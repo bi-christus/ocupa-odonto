@@ -658,38 +658,18 @@
     commit();
   }
 
-  /* ── Mutações: acessos, clínicas e parâmetros ─────────────────────── */
-  function salvarUsuario(id, dados) {
-    var u = id ? pessoa(id) : null;
-    if (!u) {
-      u = { id: C.uid('u'), criadoEm: C.carimbo(), ultimoAcesso: null, ativo: true };
-      estado.usuarios.push(u);
-    }
-    ['nome', 'email', 'perfil', 'ativo'].forEach(function (k) {
-      if (dados[k] !== undefined) u[k] = dados[k];
-    });
-    commit(); return u;
-  }
-  function alternarAtivo(id) {
-    var u = pessoa(id); if (!u) return;
-    u.ativo = !u.ativo; commit();
-  }
-  function podeRemoverUsuario(id) {
-    var u = pessoa(id);
-    if (!u) return false;
-    if (id === sessaoId) return false;
-    if (turmasDoProfessor(id).length) return false;
-    if (u.perfil === 'coordenador' && coordenadoresAtivos().length <= 1) return false;
-    return true;
-  }
-  function coordenadoresAtivos() {
-    return estado.usuarios.filter(function (u) { return u.perfil === 'coordenador' && u.ativo; });
-  }
-  function removerUsuario(id) {
-    if (!podeRemoverUsuario(id)) return false;
-    estado.usuarios = estado.usuarios.filter(function (u) { return u.id !== id; });
-    commit(); return true;
-  }
+  /* ── Mutações: clínicas e parâmetros ───────────────────────────────
+     Aqui existiam salvarUsuario, alternarAtivo, podeRemoverUsuario,
+     coordenadoresAtivos e removerUsuario. Foram removidas de propósito.
+
+     Elas gravavam pessoas no localStorage, que é isolado por navegador, e
+     nem assim liberavam ninguém: o portão de login é Autorizados.buscar()
+     logo acima, e esses registros não participam da decisão. Deixá-las
+     exportadas seria um convite para alguém religá-las na tela e recriar
+     a mesma ilusão de que a coordenação pode conceder acesso pelo app.
+
+     Conceder e revogar acesso é alterar app/js/autorizados.js e publicar.
+     Quando existir servidor, isto volta — validando o token no back-end. */
   function atualizarClinica(id, dados) {
     var c = clinica(id); if (!c) return;
     /* 'cadeiras' fica de fora de propósito: 14 por clínica é invariante do
@@ -821,8 +801,6 @@
     calcularImpacto: calcularImpacto,
     salvarDisciplina: salvarDisciplina, salvarTurma: salvarTurma, excluirTurma: excluirTurma,
     vincularAluno: vincularAluno, desvincularAluno: desvincularAluno,
-    salvarUsuario: salvarUsuario, alternarAtivo: alternarAtivo,
-    podeRemoverUsuario: podeRemoverUsuario, removerUsuario: removerUsuario,
     atualizarClinica: atualizarClinica, atualizarParametros: atualizarParametros,
     atualizarSemestre: atualizarSemestre,
     horasSemana: horasSemana, horasPorClinica: horasPorClinica,

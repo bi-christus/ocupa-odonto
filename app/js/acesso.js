@@ -41,7 +41,11 @@
     { id: 'manutencao.encerrar', area: 'Estrutura', rotulo: 'Encerrar registro de manutenção' },
     { id: 'relatorios.ver', area: 'Relatórios', rotulo: 'Consultar e exportar relatórios' },
     { id: 'acessos.ver', area: 'Acessos', rotulo: 'Ver o controle de acessos' },
-    { id: 'acessos.editar', area: 'Acessos', rotulo: 'Conceder, alterar e revogar acesso' }
+    /* Concedido ao coordenador, mas exercido FORA do sistema: liberar alguém
+       é alterar app/js/autorizados.js e publicar. Enquanto não houver
+       servidor, nenhum botão dentro do app concede acesso — e o rótulo não
+       pode sugerir que concede. */
+    { id: 'acessos.editar', area: 'Acessos', rotulo: 'Responder pela lista de acesso (alterada fora do sistema)' }
   ];
 
   var MATRIZ = {

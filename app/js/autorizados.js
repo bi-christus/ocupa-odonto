@@ -30,16 +30,24 @@
 
   global.Autorizados = [
 
-    /* Administradores do sistema. O nível 'coordenador' é o topo da
-       hierarquia e o único com a permissão acessos.editar — são estas duas
-       contas que cadastram as demais pessoas e definem o nível de cada uma,
-       pelo painel Acessos, sem precisar mexer neste arquivo de novo. */
+    /* Administradores do sistema. */
     { email: 'setorbiunichristus@gmail.com', perfil: 'coordenador' },
-    { email: 'napa21@christus.com.br', perfil: 'coordenador' }
+    { email: 'napa21@christus.com.br', perfil: 'coordenador' },
+    { email: 'praticas.saude03@unichristus.edu.br', nome: 'Andrea Galvao', perfil: 'coordenador' },
 
-    /* Para acrescentar alguém aqui, uma linha por pessoa:
-       { email: 'fulano@dominio', perfil: 'professor' },
-       Perfis válidos: 'coordenador', 'professor', 'tecnico'. */
+    /* Equipe. */
+    { email: 'napa13@christus.com.br', nome: 'Italo', perfil: 'professor' },
+    { email: 'napa19@christus.com.br', nome: 'Emerson', perfil: 'tecnico' }
+
+    /* Uma linha por pessoa. Os perfis válidos são exatamente estes três
+       identificadores, conforme acesso.js — 'tecnico' é o valor interno, e
+       "Técnico de manutenção" é apenas o rótulo mostrado na tela:
+         'coordenador' · 'professor' · 'tecnico'
+
+       ESTE ARQUIVO É A ÚNICA COISA QUE CONCEDE ACESSO. A tela Acessos, dentro
+       do sistema, não substitui esta lista: o que ela guarda fica no
+       navegador de quem mexeu. Para liberar alguém de verdade, acrescente
+       aqui, faça commit e publique. */
 
   ];
 
