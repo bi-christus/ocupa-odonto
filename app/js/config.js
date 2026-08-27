@@ -21,12 +21,17 @@
 
   global.Config = {
 
-    /* Cole aqui o Client ID, algo terminado em .apps.googleusercontent.com */
-    googleClientId: '',
+    /* Client ID OAuth desta aplicação. Identificador público: pode ficar no
+       repositório. Não existe client secret neste fluxo. */
+    googleClientId: '771816455765-5bj26535tqd3u88a8jsitce2qoduce9h.apps.googleusercontent.com',
 
-    /* Domínio institucional aceito no login. Com isto preenchido, contas de
-       fora do domínio são recusadas mesmo que o e-mail esteja na lista de
-       autorizados. Deixe vazio para não restringir por domínio. */
+    /* Vazio de propósito, por decisão de projeto: o controle de quem entra é
+       feito pela lista em autorizados.js, e não pelo domínio do e-mail. Isso
+       permite conceder acesso a alguém de fora do domínio institucional sem
+       mexer nesta configuração.
+       Preencher este campo volta a exigir que a conta seja do domínio, além
+       de constar na lista — as duas checagens são cumulativas, nunca
+       alternativas. */
     dominioInstitucional: '',
 
     /* Aparece no cabeçalho e na tela de entrada. */
