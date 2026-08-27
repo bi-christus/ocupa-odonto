@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-52b3a84e-952b-4f3c-abd6-0bc9d71c16d4/styles.css">
+<script src="_ds/industry-52b3a84e-952b-4f3c-abd6-0bc9d71c16d4/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)}
+a{color:var(--accent-ink)}a:hover{color:var(--color-accent-600)}
+[data-tema]{--fill-strong:var(--color-accent-700);--on-strong:var(--color-accent-100);--fill-soft:var(--color-accent-200);--on-soft:var(--color-accent-800);--fill-deep:var(--color-accent-900);--fill-tint:var(--color-accent-2-200);--on-tint:var(--color-accent-2-800);--on-line:var(--color-neutral-800);--accent-ink:var(--color-accent-700);--line:var(--color-neutral-400);--line-soft:var(--color-neutral-200);--muted:var(--color-neutral-700);--muted-2:var(--color-neutral-700);background:var(--color-bg);color:var(--color-text);min-height:100vh}
+[data-tema="escuro"]{--color-bg:#1d1f20;--color-surface:#2b2b2d;--color-text:#f5f5f8;--color-divider:color-mix(in srgb,#f5f5f8 24%,transparent);--fill-strong:var(--color-accent-600);--on-strong:var(--color-accent-100);--fill-soft:var(--color-accent-800);--on-soft:var(--color-accent-200);--fill-deep:var(--color-accent-900);--fill-tint:var(--color-accent-2-800);--on-tint:var(--color-accent-2-200);--on-line:var(--color-neutral-200);--accent-ink:var(--color-accent-300);--line:var(--color-neutral-700);--line-soft:var(--color-neutral-800);--muted:var(--color-neutral-400);--muted-2:var(--color-neutral-400)}
+[data-tema] .btn-primary{background:var(--color-accent-700);color:var(--color-accent-100)}
+[data-tema] .btn-primary:hover{background:var(--color-accent-800)}
+[data-tema] .btn-ghost{color:var(--accent-ink)}
+[data-tema] .input,[data-tema] select.input{background:transparent;color:var(--color-text);border:1px solid var(--color-divider);border-radius:0;height:36px;font:400 13.5px var(--font-body);padding:0 10px}
+[data-tema] select.input{appearance:none;padding-right:26px;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) 16px,calc(100% - 9px) 16px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+[data-tema] .table th,[data-tema] .table td{border-color:var(--color-divider)}
+[data-tema="escuro"] select.input option{background:#2b2b2d;color:#f5f5f8}
+</style>
+</helmet>
+
+<div data-tema="{{ tema }}">
+<sc-if value="{{ showLogin }}" hint-placeholder-val="{{ true }}">
+<div style="min-height:100vh;display:grid;grid-template-columns:1.2fr 1fr">
+  <div style="padding:64px 60px;display:flex;flex-direction:column;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:11px">
+      <div style="border:1px solid var(--color-divider);width:30px;height:30px;display:grid;place-items:center;font:600 13px var(--font-heading);color:var(--accent-ink)">O</div>
+      <span style="font:600 14px var(--font-heading);letter-spacing:.08em;text-transform:uppercase">Ocupa</span>
+    </div>
+    <div>
+      <h1 style="font-size:clamp(38px,4.4vw,60px);line-height:0.98;margin:0;max-width:15ch">Ocupação das clínicas de odontologia</h1>
+    </div>
+    <div style="display:flex;gap:44px;flex-wrap:wrap">
+      <sc-for list="{{ numeros }}" as="n" hint-placeholder-count="4">
+        <div>
+          <div style="font:600 34px var(--font-heading);line-height:1">{{ n.valor }}</div>
+          <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">{{ n.label }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:grid;place-items:center;padding:40px;border-left:1px solid var(--color-divider)">
+    <div style="width:300px">
+      <h4 style="margin:0 0 22px;font-size:30px">Entrar</h4>
+      <button class="btn btn-primary btn-block" onClick="{{ entrar }}" style="height:44px;border-radius:0;font-size:14px">Continuar com Google</button>
+      <p style="font-size:12px;line-height:1.6;color:var(--muted);margin-top:18px">@{{ dominio }} · semestre {{ semestre }}</p>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showApp }}" hint-placeholder-val="{{ false }}">
+<div style="min-height:100vh;display:flex;flex-direction:column">
+  <header style="display:flex;align-items:center;justify-content:space-between;gap:14px 22px;flex-wrap:wrap;padding:12px 28px;border-bottom:1px solid var(--color-divider);background:var(--color-bg);position:sticky;top:0;z-index:20">
+    <div style="display:flex;align-items:center;gap:24px;min-width:0;flex-wrap:wrap">
+      <span style="font:600 13px var(--font-heading);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap">{{ nomeInst }}</span>
+      <nav style="display:flex;gap:2px;flex-wrap:wrap;min-width:0">
+        <sc-for list="{{ abas }}" as="t" hint-placeholder-count="6">
+          <button onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button>
+        </sc-for>
+      </nav>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex:none">
+      <span style="font-size:12.5px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums">{{ dataAtual }} · {{ horaAtual }}</span>
+      <button onClick="{{ toggleTema }}" style="{{ temaBtnStyle }}">{{ temaLabel }}</button>
+      <div style="display:flex;border:1px solid var(--line);flex:none">
+        <sc-for list="{{ perfis }}" as="p" hint-placeholder-count="2">
+          <button onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button>
+        </sc-for>
+      </div>
+      <div style="position:relative">
+        <button onClick="{{ toggleNotif }}" style="{{ notifBtnStyle }}">
+          <span style="font-size:13px">◔</span>
+          <span style="{{ notifBadgeStyle }}">{{ notifCount }}</span>
+        </button>
+        <sc-if value="{{ notifAberto }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid var(--color-divider);position:absolute;right:0;top:42px;width:320px;background:var(--color-bg);padding:18px 20px;z-index:30">
+              <div style="display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{ notificacoes }}" as="n" hint-placeholder-count="3">
+                <div style="display:flex;gap:10px;font-size:12.5px;line-height:1.45">
+                  <span style="{{ n.dot }}"></span>
+                  <span><span>{{ n.titulo }}</span><br><span style="color:var(--muted)">{{ n.detalhe }}</span></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+      <div style="display:flex;align-items:center;gap:9px">
+        <div style="width:30px;height:30px;background:var(--fill-soft);color:var(--on-soft);display:grid;place-items:center;font:600 11px var(--font-body)">{{ usuario.iniciais }}</div>
+        <span style="font-size:12.5px;white-space:nowrap">{{ usuario.nome }}</span>
+      </div>
+    </div>
+  </header>
+
+  <sc-if value="{{ isPainel }}" hint-placeholder-val="{{ true }}">
+  <main style="padding:24px 28px 56px;display:flex;flex-direction:column;gap:32px;max-width:1400px">
+    <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+        <div style="border:1px solid var(--color-divider);padding:16px 18px">
+          <div style="font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)">{{ k.label }}</div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-top:8px">
+            <span style="font:600 38px var(--font-heading);line-height:1;font-variant-numeric:tabular-nums;color:{{ k.color }}">{{ k.value }}</span>
+            <span style="font-size:12.5px;color:var(--muted)">{{ k.unit }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </section>
+
+    <section style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:36px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:28px;min-width:0">
+        <div style="border:1px solid var(--color-divider);padding:22px 24px">
+          <h5 style="margin:0 0 18px;font-size:22px">Nova ocupação</h5>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
+            <sc-for list="{{ campos }}" as="f" hint-placeholder-count="5">
+              <label class="field" style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">{{ f.label }}</span>
+                <select class="input" value="{{ f.value }}" onChange="{{ f.onChange }}">
+                  <sc-for list="{{ f.opcoes }}" as="o" hint-placeholder-count="4">
+                    <option value="{{ o.v }}">{{ o.t }}</option>
+                  </sc-for>
+                </select>
+              </label>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;margin-top:20px;flex-wrap:wrap">
+            <button class="btn btn-primary" onClick="{{ registrar }}" style="height:38px;border-radius:0;font-size:13.5px;padding:0 20px">Registrar</button>
+            <span style="{{ avisoStyle }}">{{ aviso }}</span>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px">
+            <h5 style="margin:0;font-size:22px">Ocupações de hoje</h5>
+            <div class="seg" style="flex:none;border-radius:0">
+              <sc-for list="{{ filtros }}" as="t" hint-placeholder-count="2">
+                <button class="seg-opt" onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ ocupacoesHoje }}" as="s" hint-placeholder-count="5">
+              <div style="{{ s.rowStyle }}">
+                <div style="min-width:0;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                  <span style="font:600 14px var(--font-heading);letter-spacing:.02em;min-width:104px">{{ s.titulo }}</span>
+                  <span style="font-size:13px;font-variant-numeric:tabular-nums;color:var(--accent-ink);min-width:96px">{{ s.faixa }}</span>
+                  <span style="font-size:13px;color:var(--muted)">{{ s.detalhe }}</span>
+                  <span style="{{ s.tagStyle }}">{{ s.situacao }}</span>
+                </div>
+                <div style="display:flex;gap:6px;flex:none">
+                  <button class="btn btn-ghost" onClick="{{ s.abrir }}" style="height:32px;border-radius:0;font-size:12.5px;padding:0 12px">Sala</button>
+                  <button class="btn btn-ghost" onClick="{{ s.cancelar }}" title="{{ s.cancelarTitulo }}" style="{{ s.cancelarStyle }}">Cancelar</button>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ semOcupacoes }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:18px 0;font-size:13px;color:var(--muted)">Nenhuma ocupação registrada para hoje.</div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h5 style="margin:0 0 16px;font-size:22px">Horas por clínica</h5>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <sc-for list="{{ ocupacaoClinicas }}" as="c" hint-placeholder-count="8">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="font-size:12.5px;width:82px;flex:none">{{ c.nome }}</span>
+              <span style="flex:1;height:8px;background:var(--line-soft);overflow:hidden"><span style="{{ c.barStyle }}"></span></span>
+              <span style="font-size:12.5px;width:40px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)">{{ c.horas }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ isOcup }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-wrap:wrap;flex:1;align-items:stretch">
+    <aside style="flex:0 0 208px;padding:24px 24px 44px 28px;display:flex;flex-direction:column;gap:4px;align-self:flex-start;border-right:1px solid var(--color-divider)">
+      <sc-for list="{{ salas }}" as="s" hint-placeholder-count="4">
+        <button onClick="{{ s.onClick }}" style="{{ s.style }}">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;width:100%">
+            <span style="font:600 14px var(--font-heading);letter-spacing:.04em">{{ s.nome }}</span>
+            <span style="font-size:12.5px;font-variant-numeric:tabular-nums">{{ s.pct }}%</span>
+          </div>
+          <div style="font-size:11.5px;color:var(--muted);text-align:left;width:100%">{{ s.clinicas }}</div>
+        </button>
+      </sc-for>
+      <div style="margin-top:26px;display:flex;flex-direction:column;gap:9px">
+        <sc-for list="{{ legenda }}" as="l" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--muted)">
+            <span style="{{ l.swatch }}"></span>{{ l.label }}
+          </div>
+        </sc-for>
+      </div>
+    </aside>
+
+    <main style="flex:1 1 600px;padding:24px 28px 56px;display:flex;flex-direction:column;gap:30px;min-width:0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <h2 style="font-size:30px;margin:0">{{ salaAtual.nome }}</h2>
+        <span style="font-size:12.5px;color:var(--muted)">{{ salaAtual.resumo }}</span>
+      </div>
+
+      <sc-if value="{{ salaAtual.conjunta }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--fill-tint);color:var(--on-tint)">
+          <span style="{{ tagConjunta }}">conjunta</span>
+          <span style="font-size:13px">{{ salaAtual.textoConjunta }}</span>
+        </div>
+      </sc-if>
+
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0">
+        <sc-for list="{{ salaAtual.metades }}" as="m" hint-placeholder-count="2">
+          <div style="{{ m.wrapStyle }}">
+            <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0">
+              <span style="font:600 18px var(--font-heading);letter-spacing:.02em">{{ m.clinica }}</span>
+              <span style="font-size:12px;color:var(--accent-ink)">{{ m.especialidade }}</span>
+            </div>
+            <div style="font-size:12.5px;color:var(--muted);margin:6px 0 16px">{{ m.reserva }}</div>
+            <div style="display:grid;grid-template-columns:repeat(7,minmax(28px,1fr));gap:5px">
+              <sc-for list="{{ m.cadeiras }}" as="c" hint-placeholder-count="14">
+                <button onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px">
+          <h5 style="margin:0;font-size:20px">Hoje</h5>
+          <span style="font-size:12px;color:var(--muted)">07h–22h</span>
+        </div>
+        <div style="display:grid;grid-template-columns:92px minmax(0,1fr);gap:0 12px">
+          <div></div>
+          <div style="display:grid;grid-template-columns:repeat(15,1fr);padding-bottom:6px">
+            <sc-for list="{{ horas }}" as="h" hint-placeholder-count="15">
+              <span style="font-size:10.5px;color:var(--muted-2);font-variant-numeric:tabular-nums">{{ h }}</span>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:space-around;height:{{ pistaAltura }}">
+            <sc-for list="{{ pistaLabels }}" as="l" hint-placeholder-count="2">
+              <span style="font-size:12.5px;color:var(--muted)">{{ l }}</span>
+            </sc-for>
+          </div>
+          <div style="{{ pistaStyle }}">
+            <sc-for list="{{ pistaLinhas }}" as="g" hint-placeholder-count="3">
+              <div style="{{ g }}"></div>
+            </sc-for>
+            <sc-for list="{{ pistaBlocos }}" as="b" hint-placeholder-count="3">
+              <div style="{{ b.style }}">{{ b.label }}</div>
+            </sc-for>
+            <div style="{{ agoraStyle }}"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <aside style="flex:1 1 258px;padding:24px 28px 56px 24px;align-self:flex-start;display:flex;flex-direction:column;gap:26px;min-width:0;border-left:1px solid var(--color-divider)">
+      <div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+          <span style="font:600 22px var(--font-heading)">Cadeira {{ detalhe.num }}</span>
+          <span style="{{ detalhe.tagStyle }}">{{ detalhe.status }}</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">{{ detalhe.local }}</div>
+        <div style="display:flex;flex-direction:column;margin-top:16px">
+          <sc-for list="{{ detalhe.campos }}" as="f" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;gap:14px;padding:7px 0;font-size:13px;border-bottom:1px solid var(--line-soft)">
+              <span style="color:var(--muted)">{{ f.k }}</span>
+              <span style="text-align:right">{{ f.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:18px">
+          <button class="btn btn-primary" onClick="{{ detalhe.acaoFn }}" style="height:34px;border-radius:0;font-size:12.5px;padding:0 14px">{{ detalhe.acao }}</button>
+        </div>
+      </div>
+      <sc-if value="{{ temAlunos }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">{{ tituloAlunos }}</div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ alunosAgora }}" as="a" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:10px;font-size:12.5px">
+                <span style="{{ a.numStyle }}">{{ a.cadeira }}</span>
+                <span style="min-width:0"><span style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.nome }}</span><span style="font-size:11px;color:var(--muted)">{{ a.periodo }}</span></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </aside>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isReservas }}" hint-placeholder-val="{{ false }}">
+  <main style="padding:24px 28px 56px;display:flex;flex-direction:column;gap:22px;max-width:1460px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+      <h2 style="font-size:30px;margin:0">Ocupações · {{ semanaLabel }}</h2>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="seg" style="flex:none;border-radius:0">
+          <sc-for list="{{ modos }}" as="a" hint-placeholder-count="2">
+            <button class="seg-opt" onClick="{{ a.onClick }}" style="{{ a.style }}">{{ a.label }}</button>
+          </sc-for>
+        </div>
+        <button class="btn btn-primary" onClick="{{ irParaNova }}" style="height:36px;border-radius:0;font-size:13px;padding:0 16px">Nova ocupação</button>
+      </div>
+    </div>
+
+    <sc-if value="{{ isCalendario }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <div style="max-height:600px;overflow:auto">
+        <div style="display:grid;grid-template-columns:58px repeat(6,minmax(104px,1fr));gap:0 8px">
+          <div style="position:sticky;top:0;z-index:2;background:var(--color-bg);height:30px"></div>
+          <sc-for list="{{ dias }}" as="d" hint-placeholder-count="6">
+            <div style="{{ d.headStyle }}">{{ d.label }} <span style="color:var(--muted);font-weight:400">{{ d.data }}</span></div>
+          </sc-for>
+          <sc-for list="{{ calendarioHoras }}" as="row" hint-placeholder-count="15">
+            <div style="display:contents">
+              <div style="{{ row.horaStyle }}">{{ row.hora }}</div>
+              <sc-for list="{{ row.celulas }}" as="c" hint-placeholder-count="6">
+                <div style="{{ c.style }}">
+                  <sc-for list="{{ c.blocos }}" as="b" hint-placeholder-count="1">
+                    <button onClick="{{ b.onClick }}" style="{{ b.style }}">
+                      <span style="display:block;font:600 12px var(--font-heading);letter-spacing:.03em">{{ b.titulo }}</span>
+                      <span style="display:block;font-size:10.5px;margin-top:1px">{{ b.sub }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;gap:18px;margin-top:14px;flex-wrap:wrap">
+        <sc-for list="{{ legendaReserva }}" as="l" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)">
+            <span style="{{ l.swatch }}"></span>{{ l.label }}
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isGantt }}" hint-placeholder-val="{{ false }}">
+    <div>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:18px;flex-wrap:wrap">
+        <span style="font:600 20px var(--font-heading)">{{ diaSelecionado }}</span>
+        <div style="margin-left:auto;display:flex;gap:5px">
+          <sc-for list="{{ diasChips }}" as="d" hint-placeholder-count="6">
+            <button onClick="{{ d.onClick }}" style="{{ d.chipStyle }}">{{ d.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:108px minmax(0,1fr);gap:0 12px">
+        <div></div>
+        <div style="display:grid;grid-template-columns:repeat(15,1fr);padding-bottom:6px">
+          <sc-for list="{{ horas }}" as="h" hint-placeholder-count="15">
+            <span style="font-size:10.5px;color:var(--muted-2);font-variant-numeric:tabular-nums">{{ h }}</span>
+          </sc-for>
+        </div>
+        <sc-for list="{{ ganttSalas }}" as="s" hint-placeholder-count="4">
+          <div style="display:contents">
+            <div style="display:flex;flex-direction:column;justify-content:center;gap:2px;padding:10px 0">
+              <span style="font:600 13px var(--font-heading);letter-spacing:.04em">{{ s.sala }}</span>
+              <span style="font-size:11px;color:var(--muted)">{{ s.clinicas }}</span>
+            </div>
+            <div style="padding:10px 0">
+              <div style="{{ s.pistaStyle }}">
+                <sc-for list="{{ s.linhas }}" as="g" hint-placeholder-count="3">
+                  <div style="{{ g }}"></div>
+                </sc-for>
+                <sc-for list="{{ s.blocos }}" as="b" hint-placeholder-count="3">
+                  <div style="{{ b.style }}" title="{{ b.title }}">{{ b.label }}</div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ isCad }}" hint-placeholder-val="{{ false }}">
+  <main style="padding:24px 28px 56px;display:grid;grid-template-columns:288px minmax(0,1fr);gap:18px 36px;align-items:start;max-width:1440px">
+    <div style="grid-column:1 / -1;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+      <h2 style="font-size:30px;margin:0">Disciplinas · {{ semestre }}</h2>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="btn btn-ghost" onClick="{{ encerrarSemestre }}" style="height:34px;border-radius:0;font-size:12.5px;padding:0 14px">Encerrar semestre</button>
+        <button class="btn btn-ghost" onClick="{{ novaTurma }}" style="height:34px;border-radius:0;font-size:12.5px;padding:0 14px">Nova turma</button>
+        <button class="btn btn-primary" onClick="{{ novaDisciplina }}" style="height:34px;border-radius:0;font-size:12.5px;padding:0 14px">Nova disciplina</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column">
+      <sc-for list="{{ listaDisciplinas }}" as="d" hint-placeholder-count="8">
+        <button onClick="{{ d.onClick }}" style="{{ d.style }}">
+          <div style="display:flex;align-items:baseline;gap:8px;width:100%">
+            <span style="font:600 13.5px var(--font-heading);letter-spacing:.04em">{{ d.codigo }}</span>
+            <span style="{{ d.turmaStyle }}">{{ d.turma }}</span>
+            <span style="margin-left:auto;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums">{{ d.alunos }}</span>
+          </div>
+          <span style="font-size:13.5px;text-align:left">{{ d.nome }}</span>
+          <span style="font-size:11.5px;color:var(--muted);text-align:left">{{ d.detalhe }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:26px;min-width:0">
+      <div style="border:1px solid var(--color-divider);padding:22px 24px">
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <span style="font:600 26px var(--font-heading)">{{ disciplina.nome }}</span>
+          <span style="font-size:13px;color:var(--accent-ink)">{{ disciplina.codigo }} · turma {{ disciplina.turma }} · {{ disciplina.ch }}</span>
+          <span style="{{ disciplina.nivelStyle }}">{{ disciplina.nivel }}</span>
+        </div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:5px">{{ disciplina.clinica }} · {{ disciplina.horas }} · {{ disciplina.irmas }} · {{ disciplina.vinculo }}</div>
+        <div style="display:flex;align-items:flex-end;gap:14px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line-soft);flex-wrap:wrap">
+          <label class="field" style="display:flex;flex-direction:column;gap:6px;width:118px">
+            <span style="font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Código</span>
+            <input class="input" value="{{ disciplina.codigo }}" onChange="{{ setCodigo }}">
+          </label>
+          <label class="field" style="display:flex;flex-direction:column;gap:6px;min-width:190px;flex:1">
+            <span style="font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Disciplina</span>
+            <input class="input" value="{{ disciplina.nome }}" onChange="{{ setNomeDisc }}">
+          </label>
+          <label class="field" style="display:flex;flex-direction:column;gap:6px;width:96px">
+            <span style="font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Turma</span>
+            <select class="input" value="{{ disciplina.turma }}" onChange="{{ setTurma }}">
+              <sc-for list="{{ turmas }}" as="t" hint-placeholder-count="4">
+                <option value="{{ t }}">{{ t }}</option>
+              </sc-for>
+            </select>
+          </label>
+          <label class="field" style="display:flex;flex-direction:column;gap:6px;min-width:210px">
+            <span style="font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Professor responsável</span>
+            <select class="input" value="{{ disciplina.professor }}" onChange="{{ trocarProfessor }}">
+              <sc-for list="{{ professores }}" as="p" hint-placeholder-count="8">
+                <option value="{{ p }}">{{ p }}</option>
+              </sc-for>
+            </select>
+          </label>
+          <label class="field" style="display:flex;flex-direction:column;gap:6px;min-width:170px">
+            <span style="font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Clínica</span>
+            <select class="input" value="{{ disciplina.clinicaIdx }}" onChange="{{ trocarClinica }}">
+              <sc-for list="{{ clinicasOpcoes }}" as="c" hint-placeholder-count="8">
+                <option value="{{ c.v }}">{{ c.t }}</option>
+              </sc-for>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap">
+          <h5 style="margin:0;font-size:20px">Alunos</h5>
+          <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+            <label class="field" style="display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Nome</span>
+              <input class="input" value="{{ novoAluno.nome }}" onChange="{{ novoAluno.setNome }}" placeholder="Nome do aluno" style="width:180px">
+            </label>
+            <label class="field" style="display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Matrícula</span>
+              <input class="input" value="{{ novoAluno.matricula }}" onChange="{{ novoAluno.setMatricula }}" placeholder="20261234" style="width:120px">
+            </label>
+            <label class="field" style="display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Período</span>
+              <select class="input" value="{{ novoAluno.periodo }}" onChange="{{ novoAluno.setPeriodo }}" style="width:130px">
+                <sc-for list="{{ periodos }}" as="p" hint-placeholder-count="4">
+                  <option value="{{ p }}">{{ p }}</option>
+                </sc-for>
+              </select>
+            </label>
+            <button class="btn btn-primary" onClick="{{ novoAluno.vincular }}" style="height:36px;border-radius:0;font-size:12.5px;padding:0 14px">Vincular</button>
+          </div>
+        </div>
+        <table class="table" style="width:100%">
+          <thead>
+            <tr>
+              <sc-for list="{{ alunoCols }}" as="c" hint-placeholder-count="4">
+                <th style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left">{{ c }}</th>
+              </sc-for>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ alunosDisc }}" as="a" hint-placeholder-count="10">
+              <tr>
+                <td style="font-size:13.5px">{{ a.nome }}</td>
+                <td style="font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums">{{ a.matricula }}</td>
+                <td style="font-size:13px;color:var(--muted)">{{ a.periodo }}</td>
+                <td>
+                  <sc-if value="{{ a.fixa }}" hint-placeholder-val="{{ true }}">
+                    <select class="input" value="{{ a.cadeira }}" onChange="{{ a.setCadeira }}" style="width:112px;height:30px;font-size:12.5px">
+                      <sc-for list="{{ a.opcoes }}" as="o" hint-placeholder-count="15">
+                        <option value="{{ o.v }}">{{ o.t }}</option>
+                      </sc-for>
+                    </select>
+                  </sc-if>
+                  <sc-if value="{{ a.rotativo }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:12.5px;color:var(--muted)">rotativo</span>
+                  </sc-if>
+                </td>
+                <td style="text-align:right"><button class="btn btn-ghost" onClick="{{ a.remover }}" style="height:28px;border-radius:0;font-size:12px;padding:0 10px">Remover</button></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <sc-if value="{{ semAlunos }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 0;font-size:13px;color:var(--muted)">Nenhum aluno vinculado neste semestre.</div>
+        </sc-if>
+      </div>
+    </div>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ isRel }}" hint-placeholder-val="{{ false }}">
+  <main style="padding:24px 28px 56px;display:flex;flex-direction:column;gap:28px;max-width:1280px">
+    <h2 style="font-size:30px;margin:0">Relatórios</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px">
+      <sc-for list="{{ relatorios }}" as="r" hint-placeholder-count="4">
+        <div style="border:1px solid var(--color-divider);padding:20px;display:flex;flex-direction:column;gap:14px">
+          <span style="font:600 19px var(--font-heading)">{{ r.titulo }}</span>
+          <span style="font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums">{{ r.linhas }}</span>
+          <button class="btn btn-primary" onClick="{{ r.exportar }}" style="height:32px;border-radius:0;font-size:12.5px;padding:0 14px;align-self:flex-start">Exportar CSV</button>
+        </div>
+      </sc-for>
+    </div>
+    <div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap">
+        <h5 style="margin:0;font-size:20px">Semanal · ocupação e manutenção</h5>
+        <span style="font-size:12.5px;color:var(--muted)">{{ semanaLabel }} · semestre {{ semestre }}</span>
+      </div>
+      <table class="table" style="width:100%">
+        <thead>
+          <tr>
+            <sc-for list="{{ semanalCols }}" as="c" hint-placeholder-count="10">
+              <th style="{{ c.style }}">{{ c.label }}</th>
+            </sc-for>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{ semanalRows }}" as="r" hint-placeholder-count="8">
+            <tr>
+              <td style="font-size:13.5px">{{ r.nome }}<span style="display:block;font-size:11.5px;color:var(--muted)">{{ r.esp }}</span></td>
+              <sc-for list="{{ r.dias }}" as="d" hint-placeholder-count="6">
+                <td style="{{ d.style }}">{{ d.v }}</td>
+              </sc-for>
+              <td style="{{ r.totalStyle }}">{{ r.total }}</td>
+              <td style="{{ r.pctStyle }}">{{ r.pct }}</td>
+              <td style="{{ r.manutStyle }}">{{ r.manut }}</td>
+            </tr>
+          </sc-for>
+          <tr>
+            <td style="font-size:13px;font-weight:600">{{ semanalTotal.nome }}</td>
+            <sc-for list="{{ semanalTotal.dias }}" as="d" hint-placeholder-count="6">
+              <td style="{{ d.style }}">{{ d.v }}</td>
+            </sc-for>
+            <td style="{{ semanalTotal.totalStyle }}">{{ semanalTotal.total }}</td>
+            <td style="{{ semanalTotal.pctStyle }}">{{ semanalTotal.pct }}</td>
+            <td style="{{ semanalTotal.manutStyle }}">{{ semanalTotal.manut }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn btn-primary" onClick="{{ exportarSemanal }}" style="height:34px;border-radius:0;font-size:12.5px;padding:0 16px">Exportar CSV semanal</button>
+        <span style="font-size:12px;color:var(--muted)">{{ semanalNota }}</span>
+      </div>
+    </div>
+    <div>
+      <h5 style="margin:0 0 14px;font-size:20px">Horas por disciplina</h5>
+      <table class="table" style="width:100%">
+        <thead>
+          <tr>
+            <sc-for list="{{ relCols }}" as="c" hint-placeholder-count="5">
+              <th style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left">{{ c }}</th>
+            </sc-for>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{ relRows }}" as="r" hint-placeholder-count="8">
+            <tr>
+              <td style="font-size:13.5px">{{ r.disc }}</td>
+              <td style="font-size:13px;color:var(--muted)">{{ r.prof }}</td>
+              <td style="font-size:13px;font-variant-numeric:tabular-nums">{{ r.horas }}</td>
+              <td style="font-size:13px;font-variant-numeric:tabular-nums">{{ r.alunos }}</td>
+              <td style="width:130px"><span style="display:block;height:6px;background:var(--line-soft);overflow:hidden"><span style="{{ r.barStyle }}"></span></span></td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+  </main>
+  </sc-if>
+
+  <sc-if value="{{ isConfig }}" hint-placeholder-val="{{ false }}">
+  <main style="padding:24px 28px 56px;display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:36px;align-items:start;max-width:1400px">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <h2 style="font-size:30px;margin:0">Estrutura</h2>
+      <sc-for list="{{ config }}" as="s" hint-placeholder-count="4">
+        <div style="border:1px solid var(--color-divider);padding:20px 22px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px">
+            <span style="font:600 20px var(--font-heading)">{{ s.nome }}</span>
+            <span style="font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums">{{ s.faixa }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px">
+            <sc-for list="{{ s.clinicas }}" as="c" hint-placeholder-count="2">
+              <div>
+                <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+                  <span style="font:600 14px var(--font-heading);letter-spacing:.03em">{{ c.nome }}</span>
+                  <span style="font-size:11.5px;color:var(--accent-ink)">{{ c.especialidade }}</span>
+                </div>
+                <div style="font-size:12.5px;color:var(--muted);margin-top:4px">{{ c.info }}</div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:14px 0 8px">
+                  <span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Manutenção</span>
+                  <span style="font-size:11.5px;color:var(--muted)">{{ c.qtdManut }}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px">
+                  <sc-for list="{{ c.cadeirasManut }}" as="m" hint-placeholder-count="14">
+                    <button onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div>
+      <h5 style="margin:0 0 16px;font-size:20px">Parâmetros</h5>
+      <div style="display:flex;flex-direction:column">
+        <sc-for list="{{ regrasConfig }}" as="r" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line-soft)">
+            <span style="font-size:13px">{{ r.label }}</span>
+            <span style="{{ r.pill }}">{{ r.valor }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </main>
+  </sc-if>
+</div>
+</sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;nomeInstituicao&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Ocupa · Odontologia&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;dominio&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;unipolo.edu.br&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+const PROF = ["Helena Vasques","Márcio Antunes","Priscila Rangel","Ubirajara Lima","Sônia Bettencourt","Fabrício Doria","Cléo Marques","Rodolfo Aguiar"];
+const ALUNOS = ["Ana Beatriz Sales","Caio Nogueira","Daniela Prass","Eduardo Falcão","Fernanda Kioshi","Gustavo Rezende","Helena Coutinho","Igor Vilela","Juliana Amorim","Kelvin Braga","Larissa Pontes","Murilo Xavier","Natália Ferraz","Otávio Bruno","Paula Tavares","Rafael Quintela","Sabrina Delgado","Thiago Peçanha","Vanessa Iório","Wagner Tolentino"];
+const SALAS = [
+  { nome: "Sala 1", clinicas: ["Clínica 1", "Clínica 2"], esp: ["Dentística", "Periodontia"] },
+  { nome: "Sala 2", clinicas: ["Clínica 3", "Clínica 4"], esp: ["Endodontia", "Prótese"] },
+  { nome: "Sala 3", clinicas: ["Clínica 5", "Clínica 6"], esp: ["Odontopediatria", "Cirurgia"] },
+  { nome: "Sala 4", clinicas: ["Clínica 7", "Clínica 8"], esp: ["Ortodontia", "Clínica Integrada"] }
+];
+const DIAS = [["Seg", "17/08"], ["Ter", "18/08"], ["Qua", "19/08"], ["Qui", "20/08"], ["Sex", "21/08"], ["Sáb", "22/08"]];
+const PERIODOS = ["6º período", "7º período", "8º período", "9º período"];
+const PERIODOS_POS = ["Especialização 1º ano", "Especialização 2º ano", "Mestrado"];
+const TURMAS = ["T1", "T2", "T3", "T4"];
+const DISC_BASE = [
+  ["ODO-412", "Dentística Clínica I", "T1", "60 h", "G"], ["ODO-421", "Periodontia II", "T2", "45 h", "G"],
+  ["ODO-433", "Endodontia Clínica", "T1", "60 h", "G"], ["ODO-448", "Prótese Parcial Fixa", "T2", "45 h", "G"],
+  ["ODO-455", "Odontopediatria I", "T1", "45 h", "G"], ["ODO-467", "Cirurgia Oral Menor", "T2", "60 h", "G"],
+  ["ODO-472", "Ortodontia Preventiva", "T1", "45 h", "G"], ["ODO-490", "Clínica Integrada", "T2", "75 h", "G"],
+  ["ODO-412", "Dentística Clínica I", "T2", "60 h", "G"],
+  ["PSO-710", "Implantodontia", "T1", "60 h", "P"], ["PSO-724", "Ortodontia", "T1", "60 h", "P"]
+];
+const H0 = 7, H1 = 22, SPAN = H1 - H0, ROW = 32;
+
+class Component extends DCLogic {
+  rng(seed) { let s = (Math.abs(seed) * 7919 + 104729) % 2147483647 || 7; const f = () => { s = (s * 48271) % 2147483647; return s / 2147483647; }; f(); f(); f(); return f; }
+  hm(v) { const h = Math.floor(v), m = Math.round((v - h) * 60); return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"); }
+  meia(v) { return Math.round(v * 2) / 2; }
+  cadeirasDe(idx) { return [idx * 14 + 1, idx * 14 + 14]; }
+  alocarTurma(disc, metades) {
+    const dupla = metades.length === 2;
+    const mi0 = disc.clinicaIdx % 2;
+    const vagas = [];
+    metades.forEach(m => { for (let n = 1; n <= 14; n++) vagas.push(m * 14 + n); });
+    const usadas = [], out = [];
+    const lista = disc.alunos.slice(0, dupla ? 20 : 11);
+    if (!disc.pos) lista.forEach(a => {
+      const cad = mi0 * 14 + a.cadeira;
+      if (a.cadeira && vagas.includes(cad) && !usadas.includes(cad)) { usadas.push(cad); out.push({ cadeira: cad, nome: a.nome, periodo: a.periodo, fixa: true }); }
+    });
+    lista.forEach(a => {
+      if (out.some(x => x.nome === a.nome)) return;
+      const cad = vagas.find(v => !usadas.includes(v));
+      if (!cad) return;
+      usadas.push(cad); out.push({ cadeira: cad, nome: a.nome, periodo: a.periodo, fixa: false });
+    });
+    return out.sort((a, b) => a.cadeira - b.cadeira);
+  }
+
+  manutInicial() { const m = {}; [[0, [3]], [1, [7, 12]], [3, [9]], [4, [2, 11]], [6, [5]]].forEach(([i, cs]) => { m[i] = cs; }); return m; }
+  gerar() {
+    const disciplinas = DISC_BASE.map((d, i) => {
+      const pos = d[4] === "P", per = pos ? PERIODOS_POS : PERIODOS;
+      return {
+        codigo: d[0], nome: d[1], turma: d[2], ch: d[3], idx: i, clinicaIdx: i % 8, professor: PROF[i % 8],
+        pos, nivel: pos ? "Pós-graduação" : "Graduação",
+        alunos: [...Array(10)].map((_, k) => {
+          const nome = ALUNOS[(i * 3 + k) % ALUNOS.length];
+          return { nome, matricula: "2026" + String(1000 + i * 20 + k), periodo: per[(i + k) % per.length], cadeira: pos ? null : k + 1 };
+        })
+      };
+    });
+    const reservas = [];
+    SALAS.forEach((s, si) => DIAS.forEach((dd, di) => {
+      const r = this.rng(si * 211 + di * 53 + 11);
+      const janelas = [];
+      if (r() > 0.66) {
+        const ini = this.meia(H0 + 1 + r() * 5), dur = this.meia(3 + r() * 3);
+        janelas.push({ metades: [0, 1], inicio: ini, fim: Math.min(H1, ini + dur) });
+      }
+      [0, 1].forEach(mi => {
+        let cursor = this.meia(H0 + r() * 2);
+        const qtd = r() > 0.3 ? (r() > 0.6 ? 2 : 1) : 0;
+        for (let b = 0; b < qtd; b++) {
+          const dur = this.meia(2.5 + r() * 3);
+          if (cursor + dur > H1) break;
+          if (!janelas.some(j => j.metades.includes(mi) && cursor < j.fim && cursor + dur > j.inicio)) janelas.push({ metades: [mi], inicio: cursor, fim: cursor + dur });
+          cursor = this.meia(cursor + dur + 0.5 + r() * 2);
+        }
+      });
+      janelas.forEach((j, ji) => {
+        const discIdx = si * 2 + j.metades[0];
+        reservas.push({ id: si + "-" + di + "-" + ji, sala: si, metades: j.metades, dia: di, inicio: j.inicio, fim: j.fim, disc: discIdx, alunos: this.alocarTurma(disciplinas[discIdx], j.metades) });
+      });
+    }));
+    const agora = new Date();
+    const dh = Math.min(5, Math.max(0, (agora.getDay() || 7) - 1));
+    const hAtual = agora.getHours() + agora.getMinutes() / 60;
+    const ini = Math.max(H0, Math.min(H1 - 3, Math.floor(hAtual) - 1)), fim = Math.min(H1, Math.max(ini + 3, Math.ceil(hAtual) + 1));
+    [{ sala: 0, metades: [0] }, { sala: 2, metades: [0, 1] }].forEach((a, k) => {
+      for (let i = reservas.length - 1; i >= 0; i--) {
+        const r = reservas[i];
+        if (r.dia === dh && r.sala === a.sala && r.metades.some(m => a.metades.includes(m)) && r.inicio < fim && r.fim > ini) reservas.splice(i, 1);
+      }
+      const discIdx = a.sala * 2 + a.metades[0];
+      reservas.push({ id: "agora-" + k, sala: a.sala, metades: a.metades, dia: dh, inicio: ini, fim, disc: discIdx, alunos: this.alocarTurma(disciplinas[discIdx], a.metades) });
+    });
+    const manut = this.manutInicial();
+    return { disciplinas, reservas, manut, semestre: "2026.2" };
+  }
+
+  state = Object.assign({
+    logado: false, view: "painel", sala: 0, cadeira: 4, modo: "calendario", dia: 2, disc: 0, perfil: "responsavel",
+    notif: false, filtro: "todas", aviso: "", avisoErro: false,
+    form: { escopo: "0-0", dia: 2, inicio: "13:00", fim: "16:00", disc: "0" },
+    aluno: { nome: "", matricula: "", periodo: PERIODOS[1] },
+    tema: (typeof localStorage !== "undefined" && localStorage.getItem("cc-tema")) || "claro"
+  }, this.gerar());
+
+  pill(bg, fg) { return "display:inline-block;font:600 10.5px var(--font-body);letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;white-space:nowrap;background:" + bg + ";color:" + fg + ";"; }
+  tagPara(k) {
+    const m = {
+      "em atendimento": ["var(--fill-strong)", "var(--on-strong)"],
+      "ocupada": ["var(--fill-strong)", "var(--on-strong)"],
+      "conjunta": ["var(--fill-deep)", "var(--color-accent-100)"],
+      "registrada": ["var(--fill-soft)", "var(--on-soft)"],
+      "encerrada": ["var(--line-soft)", "var(--on-line)"],
+      "livre": ["var(--line-soft)", "var(--on-line)"],
+      "vaga livre": ["transparent", "var(--accent-ink)"],
+      "manutenção": ["var(--line-soft)", "var(--on-line)"]
+    };
+    const v = m[k] || m["livre"];
+    return this.pill(v[0], v[1]) + (k === "vaga livre" ? "box-shadow:inset 0 0 0 1px var(--accent-ink);" : "");
+  }
+  navStyle(on) { return "font:600 12.5px var(--font-heading);letter-spacing:.06em;text-transform:uppercase;padding:7px 13px;cursor:pointer;white-space:nowrap;border:0;border-radius:0;background:" + (on ? "var(--fill-strong)" : "transparent") + ";color:" + (on ? "var(--on-strong)" : "var(--muted)") + ";"; }
+  segStyle(on) { return "border-radius:0;border:0;" + (on ? "background:var(--fill-strong);color:var(--on-strong);" : "background:transparent;color:var(--muted);"); }
+  chipStyle(on) { return "font:600 12px var(--font-body);padding:6px 11px;cursor:pointer;border-radius:0;background:" + (on ? "var(--fill-strong)" : "transparent") + ";border:1px solid " + (on ? "var(--fill-strong)" : "var(--line)") + ";color:" + (on ? "var(--on-strong)" : "var(--muted)") + ";"; }
+  perfilStyle(on) { return "font:600 11px var(--font-body);letter-spacing:.06em;text-transform:uppercase;padding:7px 10px;cursor:pointer;border:0;border-radius:0;background:" + (on ? "var(--fill-strong)" : "transparent") + ";color:" + (on ? "var(--on-strong)" : "var(--muted)") + ";"; }
+  chairStyle(st, sel) {
+    const base = "display:grid;place-items:center;height:42px;border-radius:0;cursor:pointer;font:600 13px var(--font-body);font-variant-numeric:tabular-nums;border:1px solid transparent;";
+    const m = {
+      "ocupada": "background:var(--fill-strong);color:var(--on-strong);",
+      "vaga livre": "background:transparent;border:1px solid var(--accent-ink);color:var(--accent-ink);",
+      "livre": "background:transparent;border:1px solid var(--line-soft);color:var(--muted);",
+      "manutenção": "background:var(--line-soft);color:var(--muted);text-decoration:line-through;"
+    };
+    return base + m[st] + (sel ? "outline:2px solid var(--color-accent);outline-offset:2px;" : "");
+  }
+  blocoStyle(r, ativo, rowH) {
+    const dupla = r.metades.length === 2;
+    const top = dupla ? 3 : r.metades[0] * rowH + 3;
+    const h = (dupla ? rowH * 2 : rowH) - 6;
+    const cor = dupla ? "background:var(--fill-deep);color:var(--color-accent-100);" : "background:var(--fill-strong);color:var(--on-strong);";
+    return "position:absolute;left:" + ((r.inicio - H0) / SPAN * 100) + "%;width:" + ((r.fim - r.inicio) / SPAN * 100) + "%;top:" + top + "px;height:" + h + "px;display:flex;align-items:center;padding:0 10px;overflow:hidden;white-space:nowrap;font:600 11px var(--font-body);" + cor + (ativo ? "outline:1px solid var(--color-accent-300);outline-offset:-3px;" : "");
+  }
+
+  setForm(k, v) { this.setState(s => ({ form: { ...s.form, [k]: v }, aviso: "", avisoErro: false })); }
+  horasOpcoes() { const out = []; for (let h = H0; h <= H1; h += 0.5) out.push({ v: this.hm(h), t: this.hm(h) }); return out; }
+  paraDec(txt) { const p = String(txt).split(":"); return Number(p[0]) + Number(p[1]) / 60; }
+
+  registrar() {
+    const f = this.state.form;
+    const parts = f.escopo.split("-");
+    const sala = Number(parts[0]);
+    const metades = parts[1] === "d" ? [0, 1] : [Number(parts[1])];
+    const inicio = this.paraDec(f.inicio), fim = this.paraDec(f.fim);
+    const dia = Number(f.dia), disc = Number(f.disc);
+    if (fim - inicio < 2) return this.setState({ aviso: "A faixa mínima é de 2 horas.", avisoErro: true });
+    const choque = this.state.reservas.find(r => r.sala === sala && r.dia === dia && r.metades.some(m => metades.includes(m)) && r.inicio < fim && r.fim > inicio);
+    if (choque) return this.setState({ aviso: "Conflito com " + this.hm(choque.inicio) + "–" + this.hm(choque.fim) + " na mesma clínica.", avisoErro: true });
+    const d = this.state.disciplinas[disc];
+    const alunos = this.alocarTurma(d, metades);
+    this.setState(s => ({
+      reservas: s.reservas.concat([{ id: "n" + Date.now(), sala, metades, dia, inicio, fim, disc, alunos }]),
+      aviso: SALAS[sala].nome + " · " + this.hm(inicio) + "–" + this.hm(fim) + " registrada.", avisoErro: false
+    }));
+  }
+  cancelar(id) {
+    if (this.state.perfil !== "coordenacao") return this.setState({ aviso: "Somente a coordenação de clínica pode cancelar uma ocupação.", avisoErro: true });
+    const r = this.state.reservas.find(x => x.id === id);
+    this.setState(s => ({
+      reservas: s.reservas.filter(x => x.id !== id),
+      aviso: r ? "Ocupação de " + this.hm(r.inicio) + "–" + this.hm(r.fim) + " cancelada pela coordenação." : "", avisoErro: false
+    }));
+  }
+  liberarCadeira(rid, cad) { this.setState(s => ({ reservas: s.reservas.map(r => r.id === rid ? { ...r, alunos: r.alunos.filter(a => a.cadeira !== cad) } : r) })); }
+  alocar(rid, cad) {
+    this.setState(s => ({
+      reservas: s.reservas.map(r => {
+        if (r.id !== rid) return r;
+        const disc = s.disciplinas[r.disc];
+        const livre = disc.alunos.find(a => !r.alunos.some(x => x.nome === a.nome));
+        const a = livre || disc.alunos[0];
+        if (!a) return r;
+        return { ...r, alunos: r.alunos.concat([{ cadeira: cad, nome: a.nome, periodo: a.periodo }]) };
+      })
+    }));
+  }
+  emManut(cl) { return this.state.manut[cl] || []; }
+  toggleManut(clinicaIdx, cad) {
+    this.setState(s => {
+      const atual = s.manut[clinicaIdx] || [];
+      const nova = atual.includes(cad) ? atual.filter(c => c !== cad) : atual.concat([cad]).sort((a, b) => a - b);
+      return { manut: { ...s.manut, [clinicaIdx]: nova } };
+    });
+  }
+  totalManut() { return Object.keys(this.state.manut).reduce((a, k) => a + (this.state.manut[k] || []).length, 0); }
+  trocaDisc(idx, patch) { this.setState(s => ({ disciplinas: s.disciplinas.map((d, i) => i === idx ? { ...d, ...patch } : d) })); }
+  vincular(periodo) {
+    const a = this.state.aluno;
+    if (!a.nome.trim()) return;
+    const idx = this.state.disc;
+    this.setState(s => ({
+      disciplinas: s.disciplinas.map((d, i) => {
+        if (i !== idx) return d;
+        const usadas = d.alunos.map(x => x.cadeira).filter(Boolean);
+        let cadeira = null;
+        if (!d.pos) for (let n = 1; n <= 14; n++) if (!usadas.includes(n)) { cadeira = n; break; }
+        return { ...d, alunos: d.alunos.concat([{ nome: a.nome.trim(), matricula: a.matricula.trim() || "—", periodo, cadeira }]) };
+      }),
+      aluno: { nome: "", matricula: "", periodo }
+    }));
+  }
+  trocarCadeira(nome, slot) {
+    const idx = this.state.disc;
+    this.setState(s => ({
+      disciplinas: s.disciplinas.map((d, i) => i === idx ? {
+        ...d, alunos: d.alunos.map(a => a.nome === nome ? { ...a, cadeira: slot } : (slot && a.cadeira === slot ? { ...a, cadeira: null } : a))
+      } : d)
+    }));
+  }
+  removerAluno(nome) {
+    const idx = this.state.disc;
+    this.setState(s => ({ disciplinas: s.disciplinas.map((d, i) => i === idx ? { ...d, alunos: d.alunos.filter(a => a.nome !== nome) } : d) }));
+  }
+  encerrarSemestre() {
+    const proximo = this.state.semestre === "2026.2" ? "2027.1" : "2026.2";
+    this.setState(s => ({ semestre: proximo, reservas: [], disciplinas: s.disciplinas.map(d => ({ ...d, alunos: [] })), aviso: "", avisoErro: false }));
+  }
+  novaTurma() {
+    this.setState(s => {
+      const base = s.disciplinas[s.disc];
+      if (!base) return {};
+      const usadas = s.disciplinas.filter(d => d.codigo === base.codigo).map(d => d.turma);
+      const turma = TURMAS.find(t => !usadas.includes(t)) || "T" + (usadas.length + 1);
+      return { disciplinas: s.disciplinas.concat([{ ...base, turma, alunos: [], idx: s.disciplinas.length }]), disc: s.disciplinas.length };
+    });
+  }
+  novaDisciplina() {
+    this.setState(s => {
+      const n = s.disciplinas.length;
+      const codigo = "ODO-" + (500 + n * 7);
+      return {
+        disciplinas: s.disciplinas.concat([{ codigo, nome: "Disciplina nova", turma: "T1", ch: "45 h", idx: n, clinicaIdx: n % 8, professor: PROF[n % 8], pos: false, nivel: "Graduação", alunos: [] }]),
+        disc: n, view: "cadastros"
+      };
+    });
+  }
+  exportarSemanal(matriz, cap) {
+    const cab = ["Clínica", "Especialidade"].concat(DIAS.map(d => d[0] + " " + d[1])).concat(["Total h", "Ocupação %", "Cadeiras em manutenção", "Números"]);
+    const linhas = matriz.map(m => [m.cl.nome, m.cl.especialidade]
+      .concat(m.dias.map(h => String(Math.round(h * 10) / 10).replace(".", ",")))
+      .concat([Math.round(m.total), Math.round(m.total / cap * 100) + "%", m.manut.length, m.manut.map(c => String(m.cl.idx * 14 + c).padStart(2, "0")).join(" ")]));
+    const totais = ["Polo", ""].concat(DIAS.map((_, di) => Math.round(matriz.reduce((a, m) => a + m.dias[di], 0))))
+      .concat([Math.round(matriz.reduce((a, m) => a + m.total, 0)), "", matriz.reduce((a, m) => a + m.manut.length, 0), ""]);
+    this.csv("relatorio-semanal.csv", [cab].concat(linhas).concat([totais]));
+  }
+  csv(nome, linhas) {
+    const txt = linhas.map(l => l.join(";")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["\ufeff" + txt], { type: "text/csv;charset=utf-8" }));
+    a.download = nome; a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  renderVals() {
+    const st = this.state;
+    const set = (k, v) => () => this.setState({ [k]: v });
+    const coord = st.perfil === "coordenacao";
+    const escuro = st.tema === "escuro";
+    const now = new Date();
+    const horaDec = now.getHours() + now.getMinutes() / 60;
+    const diaHoje = Math.min(5, Math.max(0, (now.getDay() || 7) - 1));
+    const clinicas = [];
+    SALAS.forEach((s, si) => s.clinicas.forEach((nome, mi) => clinicas.push({ nome, especialidade: s.esp[mi], sala: si, metade: mi, idx: si * 2 + mi })));
+    const discDe = i => st.disciplinas[i] || st.disciplinas[0] || { codigo: "—", nome: "—", turma: "", professor: "—", alunos: [] };
+    const rotulo = r => r.metades.length === 2 ? SALAS[r.sala].nome + " (28 cadeiras)" : SALAS[r.sala].clinicas[r.metades[0]];
+
+    const doDia = st.reservas.filter(r => r.dia === diaHoje).sort((a, b) => a.inicio - b.inicio);
+    const emCurso = doDia.filter(r => horaDec >= r.inicio && horaDec < r.fim);
+    const ativa = (si, mi) => st.reservas.find(r => r.dia === diaHoje && r.sala === si && r.metades.includes(mi) && horaDec >= r.inicio && horaDec < r.fim);
+    const proxima = (si, mi) => st.reservas.filter(r => r.dia === diaHoje && r.sala === si && r.metades.includes(mi) && r.inicio > horaDec).sort((a, b) => a.inicio - b.inicio)[0];
+    const anterior = (si, mi) => st.reservas.filter(r => r.dia === diaHoje && r.sala === si && r.metades.includes(mi) && r.fim <= horaDec).sort((a, b) => b.fim - a.fim)[0];
+    const estado = (cl, n) => {
+      if ((st.manut[cl.idx] || []).includes(n)) return "manutenção";
+      const r = ativa(cl.sala, cl.metade);
+      if (!r) return "livre";
+      return r.alunos.some(a => a.cadeira === cl.metade * 14 + n) ? "ocupada" : "vaga livre";
+    };
+    const contaOcup = cl => [...Array(14)].filter((_, i) => estado(cl, i + 1) === "ocupada").length;
+    const totalOcupadas = clinicas.reduce((a, cl) => a + contaOcup(cl), 0);
+    const horasClinica = cl => st.reservas.filter(r => r.sala === cl.sala && r.metades.includes(cl.metade)).reduce((a, r) => a + (r.fim - r.inicio), 0);
+    const horasSemana = Math.round(st.reservas.reduce((a, r) => a + (r.fim - r.inicio) * r.metades.length, 0));
+
+    const salaSel = st.sala;
+    const clinicasSala = clinicas.filter(c => c.sala === salaSel);
+    const mSel = st.cadeira > 14 ? 1 : 0;
+    const clSel = clinicasSala[mSel];
+    const nSel = st.cadeira - mSel * 14;
+    const stSel = estado(clSel, nSel);
+    const resSel = ativa(salaSel, mSel);
+    const alunoSel = resSel && resSel.alunos.find(a => a.cadeira === mSel * 14 + nSel);
+    const dSel = resSel ? discDe(resSel.disc) : null;
+
+    const campos = stSel === "ocupada"
+      ? [{ k: "Aluno", v: alunoSel.nome }, { k: "Período", v: alunoSel.periodo }, { k: "Vínculo", v: alunoSel.fixa ? "cadeira fixa" : "rotativo" }, { k: "Disciplina", v: dSel.codigo + " " + dSel.turma }, { k: "Professor", v: dSel.professor }, { k: "Faixa", v: this.hm(resSel.inicio) + "–" + this.hm(resSel.fim) }]
+      : stSel === "vaga livre"
+        ? [{ k: "Disciplina", v: dSel.codigo + " " + dSel.turma }, { k: "Professor", v: dSel.professor }, { k: "Faixa", v: this.hm(resSel.inicio) + "–" + this.hm(resSel.fim) }]
+        : stSel === "manutenção"
+          ? [{ k: "Situação", v: "Fora de operação" }, { k: "Clínica", v: clSel.nome }]
+          : [{ k: "Situação", v: "Livre" }, { k: "Próxima", v: (() => { const p = proxima(salaSel, mSel); return p ? this.hm(p.inicio) : "—"; })() }];
+    const acao = stSel === "ocupada" ? "Liberar cadeira" : stSel === "vaga livre" ? "Alocar aluno" : stSel === "manutenção" ? "Reabrir cadeira" : "Registrar ocupação";
+    const acaoFn = stSel === "ocupada" ? () => this.liberarCadeira(resSel.id, mSel * 14 + nSel)
+      : stSel === "vaga livre" ? () => this.alocar(resSel.id, mSel * 14 + nSel)
+        : stSel === "manutenção" ? () => this.toggleManut(clSel.idx, nSel)
+          : () => this.setState(s => ({ view: "painel", form: { ...s.form, escopo: salaSel + "-" + mSel } }));
+
+    const conj = st.reservas.find(r => r.sala === salaSel && r.dia === diaHoje && r.metades.length === 2 && horaDec >= r.inicio && horaDec < r.fim);
+    const linhasPista = rowH => [0, 1, 2].map(i => "position:absolute;left:0;right:0;top:" + rowH * i + "px;height:1px;background:var(--line-soft);");
+    const horasDia = (cl, di) => st.reservas.filter(r => r.sala === cl.sala && r.metades.includes(cl.metade) && r.dia === di).reduce((a, r) => a + (r.fim - r.inicio), 0);
+    const CAP = SPAN * DIAS.length;
+    const numTd = "font-size:13px;text-align:right;font-variant-numeric:tabular-nums;";
+    const totTd = "font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;";
+    const semanalMatriz = clinicas.map(cl => {
+      const dias = DIAS.map((_, di) => horasDia(cl, di));
+      const total = dias.reduce((a, b) => a + b, 0);
+      return { cl, dias, total, manut: (st.manut[cl.idx] || []) };
+    });
+
+    const filtradas = st.filtro === "andamento" ? doDia.filter(r => horaDec >= r.inicio && horaDec < r.fim) : doDia;
+    const ocupacoesHoje = filtradas.map(r => {
+      const agora = horaDec >= r.inicio && horaDec < r.fim;
+      const sit = agora ? "em atendimento" : r.fim <= horaDec ? "encerrada" : r.metades.length === 2 ? "conjunta" : "registrada";
+      const d = discDe(r.disc);
+      return {
+        titulo: rotulo(r), faixa: this.hm(r.inicio) + "–" + this.hm(r.fim),
+        detalhe: d.codigo + " " + d.turma + " · " + d.professor + " · " + r.alunos.length + " alunos",
+        situacao: sit, tagStyle: this.tagPara(sit),
+        cancelar: () => this.cancelar(r.id),
+        cancelarStyle: "height:32px;border-radius:0;font-size:12.5px;padding:0 12px;" + (coord ? "" : "opacity:.45;"),
+        cancelarTitulo: coord ? "Cancelar ocupação" : "Somente a coordenação de clínica pode cancelar",
+        abrir: () => this.setState({ view: "ocupacao", sala: r.sala }),
+        rowStyle: "display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid var(--line-soft);" + (r.fim <= horaDec ? "opacity:.6;" : "")
+      };
+    });
+
+    const campoSel = (label, key, opcoes) => ({
+      label, value: String(st.form[key]), opcoes,
+      onChange: e => this.setForm(key, e.target.value)
+    });
+    const escopoOpcoes = [];
+    SALAS.forEach((s, si) => {
+      s.clinicas.forEach((c, mi) => escopoOpcoes.push({ v: si + "-" + mi, t: c + " · " + s.esp[mi] }));
+      escopoOpcoes.push({ v: si + "-d", t: s.nome + " · duas clínicas" });
+    });
+
+    const calendarioHoras = [...Array(15)].map((_, hi) => {
+      const h = H0 + hi;
+      return {
+        hora: this.hm(h),
+        horaStyle: "font-size:11.5px;color:var(--muted-2);padding:9px 0;border-top:1px solid var(--line-soft);font-variant-numeric:tabular-nums;",
+        celulas: DIAS.map((dd, di) => ({
+          style: "display:flex;flex-direction:column;gap:4px;min-height:42px;padding:6px 0;border-top:1px solid var(--line-soft);",
+          blocos: st.reservas.filter(r => r.dia === di && r.inicio >= h && r.inicio < h + 1).map(r => {
+            const dupla = r.metades.length === 2, d = discDe(r.disc);
+            return {
+              titulo: rotulo(r), sub: this.hm(r.inicio) + "–" + this.hm(r.fim) + " · " + d.codigo + " " + d.turma,
+              onClick: () => this.setState({ dia: di, modo: "gantt", sala: r.sala }),
+              style: "text-align:left;cursor:pointer;padding:7px 10px;border-radius:0;border:0;" + (dupla ? "background:var(--fill-deep);color:var(--color-accent-100);" : "background:var(--fill-soft);color:var(--on-soft);")
+            };
+          })
+        }))
+      };
+    });
+
+    const discSel = discDe(st.disc);
+    const clinicaDaDisc = clinicas[discSel.clinicaIdx] || clinicas[0];
+    const perLista = discSel.pos ? PERIODOS_POS : PERIODOS;
+    const perSel = perLista.includes(st.aluno.periodo) ? st.aluno.periodo : perLista[0];
+
+    return {
+      tema: st.tema,
+      toggleTema: () => { const t = escuro ? "claro" : "escuro"; try { localStorage.setItem("cc-tema", t); } catch (e) {} this.setState({ tema: t }); },
+      temaLabel: escuro ? "Claro" : "Escuro",
+      temaBtnStyle: "font:600 11.5px var(--font-body);letter-spacing:.06em;text-transform:uppercase;padding:7px 12px;cursor:pointer;border-radius:0;background:transparent;border:1px solid var(--line);color:var(--muted);",
+      showLogin: !st.logado, showApp: st.logado,
+      entrar: () => this.setState({ logado: true }),
+      dominio: this.props.dominio || "unipolo.edu.br",
+      nomeInst: this.props.nomeInstituicao || "Ocupa · Odontologia",
+      semestre: st.semestre,
+      numeros: [
+        { valor: "8", label: "clínicas" }, { valor: "4", label: "salas em par" },
+        { valor: "112", label: "cadeiras" }, { valor: "1–112", label: "numeração" }
+      ],
+      abas: [
+        { label: "Painel", onClick: set("view", "painel"), style: this.navStyle(st.view === "painel") },
+        { label: "Ocupação agora", onClick: set("view", "ocupacao"), style: this.navStyle(st.view === "ocupacao") },
+        { label: "Ocupações", onClick: set("view", "reservas"), style: this.navStyle(st.view === "reservas") },
+        { label: "Disciplinas", onClick: set("view", "cadastros"), style: this.navStyle(st.view === "cadastros") },
+        { label: "Relatórios", onClick: set("view", "relatorios"), style: this.navStyle(st.view === "relatorios") },
+        { label: "Estrutura", onClick: set("view", "config"), style: this.navStyle(st.view === "config") }
+      ],
+      isPainel: st.view === "painel", isOcup: st.view === "ocupacao", isReservas: st.view === "reservas",
+      isCad: st.view === "cadastros", isRel: st.view === "relatorios", isConfig: st.view === "config",
+      horaAtual: this.hm(horaDec), dataAtual: now.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" }),
+      semanaLabel: "17 a 22 de agosto",
+      usuario: { nome: "Camila Vieira", iniciais: "CV" },
+      perfis: [
+        { label: "Responsável", onClick: () => this.setState({ perfil: "responsavel", aviso: "", avisoErro: false }), style: this.perfilStyle(!coord) },
+        { label: "Coordenação", onClick: () => this.setState({ perfil: "coordenacao", aviso: "", avisoErro: false }), style: this.perfilStyle(coord) }
+      ],
+      toggleNotif: () => this.setState(s => ({ notif: !s.notif })),
+      notifAberto: st.notif, notifCount: emCurso.length,
+      notifBtnStyle: "position:relative;width:32px;height:32px;border-radius:0;background:transparent;border:1px solid var(--line);color:var(--muted);cursor:pointer;display:grid;place-items:center;",
+      notifBadgeStyle: "position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 4px;background:var(--fill-strong);color:var(--on-strong);font:600 10px var(--font-body);place-items:center;display:" + (emCurso.length ? "grid" : "none") + ";",
+      notificacoes: [
+        { titulo: emCurso.length + " ocupações em andamento", detalhe: doDia.length + " registradas hoje", dot: "width:6px;height:6px;flex:none;margin-top:6px;background:var(--fill-strong);" },
+        { titulo: this.totalManut() + " cadeiras em manutenção", detalhe: "ver Estrutura", dot: "width:6px;height:6px;flex:none;margin-top:6px;background:var(--line);" },
+        { titulo: "Semestre " + st.semestre, detalhe: st.disciplinas.reduce((a, d) => a + d.alunos.length, 0) + " alunos vinculados", dot: "width:6px;height:6px;flex:none;margin-top:6px;background:var(--line);" }
+      ],
+      kpis: [
+        { label: "Cadeiras em uso", value: totalOcupadas, unit: "de 112", color: "var(--accent-ink)" },
+        { label: "Em andamento", value: emCurso.length, unit: "ocupações", color: "var(--color-text)" },
+        { label: "Horas na semana", value: horasSemana, unit: "h", color: "var(--color-text)" },
+        { label: "Manutenção", value: this.totalManut(), unit: "cadeiras", color: "var(--muted)" }
+      ],
+      campos: [
+        campoSel("Clínica", "escopo", escopoOpcoes),
+        campoSel("Dia", "dia", DIAS.map((d, i) => ({ v: String(i), t: d[0] + " " + d[1] }))),
+        campoSel("Início", "inicio", this.horasOpcoes()),
+        campoSel("Fim", "fim", this.horasOpcoes()),
+        campoSel("Disciplina · turma", "disc", st.disciplinas.map((d, i) => ({ v: String(i), t: d.codigo + " " + d.turma + " · " + d.nome })))
+      ],
+      registrar: () => this.registrar(),
+      aviso: st.aviso,
+      avisoStyle: "font-size:12.5px;color:" + (st.avisoErro ? "var(--accent-ink)" : "var(--muted)") + ";",
+      filtros: [
+        { label: "Todas", onClick: set("filtro", "todas"), style: this.segStyle(st.filtro === "todas") },
+        { label: "Em andamento", onClick: set("filtro", "andamento"), style: this.segStyle(st.filtro === "andamento") }
+      ],
+      ocupacoesHoje, semOcupacoes: ocupacoesHoje.length === 0,
+      ocupacaoClinicas: clinicas.map(cl => {
+        const h = horasClinica(cl), pct = Math.min(100, Math.round(h / 60 * 100));
+        return { nome: cl.nome, horas: Math.round(h) + " h", barStyle: "display:block;height:100%;width:" + pct + "%;background:var(--fill-strong);" };
+      }),
+      salas: SALAS.map((s, i) => {
+        const o = clinicas.filter(c => c.sala === i).reduce((a, cl) => a + contaOcup(cl), 0);
+        const on = i === salaSel;
+        return {
+          nome: s.nome, clinicas: s.clinicas.join(" · "), pct: Math.round(o / 28 * 100), onClick: set("sala", i),
+          style: "display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:11px 13px;cursor:pointer;border-radius:0;border:1px solid " + (on ? "var(--accent-ink)" : "transparent") + ";background:" + (on ? "var(--fill-soft)" : "transparent") + ";color:" + (on ? "var(--on-soft)" : "var(--color-text)") + ";"
+        };
+      }),
+      legenda: [
+        { label: "Com aluno", swatch: "width:13px;height:13px;flex:none;background:var(--fill-strong);" },
+        { label: "Vaga na ocupação", swatch: "width:13px;height:13px;flex:none;border:1px solid var(--accent-ink);" },
+        { label: "Livre", swatch: "width:13px;height:13px;flex:none;border:1px solid var(--line-soft);" },
+        { label: "Manutenção", swatch: "width:13px;height:13px;flex:none;background:var(--line-soft);" }
+      ],
+      tagConjunta: this.tagPara("conjunta"),
+      salaAtual: {
+        nome: SALAS[salaSel].nome + " · " + SALAS[salaSel].clinicas.join(" e "),
+        resumo: clinicasSala.reduce((a, cl) => a + contaOcup(cl), 0) + " de 28 cadeiras em uso · " + (salaSel * 28 + 1) + "–" + (salaSel * 28 + 28),
+        conjunta: !!conj,
+        textoConjunta: conj ? discDe(conj.disc).codigo + " " + discDe(conj.disc).turma + " nas duas clínicas até " + this.hm(conj.fim) : "",
+        metades: clinicasSala.map((cl, mi) => {
+          const at = ativa(salaSel, mi), px = proxima(salaSel, mi), an = anterior(salaSel, mi);
+          const linha = at
+            ? discDe(at.disc).codigo + " " + discDe(at.disc).turma + " · " + discDe(at.disc).professor + " · " + this.hm(at.inicio) + "–" + this.hm(at.fim)
+            : px ? "Livre · próxima " + this.hm(px.inicio) + " · " + discDe(px.disc).codigo + " " + discDe(px.disc).turma
+              : an ? "Livre · encerrada " + this.hm(an.fim) : "Livre o dia inteiro";
+          return {
+            clinica: cl.nome, especialidade: cl.especialidade, reserva: linha,
+            wrapStyle: mi === 1 ? "border-left:1px dashed var(--line);padding-left:30px;min-width:0;" : "padding-right:30px;min-width:0;",
+            cadeiras: [...Array(14)].map((_, i) => {
+              const n = i + 1, gn = mi * 14 + n;
+              return { label: String(salaSel * 28 + gn).padStart(2, "0"), onClick: () => this.setState({ cadeira: gn }), style: this.chairStyle(estado(cl, n), gn === st.cadeira) };
+            })
+          };
+        })
+      },
+      detalhe: {
+        num: salaSel * 28 + mSel * 14 + nSel,
+        status: stSel, tagStyle: this.tagPara(stSel),
+        local: SALAS[salaSel].nome + " · " + clSel.nome, campos, acao, acaoFn
+      },
+      temAlunos: !!resSel,
+      tituloAlunos: resSel ? (resSel.metades.length === 2 ? "Turma nas 28 cadeiras" : "Alunos na " + clSel.nome) : "",
+      alunosAgora: resSel ? resSel.alunos.slice(0, 10).map(a => ({
+        nome: a.nome, periodo: a.periodo, cadeira: String(salaSel * 28 + a.cadeira).padStart(2, "0"),
+        numStyle: "width:26px;height:26px;flex:none;display:grid;place-items:center;font:600 11px var(--font-body);background:var(--fill-soft);color:var(--on-soft);"
+      })) : [],
+      pistaStyle: "position:relative;height:" + ROW * 2 + "px;",
+      pistaAltura: ROW * 2 + "px",
+      pistaLabels: SALAS[salaSel].clinicas,
+      pistaLinhas: linhasPista(ROW),
+      pistaBlocos: st.reservas.filter(r => r.sala === salaSel && r.dia === diaHoje).map(r => ({
+        style: this.blocoStyle(r, horaDec >= r.inicio && horaDec < r.fim, ROW),
+        label: this.hm(r.inicio) + "–" + this.hm(r.fim) + " · " + discDe(r.disc).codigo + " " + discDe(r.disc).turma
+      })),
+      agoraStyle: "position:absolute;left:" + ((horaDec - H0) / SPAN * 100) + "%;top:-4px;bottom:-4px;width:1px;background:var(--accent-ink);",
+      modos: [
+        { label: "Semana", onClick: set("modo", "calendario"), style: this.segStyle(st.modo === "calendario") },
+        { label: "Dia", onClick: set("modo", "gantt"), style: this.segStyle(st.modo === "gantt") }
+      ],
+      isCalendario: st.modo === "calendario", isGantt: st.modo === "gantt",
+      irParaNova: set("view", "painel"),
+      dias: DIAS.map(([l, dt], i) => ({ label: l, data: dt, headStyle: "position:sticky;top:0;z-index:2;background:var(--color-bg);padding-bottom:8px;font:600 13px var(--font-heading);letter-spacing:.05em;white-space:nowrap;color:" + (i === st.dia ? "var(--accent-ink)" : "var(--color-text)") })),
+      diasChips: DIAS.map(([l], i) => ({ label: l, onClick: set("dia", i), chipStyle: this.chipStyle(i === st.dia) })),
+      calendarioHoras,
+      legendaReserva: [
+        { label: "Clínica", swatch: "width:13px;height:13px;flex:none;background:var(--fill-soft);" },
+        { label: "Duas clínicas da sala", swatch: "width:13px;height:13px;flex:none;background:var(--fill-deep);" }
+      ],
+      diaSelecionado: DIAS[st.dia][0] + " " + DIAS[st.dia][1],
+      horas: ["07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21"],
+      ganttSalas: SALAS.map((s, si) => ({
+        sala: s.nome, clinicas: s.clinicas.join(" · "),
+        pistaStyle: "position:relative;height:" + ROW * 2 + "px;",
+        linhas: linhasPista(ROW),
+        blocos: st.reservas.filter(r => r.sala === si && r.dia === st.dia).map(r => ({
+          style: this.blocoStyle(r, false, ROW),
+          label: discDe(r.disc).codigo + " " + discDe(r.disc).turma + " · " + discDe(r.disc).professor.split(" ")[0],
+          title: rotulo(r) + " " + this.hm(r.inicio) + "–" + this.hm(r.fim)
+        }))
+      })),
+      listaDisciplinas: st.disciplinas.map((d, i) => {
+        const on = i === st.disc, cl = clinicas[d.clinicaIdx] || clinicas[0];
+        return {
+          codigo: d.codigo, nome: d.nome, turma: d.turma, alunos: d.alunos.length ? d.alunos.length + " alunos" : "sem alunos",
+          detalhe: d.professor + " · " + cl.nome, onClick: set("disc", i),
+          turmaStyle: this.pill(on ? "var(--fill-strong)" : "var(--line-soft)", on ? "var(--on-strong)" : "var(--on-line)"),
+          style: "display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 15px;cursor:pointer;border-radius:0;border:0;border-bottom:1px solid var(--line-soft);background:" + (on ? "var(--fill-soft)" : "transparent") + ";color:" + (on ? "var(--on-soft)" : "var(--color-text)") + ";"
+        };
+      }),
+      disciplina: {
+        codigo: discSel.codigo, nome: discSel.nome, turma: discSel.turma, ch: discSel.ch,
+        clinica: clinicaDaDisc.nome + " · " + clinicaDaDisc.especialidade,
+        clinicaIdx: String(discSel.clinicaIdx), professor: discSel.professor,
+        nivel: discSel.nivel, nivelStyle: this.pill(discSel.pos ? "var(--fill-tint)" : "var(--line-soft)", discSel.pos ? "var(--on-tint)" : "var(--on-line)"),
+        vinculo: discSel.pos ? "cadeira rotativa" : "cadeira fixa no semestre",
+        horas: Math.round(horasClinica(clinicaDaDisc)) + " h na semana",
+        irmas: (() => { const n = st.disciplinas.filter(d => d.codigo === discSel.codigo).length; return n > 1 ? n + " turmas neste código" : "turma única"; })()
+      },
+      professores: PROF,
+      turmas: TURMAS,
+      novaTurma: () => this.novaTurma(),
+      setCodigo: e => this.trocaDisc(st.disc, { codigo: e.target.value }),
+      setNomeDisc: e => this.trocaDisc(st.disc, { nome: e.target.value }),
+      setTurma: e => this.trocaDisc(st.disc, { turma: e.target.value }),
+      clinicasOpcoes: clinicas.map(c => ({ v: String(c.idx), t: c.nome + " · " + c.especialidade })),
+      trocarProfessor: e => this.trocaDisc(st.disc, { professor: e.target.value }),
+      trocarClinica: e => this.trocaDisc(st.disc, { clinicaIdx: Number(e.target.value) }),
+      periodos: perLista,
+      novoAluno: {
+        nome: st.aluno.nome, matricula: st.aluno.matricula, periodo: perSel,
+        setNome: e => this.setState(s => ({ aluno: { ...s.aluno, nome: e.target.value } })),
+        setMatricula: e => this.setState(s => ({ aluno: { ...s.aluno, matricula: e.target.value } })),
+        setPeriodo: e => this.setState(s => ({ aluno: { ...s.aluno, periodo: e.target.value } })),
+        vincular: () => this.vincular(perSel)
+      },
+      alunoCols: ["Aluno", "Matrícula", "Período", "Cadeira", ""],
+      alunosDisc: discSel.alunos.map(a => {
+        const usadas = discSel.alunos.filter(x => x.nome !== a.nome).map(x => x.cadeira);
+        return {
+          nome: a.nome, matricula: a.matricula, periodo: a.periodo,
+          fixa: !discSel.pos, rotativo: !!discSel.pos,
+          cadeira: a.cadeira ? String(a.cadeira) : "",
+          opcoes: [{ v: "", t: "—" }].concat([...Array(14)].map((_, i) => ({
+            v: String(i + 1),
+            t: String(discSel.clinicaIdx * 14 + i + 1).padStart(2, "0") + (usadas.includes(i + 1) ? " · ocupada" : "")
+          }))),
+          setCadeira: e => this.trocarCadeira(a.nome, e.target.value ? Number(e.target.value) : null),
+          remover: () => this.removerAluno(a.nome)
+        };
+      }),
+      semAlunos: discSel.alunos.length === 0,
+      encerrarSemestre: () => this.encerrarSemestre(),
+      novaDisciplina: () => this.novaDisciplina(),
+      relatorios: [
+        {
+          titulo: "Semanal · ocupação e manutenção", linhas: clinicas.length + " clínicas · " + DIAS.length + " dias",
+          exportar: () => this.exportarSemanal(semanalMatriz, CAP)
+        },
+        {
+          titulo: "Ocupação por clínica", linhas: clinicas.length + " linhas",
+          exportar: () => this.csv("ocupacao-por-clinica.csv", [["Clínica", "Especialidade", "Horas", "Ocupações"]].concat(clinicas.map(cl => [cl.nome, cl.especialidade, Math.round(horasClinica(cl)), st.reservas.filter(r => r.sala === cl.sala && r.metades.includes(cl.metade)).length])))
+        },
+        {
+          titulo: "Ocupações da semana", linhas: st.reservas.length + " registros",
+          exportar: () => this.csv("ocupacoes-semana.csv", [["Dia", "Sala", "Escopo", "Início", "Fim", "Disciplina", "Professor", "Alunos"]].concat(st.reservas.slice().sort((a, b) => (a.dia - b.dia) || (a.inicio - b.inicio)).map(r => [DIAS[r.dia][1], SALAS[r.sala].nome, rotulo(r), this.hm(r.inicio), this.hm(r.fim), discDe(r.disc).codigo + " " + discDe(r.disc).turma, discDe(r.disc).professor, r.alunos.length])))
+        },
+        {
+          titulo: "Disciplinas e alunos", linhas: st.disciplinas.reduce((a, d) => a + d.alunos.length, 0) + " vínculos",
+          exportar: () => this.csv("disciplinas-alunos.csv", [["Código", "Disciplina", "Turma", "Professor", "Aluno", "Matrícula", "Período"]].concat(st.disciplinas.flatMap(d => d.alunos.map(a => [d.codigo, d.nome, d.turma, d.professor, a.nome, a.matricula, a.periodo]))))
+        },
+        {
+          titulo: "Manutenção", linhas: this.totalManut() + " cadeiras",
+          exportar: () => this.csv("manutencao.csv", [["Clínica", "Especialidade", "Cadeira"]].concat(Object.keys(st.manut).flatMap(k => (st.manut[k] || []).map(c => [clinicas[k].nome, clinicas[k].especialidade, String(Number(k) * 14 + c).padStart(2, "0")]))))
+        }
+      ],
+      relCols: ["Disciplina", "Professor", "Horas", "Alunos", ""],
+      semanalCols: [{ label: "Clínica", style: "font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left" }]
+        .concat(DIAS.map(d => ({ label: d[0], style: "font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:right" })))
+        .concat(["Total", "Ocup.", "Manut."].map(l => ({ label: l, style: "font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:right" }))),
+      semanalRows: semanalMatriz.map(m => ({
+        nome: m.cl.nome, esp: m.cl.especialidade,
+        dias: m.dias.map(h => ({ v: h ? Math.round(h) : "—", style: numTd + (h ? "" : "color:var(--muted);") })),
+        total: Math.round(m.total) + " h", totalStyle: totTd,
+        pct: Math.round(m.total / CAP * 100) + "%", pctStyle: numTd + "color:var(--accent-ink);",
+        manut: m.manut.length ? m.manut.map(c => String(m.cl.idx * 14 + c).padStart(2, "0")).join(", ") : "—",
+        manutStyle: "font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums;" + (m.manut.length ? "color:var(--color-text);" : "color:var(--muted);")
+      })),
+      semanalTotal: (() => {
+        const dias = DIAS.map((_, di) => semanalMatriz.reduce((a, m) => a + m.dias[di], 0));
+        const total = dias.reduce((a, b) => a + b, 0);
+        return {
+          nome: "Polo", dias: dias.map(h => ({ v: Math.round(h), style: totTd })),
+          total: Math.round(total) + " h", totalStyle: totTd,
+          pct: Math.round(total / (CAP * clinicas.length) * 100) + "%", pctStyle: totTd,
+          manut: this.totalManut() + " cadeiras", manutStyle: totTd
+        };
+      })(),
+      semanalNota: "Horas por dia · capacidade de " + CAP + " h por clínica na semana (07h–22h, seg a sáb)",
+      exportarSemanal: () => this.exportarSemanal(semanalMatriz, CAP),
+      relRows: st.disciplinas.map(d => {
+        const cl = clinicas[d.clinicaIdx] || clinicas[0];
+        const horas = Math.round(horasClinica(cl));
+        return { disc: d.codigo + " " + d.turma + " · " + d.nome, prof: d.professor, horas: horas + " h", alunos: d.alunos.length, barStyle: "display:block;height:100%;width:" + Math.min(100, horas * 1.8) + "%;background:var(--fill-strong);" };
+      }),
+      config: SALAS.map((s, si) => ({
+        nome: s.nome,
+        faixa: (si * 28 + 1) + "–" + (si * 28 + 28),
+        clinicas: s.clinicas.map((nome, mi) => {
+          const cl = clinicas[si * 2 + mi];
+          const faixa = this.cadeirasDe(cl.idx);
+          return {
+            nome, especialidade: s.esp[mi],
+            info: "14 cadeiras (" + faixa[0] + "–" + faixa[1] + ")",
+            qtdManut: (st.manut[cl.idx] || []).length ? (st.manut[cl.idx] || []).length + " em manutenção" : "todas operando",
+            cadeirasManut: [...Array(14)].map((_, i) => {
+              const n = i + 1, off = (st.manut[cl.idx] || []).includes(n);
+              return {
+                label: String(si * 28 + mi * 14 + n).padStart(2, "0"),
+                onClick: () => this.toggleManut(cl.idx, n),
+                style: "height:34px;display:grid;place-items:center;cursor:pointer;border-radius:0;font:600 12px var(--font-body);font-variant-numeric:tabular-nums;" + (off
+                  ? "background:var(--line-soft);border:1px solid var(--line);color:var(--muted);text-decoration:line-through;"
+                  : "background:transparent;border:1px solid var(--line-soft);color:var(--color-text);")
+              };
+            })
+          };
+        })
+      })),
+      regrasConfig: [
+        { label: "Numeração das cadeiras", valor: "1–112", pill: this.tagPara("registrada") },
+        { label: "Cancelamento", valor: "coordenação", pill: this.tagPara("em atendimento") },
+        { label: "Vínculo aluno–cadeira", valor: "fixo na graduação", pill: this.tagPara("registrada") },
+        { label: "Pós-graduação", valor: "cadeira rotativa", pill: this.tagPara("livre") },
+        { label: "Ocupação conjunta", valor: "permitida", pill: this.tagPara("registrada") },
+        { label: "Sobreposição na clínica", valor: "bloqueada", pill: this.tagPara("livre") },
+        { label: "Faixa mínima", valor: "2 h", pill: this.tagPara("registrada") },
+        { label: "Vínculos", valor: st.semestre, pill: this.tagPara("registrada") }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

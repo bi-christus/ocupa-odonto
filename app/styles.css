@@ -1,0 +1,296 @@
+/* Os pesos precisam ser exatamente os do design system. Carregar 600 de
+   Barlow e 700 de Condensed fazia o navegador resolver os font-weight:600
+   para faces que o mockup nunca usou — a causa de "as fontes carregam mas
+   não batem". */
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&display=swap');
+
+/* ═══ Tokens — Industry design system ═══ */
+:root{
+  --color-bg:#f2f2f3; --color-surface:#e9e9ea; --color-text:#1d1f20;
+  --color-divider:color-mix(in srgb,#1d1f20 16%,transparent);
+  --color-neutral-100:#f5f5f8;--color-neutral-200:#e7e7ea;--color-neutral-300:#d4d4d7;
+  --color-neutral-400:#b7b7ba;--color-neutral-500:#98989b;--color-neutral-600:#7a7a7d;
+  --color-neutral-700:#5d5d60;--color-neutral-800:#424244;--color-neutral-900:#2b2b2d;
+  --color-accent-100:#eef6ff;--color-accent-200:#d6ebff;--color-accent-300:#b5d9fd;
+  --color-accent-400:#94bce3;--color-accent-500:#749dc4;--color-accent-600:#597ea3;
+  --color-accent-700:#416180;--color-accent-800:#2c455d;--color-accent-900:#1d2d3d;
+  --color-accent:#5980a6;--color-accent-2:#728fab;
+  --color-accent-2-100:#f0f4f8;--color-accent-2-200:#dbe4ee;--color-accent-2-300:#c1d0e0;
+  --color-accent-2-400:#a3b8ce;--color-accent-2-500:#879fba;--color-accent-2-600:#6d8399;
+  --color-accent-2-700:#546678;--color-accent-2-800:#3b4956;--color-accent-2-900:#252e37;
+  --font-heading:"Barlow Condensed",system-ui,sans-serif;
+  --font-body:"Barlow",system-ui,sans-serif;
+  --warn:#a8641f; --warn-bg:#fbeedd; --danger:#9d3a34; --danger-bg:#fbe4e2;
+  --ok:#3d6b4a; --ok-bg:#e2f0e6;
+}
+[data-tema]{
+  --fill-strong:var(--color-accent-700);--on-strong:var(--color-accent-100);
+  --fill-soft:var(--color-accent-200);--on-soft:var(--color-accent-800);
+  --fill-deep:var(--color-accent-900);--accent-ink:var(--color-accent-700);
+  --line:var(--color-neutral-400);--line-soft:var(--color-neutral-200);
+  --muted:var(--color-neutral-700);--muted-2:var(--color-neutral-700);--panel:transparent;
+  /* Faixa da ocupação que toma as duas clínicas do agrupamento. */
+  --fill-tint:var(--color-accent-2-200);--on-tint:var(--color-accent-2-800);
+  --on-line:var(--color-neutral-800);
+  background:var(--color-bg);color:var(--color-text);min-height:100vh;
+}
+[data-tema="escuro"]{
+  --color-bg:#1d1f20;--color-surface:#2b2b2d;--color-text:#f5f5f8;
+  --color-divider:color-mix(in srgb,#f5f5f8 24%,transparent);
+  /* accent-600 dava 3,90:1 contra o texto claro, abaixo de AA. */
+  --fill-strong:var(--color-accent-700);--on-strong:var(--color-accent-100);
+  --fill-soft:var(--color-accent-800);--on-soft:var(--color-accent-200);
+  --fill-deep:var(--color-accent-900);--accent-ink:var(--color-accent-300);
+  --line:var(--color-neutral-700);--line-soft:var(--color-neutral-800);
+  --muted:var(--color-neutral-400);--muted-2:var(--color-neutral-400);
+  --fill-tint:var(--color-accent-2-800);--on-tint:var(--color-accent-2-200);
+  --on-line:var(--color-neutral-200);
+  --warn:#e0ac6c;--warn-bg:#3a2e1c;--danger:#e39a94;--danger-bg:#3a2422;
+  --ok:#8fc09e;--ok-bg:#1e3325;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);
+  font-size:15px;line-height:1.55;font-weight:400;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,h5{font-family:var(--font-heading);font-weight:600;margin:0;
+  line-height:1.12;letter-spacing:-.015em}
+h1{font-size:40px;line-height:1.05}
+h2{font-size:30px}h3{font-size:24px}h4{font-size:20px}h5{font-size:20px}
+a{color:var(--accent-ink);text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
+::selection{background:color-mix(in srgb,var(--color-accent) 30%,transparent)}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.eyebrow{font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.hidden{display:none !important}
+
+/* ═══ Shell ═══ */
+.app{min-height:100vh;display:flex;flex-direction:column}
+.hdr{display:flex;align-items:center;justify-content:space-between;gap:14px 22px;flex-wrap:wrap;
+  padding:12px 28px;border-bottom:1px solid var(--color-divider);background:var(--color-bg);position:sticky;top:0;z-index:40}
+.brand{font:600 13px var(--font-heading);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.nav{display:flex;gap:2px;flex-wrap:wrap}
+.nav button{background:none;border:0;padding:7px 13px;font:600 12.5px var(--font-heading);letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);border-radius:0}
+.nav button:hover{color:var(--color-text)}
+.nav button.on{background:var(--fill-strong);color:var(--on-strong)}
+.hdr-right{display:flex;align-items:center;gap:12px}
+.chip-btn{background:none;border:1px solid var(--line);padding:7px 12px;font:600 11.5px var(--font-heading);
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-radius:0}
+.chip-btn:hover{border-color:var(--color-text)}
+.avatar{width:30px;height:30px;background:var(--fill-soft);color:var(--on-soft);display:grid;place-items:center;font:600 11px var(--font-body)}
+.role-tag{font:600 10px var(--font-body);letter-spacing:.09em;text-transform:uppercase;
+  background:var(--fill-soft);color:var(--on-soft);padding:3px 7px}
+main{padding:24px 28px 56px;max-width:1460px;width:100%}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:24px}
+
+/* ═══ Primitives ═══ */
+.card{border:1px solid var(--color-divider);padding:22px 24px;background:var(--panel)}
+.btn{border:1px solid transparent;padding:0 16px;height:36px;border-radius:0;
+  font-family:var(--font-heading);font-weight:600;font-size:13.5px;line-height:1.2;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}
+.btn-lg{height:38px;padding:0 20px}
+.btn-primary{background:var(--fill-strong);color:var(--on-strong)}
+.btn-primary:hover{background:var(--color-accent-800)}
+[data-tema="escuro"] .btn-primary:hover{background:var(--color-accent-500)}
+.btn-primary:disabled{opacity:.42;cursor:not-allowed}
+.btn-outline{background:transparent;border-color:var(--line);color:var(--color-text)}
+.btn-outline:hover{border-color:var(--color-text)}
+.btn-ghost{background:none;border:0;color:var(--accent-ink);padding:0 6px;height:auto}
+.btn-ghost:hover{background:color-mix(in srgb,var(--accent-ink) 10%,transparent)}
+.btn-ghost:active{background:color-mix(in srgb,var(--accent-ink) 18%,transparent)}
+.btn-danger{background:none;border:0;color:var(--danger);padding:0 6px;height:auto}
+.btn-danger:hover{background:color-mix(in srgb,var(--danger) 10%,transparent)}
+.btn-danger:active{background:color-mix(in srgb,var(--danger) 18%,transparent)}
+/* Ação destrutiva confirmada num modal não pode usar o mesmo azul de "salvar".
+   No tema escuro --danger é claro, então o texto precisa ser escuro. */
+.btn-perigo{background:var(--danger);color:var(--danger-bg);border-color:transparent}
+[data-tema="escuro"] .btn-perigo{color:var(--color-neutral-900)}
+.btn-perigo:hover{background:color-mix(in srgb,var(--danger) 82%,#000)}
+[data-tema="escuro"] .btn-perigo:hover{background:color-mix(in srgb,var(--danger) 82%,#fff)}
+.btn-sm{height:30px;font-size:12px;padding:0 11px}
+label.fld{display:flex;flex-direction:column;gap:6px;min-width:0}
+label.fld > span{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.input{background:transparent;color:var(--color-text);border:1px solid var(--color-divider);border-radius:0;
+  height:36px;font:400 13.5px var(--font-body);padding:0 10px;width:100%}
+.input:focus-visible{border-color:var(--accent-ink)}
+input[type="time"].input{padding-right:6px}
+textarea.input{height:auto;padding:9px 10px;line-height:1.5;resize:vertical;font-family:var(--font-body)}
+select.input{appearance:none;padding-right:26px;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 14px) 16px,calc(100% - 9px) 16px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+[data-tema="escuro"] select.input option{background:#2b2b2d;color:#f5f5f8}
+.grid-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:14px}
+.seg{display:inline-flex;border:1px solid var(--line)}
+.seg button{background:none;border:0;padding:8px 15px;font:500 12.5px var(--font-body);color:var(--muted);border-radius:0}
+.seg button.on{background:var(--fill-strong);color:var(--on-strong)}
+.badge{display:inline-block;font:600 10.5px var(--font-body);letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;white-space:nowrap}
+.badge.conjunta{background:var(--fill-tint);color:var(--on-tint)}
+.badge.strong{background:var(--fill-strong);color:var(--on-strong)}
+.badge.soft{background:var(--fill-soft);color:var(--on-soft)}
+.badge.neutral{background:var(--color-neutral-200);color:var(--color-neutral-800)}
+[data-tema="escuro"] .badge.neutral{background:var(--color-neutral-800);color:var(--color-neutral-200)}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.badge.danger{background:var(--danger-bg);color:var(--danger)}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.table{width:100%;border-collapse:collapse}
+.table th{text-align:left;font:600 11px var(--font-body);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:0 12px 9px 0;border-bottom:1px solid var(--color-divider)}
+.table tbody tr:hover{background:color-mix(in srgb,var(--color-text) 4%,transparent)}
+.table td{padding:11px 12px 11px 0;border-bottom:1px solid var(--color-divider);font-size:13.5px;vertical-align:middle}
+.table tr:last-child td{border-bottom:0}
+.table td.right,.table th.right{text-align:right;padding-right:0}
+.bar{height:8px;background:var(--line-soft);position:relative;flex:1;min-width:60px}
+.bar > i{position:absolute;inset:0 auto 0 0;background:var(--fill-strong);display:block}
+.empty{padding:34px 0;text-align:center;color:var(--muted);font-size:13.5px}
+.alert{border-left:3px solid var(--warn);background:var(--warn-bg);color:var(--warn);padding:10px 13px;font-size:12.5px;line-height:1.5}
+.alert.danger{border-color:var(--danger);background:var(--danger-bg);color:var(--danger)}
+.alert.ok{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}
+.stack{display:flex;flex-direction:column;gap:18px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* ═══ Toast ═══ */
+#toasts{position:fixed;right:20px;bottom:20px;z-index:90;display:flex;flex-direction:column;gap:9px}
+.toast{background:var(--color-neutral-900);color:var(--color-neutral-100);padding:12px 16px;font-size:13px;max-width:360px;
+  border-left:3px solid var(--color-accent-400);animation:tin .2s ease-out}
+@keyframes tin{from{opacity:0;transform:translateY(6px)}}
+
+/* ═══ Modal ═══ */
+.scrim{position:fixed;inset:0;background:color-mix(in srgb,#1d1f20 55%,transparent);z-index:60;
+  display:flex;align-items:flex-start;justify-content:center;padding:44px 20px;overflow:auto}
+.modal{background:var(--color-bg);border:1px solid var(--color-divider);width:100%;max-width:780px;box-shadow:0 12px 32px rgba(0,0,0,.28)}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 22px;border-bottom:1px solid var(--color-divider)}
+.modal-bd{padding:22px}
+.modal-ft{padding:16px 22px;border-top:1px solid var(--color-divider);display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.x{background:none;border:0;font-size:20px;line-height:1;color:var(--muted);padding:4px 8px}
+
+/* ═══ KPIs ═══ */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px}
+.kpi{border:1px solid var(--color-divider);padding:16px 18px}
+.kpi b{font:600 38px var(--font-heading);line-height:1;font-variant-numeric:tabular-nums;display:block;margin-top:7px}
+.kpi b small{font:400 12.5px var(--font-body);color:var(--muted);margin-left:5px}
+
+/* ═══ Chairs ═══
+   7 colunas fixas, sempre: é o que produz as duas fileiras de 7 que formam
+   as 14 cadeiras de uma clínica. Com auto-fill a grade remontava conforme a
+   largura e a leitura da clínica se perdia. */
+.chairs{display:grid;grid-template-columns:repeat(7,minmax(28px,1fr));gap:5px}
+.chair{border:1px solid var(--line-soft);height:42px;display:grid;place-items:center;
+  font:600 13px var(--font-body);font-variant-numeric:tabular-nums;background:transparent;color:var(--muted);border-radius:0;position:relative}
+.chair:hover{border-color:var(--color-text);color:var(--color-text)}
+.chair.ocupada{background:var(--fill-strong);color:var(--on-strong);border-color:var(--fill-strong)}
+.chair.vaga{border-color:var(--fill-strong);color:var(--accent-ink)}
+.chair.manut{background:var(--line-soft);color:var(--muted);border-color:transparent;text-decoration:line-through}
+[data-tema="escuro"] .chair.manut{background:var(--color-neutral-800);color:var(--color-neutral-300);border-color:transparent}
+.chair.sel{outline:2px solid var(--color-accent);outline-offset:2px}
+/* Variante densa da aba Estrutura, onde as 8 clínicas aparecem juntas. */
+.chairs.compacta{grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.chairs.compacta .chair{height:34px;font-size:12px;color:var(--color-text)}
+.chairs.compacta .chair.manut{border:1px solid var(--line);color:var(--muted)}
+.legend{display:flex;flex-direction:column;gap:9px;font-size:12.5px}
+.legend span.k{width:14px;height:14px;display:inline-block;border:1px solid var(--line-soft);flex:none}
+
+/* ═══ Timeline / Gantt ═══ */
+.tl-hd{display:flex;font-size:11px;color:var(--muted);padding-bottom:5px}
+.tl-hd i{flex:1;font-style:normal;font-variant-numeric:tabular-nums}
+.tl-row{display:flex;align-items:stretch;border-bottom:1px solid var(--color-divider);min-height:56px}
+.tl-lbl{width:142px;flex:none;padding:11px 12px 11px 0;font:600 13px var(--font-heading);letter-spacing:.04em}
+.tl-lbl small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.tl-track{flex:1;position:relative;padding:7px 0;min-width:0}
+.tl-blk{position:absolute;height:26px;background:var(--fill-strong);color:var(--on-strong);
+  font:600 11px var(--font-body);display:flex;align-items:center;padding:0 8px;overflow:hidden;white-space:nowrap;border:0}
+/* accent-500 dava 2,62:1 contra o texto claro do bloco. */
+.tl-blk.pontual{background:var(--color-accent-600)}
+/* O tom mais escuro identifica a ocupação que toma as duas clínicas; "em
+   curso" passa a ser sinalizado por contorno, e não gastando esse tom. */
+.tl-blk.conjunta{background:var(--fill-deep);color:var(--color-accent-100)}
+.tl-blk.agora{outline:1px solid var(--color-accent-300);outline-offset:-3px}
+.tl-now{position:absolute;top:0;bottom:0;width:1px;background:var(--accent-ink)}
+
+/* ═══ Week calendar ═══ */
+.wk{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--color-divider);border:1px solid var(--color-divider)}
+.wk-col{background:var(--color-bg);min-height:200px;padding:0 0 10px}
+.wk-hd{padding:10px 12px;border-bottom:1px solid var(--color-divider);font:600 13px var(--font-heading);letter-spacing:.05em}
+.wk-hd small{color:var(--muted);font-weight:400;margin-left:5px}
+.wk-hd.hoje{color:var(--accent-ink)}
+.ev{margin:7px 9px 0;padding:7px 9px;background:var(--fill-soft);color:var(--on-soft);border:0;border-left:3px solid var(--fill-strong);
+  font-size:12px;line-height:1.4;text-align:left;width:calc(100% - 18px);display:block}
+.ev:hover{filter:brightness(.96)}
+.ev b{display:block;font:600 12px var(--font-heading);letter-spacing:.03em}
+.ev.pontual{border-left-style:dashed}
+.ev.conjunta{background:var(--fill-tint);color:var(--on-tint);border-left-color:var(--fill-deep)}
+
+/* ═══ Split layouts ═══ */
+.split{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:36px;align-items:start}
+.split3{display:grid;grid-template-columns:238px minmax(0,1fr) 330px;gap:0;align-items:start}
+.split3 > .c-left{padding-right:24px;border-right:1px solid var(--color-divider)}
+.split3 > .c-mid{padding:0 26px;min-width:0}
+.split3 > .c-right{padding-left:24px;border-left:1px solid var(--color-divider)}
+.list-btn{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line-soft);
+  padding:12px 12px;font:inherit;color:inherit}
+.list-btn:hover{background:var(--color-surface)}
+.list-btn.on{background:var(--fill-soft);color:var(--on-soft)}
+.list-btn b{display:block;font:600 13.5px var(--font-heading);letter-spacing:.04em}
+.list-btn small{color:var(--muted);font-size:12px}
+.list-btn.on small{color:inherit;opacity:.8}
+.kv{display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px}
+.kv span:first-child{color:var(--muted)}
+.kv span:last-child{text-align:right;font-weight:500}
+
+/* ═══ Form: recurrence day picker ═══ */
+.days{display:flex;gap:6px;flex-wrap:wrap}
+.days button{border:1px solid var(--line);background:none;color:var(--color-text);height:36px;min-width:50px;
+  font:600 12px var(--font-body);border-radius:0}
+.days button.on{background:var(--fill-strong);color:var(--on-strong);border-color:var(--fill-strong)}
+.preview{border:1px solid var(--color-divider);border-left:3px solid var(--accent-ink);padding:13px 15px;font-size:12.5px;line-height:1.65}
+.preview b{font-weight:600}
+
+/* ═══ Access matrix ═══ */
+.matrix td.c{text-align:center;width:130px}
+.dot-yes{color:var(--ok);font-weight:700}
+.dot-no{color:var(--color-neutral-700)}
+[data-tema="escuro"] .dot-no{color:var(--color-neutral-400)}
+
+/* ═══ Telas estreitas ═══
+   As larguras fixas inline das telas não são alcançáveis daqui, então o que
+   se pode garantir é que nenhuma tabela empurre a página na horizontal. */
+.rolagem-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media (max-width:1080px){
+  .split{grid-template-columns:minmax(0,1fr);gap:26px}
+  .split3{grid-template-columns:minmax(0,1fr)}
+  .split3 > .c-left{padding-right:0;border-right:0;border-bottom:1px solid var(--color-divider);padding-bottom:18px}
+  .split3 > .c-mid{padding:18px 0}
+  .split3 > .c-right{padding-left:0;border-left:0;border-top:1px solid var(--color-divider);padding-top:18px}
+}
+@media (max-width:760px){
+  main{padding:18px 16px 48px}
+  .hdr{padding:10px 16px}
+  .wk{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tl-lbl{width:104px}
+  h1{font-size:30px}h2{font-size:24px}h3{font-size:20px}
+}
+
+/* ═══ Login ═══ */
+.login{min-height:100vh;display:grid;grid-template-columns:1.15fr 1fr}
+.login-l{padding:60px 56px;display:flex;flex-direction:column;justify-content:space-between;gap:40px}
+.login-r{display:grid;place-items:center;padding:40px;border-left:1px solid var(--color-divider)}
+.login h1{font-size:clamp(38px,4.4vw,60px);line-height:.98;max-width:15ch}
+@media (max-width:860px){
+  .login{grid-template-columns:minmax(0,1fr)}
+  .login-l{padding:40px 24px 24px}
+  .login-r{border-left:0;border-top:1px solid var(--color-divider);padding:24px}
+}
+.who{display:block;width:100%;text-align:left;border:1px solid var(--color-divider);background:none;color:inherit;
+  padding:13px 15px;margin-bottom:9px;border-radius:0}
+.who:hover{border-color:var(--accent-ink)}
+.who b{display:block;font:600 14px var(--font-heading);letter-spacing:.03em}
+.who small{color:var(--muted);font-size:12px}
+
+@media(max-width:1180px){.split3{grid-template-columns:1fr}
+  .split3 > .c-left,.split3 > .c-right{border:0;padding:0;margin-bottom:22px}
+  .split3 > .c-mid{padding:0}}
+@media(max-width:900px){.split{grid-template-columns:1fr}.login{grid-template-columns:1fr}
+  .login-r{border-left:0;border-top:1px solid var(--color-divider)}
+  .wk{grid-template-columns:1fr}}

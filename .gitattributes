@@ -1,0 +1,8 @@
+# Normaliza fim de linha: LF no repositório, nativo na cópia de trabalho.
+# Sem isto, o CRLF do Windows faz arquivos inteiros aparecerem como
+# modificados assim que o repo é aberto em outro sistema — e o deploy roda
+# em Linux.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
