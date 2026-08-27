@@ -30,13 +30,16 @@
 
   global.Autorizados = [
 
-    /* Exemplo — apague o comentário, ajuste e repita uma linha por pessoa:
+    /* Administradores do sistema. O nível 'coordenador' é o topo da
+       hierarquia e o único com a permissão acessos.editar — são estas duas
+       contas que cadastram as demais pessoas e definem o nível de cada uma,
+       pelo painel Acessos, sem precisar mexer neste arquivo de novo. */
+    { email: 'setorbiunichristus@gmail.com', perfil: 'coordenador' },
+    { email: 'napa21@christus.com.br', perfil: 'coordenador' }
 
-    { email: 'coordenacao.odonto@instituicao.edu.br', perfil: 'coordenador' },
-    { email: 'helena.vasques@instituicao.edu.br',     perfil: 'professor'   },
-    { email: 'manutencao.clinicas@instituicao.edu.br', perfil: 'tecnico'    },
-
-    */
+    /* Para acrescentar alguém aqui, uma linha por pessoa:
+       { email: 'fulano@dominio', perfil: 'professor' },
+       Perfis válidos: 'coordenador', 'professor', 'tecnico'. */
 
   ];
 
