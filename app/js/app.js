@@ -15,12 +15,42 @@
     { id: 'acessos', rotulo: 'Acessos', permissao: 'acessos.ver', view: 'ViewAcessos' }
   ];
 
+  /* `boot` separa "ainda não sei quem é" de "não tem ninguém logado". Sem
+     essa distinção a tela de login pisca antes de o Firebase devolver a
+     sessão que já existia, e quem recarregava a página via a tela de entrada
+     por um instante mesmo estando autenticado. */
+  var boot = true;
+
   function iniciar() {
     raiz = document.getElementById('raiz');
     try { tema = localStorage.getItem('ocupa.tema') || 'claro'; } catch (e) { }
-    S.carregar();
-    S.iniciarSessao();
-    desenhar();
+
+    if (!global.Nuvem || !global.Nuvem.iniciar()) {
+      boot = false;
+      desenhar();
+      return;
+    }
+
+    /* Uma assinatura só, que cobre os três casos: login novo, sessão
+       retomada ao reabrir a aba, e saída. */
+    global.Nuvem.aoMudarSessao(function (conta) {
+      if (!conta) { boot = false; desenhar(); return; }
+      if (S.usuario()) { boot = false; desenhar(); return; }
+      desenhar();
+      S.conferir(conta).then(function (r) {
+        boot = false;
+        if (!r.ok && r.motivo !== 'cancelado') erroLogin = r.mensagem;
+        if (r.ok) rota = 'painel';
+        desenhar();
+      }, function (e) {
+        boot = false;
+        erroLogin = 'Falha ao carregar o sistema: ' + ((e && e.message) || 'erro desconhecido');
+        desenhar();
+      });
+    });
+
+    S.assinar(function () { if (S.usuario()) desenhar(); });
+
     /* Relógio do cabeçalho e status das ocupações mudam com o tempo. */
     setInterval(function () {
       var t = document.getElementById('relogio');
@@ -32,7 +62,10 @@
     document.documentElement.setAttribute('data-tema', tema);
     C.clear(raiz);
     raiz.setAttribute('data-tema', tema);
+    if (boot) { raiz.appendChild(aguardando('Carregando…')); return; }
+    if (carregando) { raiz.appendChild(aguardando('Entrando…')); return; }
     if (!S.usuario()) { raiz.appendChild(login()); return; }
+    if (S.estruturaPendente()) { raiz.appendChild(provisionar()); return; }
     rotaValida();
     raiz.appendChild(C.el('div', { class: 'app' }, [
       cabecalho(),
@@ -54,131 +87,57 @@
   }
 
   /* ── Entrada ────────────────────────────────────────────────────────
-     Login exclusivamente por conta Google, restrito ao domínio institucional
-     e à lista de autorizados.js. Não há senha, cadastro aberto nem seleção
-     de pessoa. */
+     Login por conta Google via Firebase Auth. Quem pode entrar está na
+     coleção `autorizados` do Firestore — estar autenticado no Google não é
+     estar autorizado aqui. */
   var erroLogin = null;
+  var carregando = false;
 
-  /* Lê o corpo do token do Google. A assinatura NÃO é conferida — sem
-     servidor não há onde validar. Ver o aviso em autorizados.js. */
-  function corpoDoToken(jwt) {
-    var partes = String(jwt || '').split('.');
-    if (partes.length !== 3) return null;
-    try {
-      var b64 = partes[1].replace(/-/g, '+').replace(/_/g, '/');
-      while (b64.length % 4) { b64 += '='; }
-      var bruto = atob(b64);
-      var pct = '';
-      for (var i = 0; i < bruto.length; i++) {
-        pct += '%' + ('00' + bruto.charCodeAt(i).toString(16)).slice(-2);
-      }
-      return JSON.parse(decodeURIComponent(pct));
-    } catch (e) { return null; }
-  }
-
-  function aoReceberCredencial(resposta) {
-    var p = corpoDoToken(resposta && resposta.credential);
-    if (!p) {
-      erroLogin = 'Não foi possível ler a resposta do Google. Tente novamente.';
-      desenhar(); return;
-    }
-    var r = S.entrarComGoogle({
-      email: p.email, nome: p.name, hd: p.hd, emailVerificado: p.email_verified
-    });
-    if (!r.ok) {
-      erroLogin = r.mensagem;
-      /* Esquece a conta escolhida para o próximo clique poder trocar. */
-      try { global.google.accounts.id.disableAutoSelect(); } catch (e) { }
-      desenhar(); return;
-    }
+  function entrar() {
+    if (carregando) return;
     erroLogin = null;
-    rota = 'painel';
+    carregando = true;
     desenhar();
-    C.toast('Bem-vindo, ' + C.primeiroNome(r.usuario.nome) + '.');
+    S.entrar().then(function (r) {
+      carregando = false;
+      if (r.ok) { rota = 'painel'; erroLogin = null; desenhar(); C.toast('Bem-vindo, ' + C.primeiroNome(r.usuario.nome) + '.'); return; }
+      /* Fechar o popup é escolha da pessoa, não erro a ser exibido. */
+      erroLogin = (r.motivo === 'cancelado') ? null : r.mensagem;
+      desenhar();
+    }, function (e) {
+      carregando = false;
+      erroLogin = 'Falha inesperada ao entrar: ' + ((e && e.message) || 'erro desconhecido');
+      desenhar();
+    });
   }
 
-  function montarBotaoGoogle(alvo) {
-    var cfg = global.Config;
-    if (!global.google || !global.google.accounts || !global.google.accounts.id) {
-      alvo.appendChild(C.el('div', { class: 'alert danger' },
-        'Não foi possível carregar o login do Google. Verifique a conexão e recarregue a página.'));
-      return;
-    }
-    var opcoes = {
-      client_id: cfg.googleClientId,
-      callback: aoReceberCredencial,
-      auto_select: false,
-      cancel_on_tap_outside: true,
-      ux_mode: 'popup'
-    };
-    if (cfg.dominioInstitucional) {
-      opcoes.hosted_domain = String(cfg.dominioInstitucional).replace(/^@/, '');
-    }
-    try {
-      global.google.accounts.id.initialize(opcoes);
-      global.google.accounts.id.renderButton(alvo, {
-        type: 'standard', theme: tema === 'escuro' ? 'filled_black' : 'outline',
-        size: 'large', text: 'signin_with', shape: 'rectangular',
-        logo_alignment: 'left', locale: 'pt-BR', width: 320
-      });
-    } catch (e) {
-      alvo.appendChild(C.el('div', { class: 'alert danger' },
-        'O login do Google recusou a configuração: ' + e.message));
-    }
-  }
-
-  /* Coluna da direita: ou o botão do Google, ou a instrução do que falta
-     configurar. Prefiro dizer exatamente o que preencher a mostrar um botão
-     que falharia. */
+  /* Coluna da direita da tela de entrada. */
   function painelDeEntrada() {
-    var cfg = global.Config || {};
-    var lista = global.Autorizados || [];
     var caixa = C.el('div', { style: 'width:330px;max-width:100%' });
 
-    if (!cfg.configurado || !cfg.configurado()) {
-      caixa.appendChild(C.el('h4', { text: 'Falta configurar', style: 'margin-bottom:10px' }));
-      caixa.appendChild(C.el('div', { class: 'alert' },
-        'O login por conta Google ainda não foi configurado neste sistema.'));
-      caixa.appendChild(C.el('p', {
-        class: 'muted', style: 'font-size:12.5px;line-height:1.7;margin-top:16px'
-      }, [
-        'Edite ', C.el('b', { text: 'app/js/config.js' }),
-        ' e preencha o Client ID do Google e o domínio institucional. ',
-        'As instruções de onde obter o Client ID estão no próprio arquivo.'
-      ]));
-      return caixa;
-    }
-
-    if (!lista.length) {
-      caixa.appendChild(C.el('h4', { text: 'Nenhum acesso concedido', style: 'margin-bottom:10px' }));
-      caixa.appendChild(C.el('div', { class: 'alert' },
-        'A lista de pessoas autorizadas está vazia, então ninguém consegue entrar.'));
-      caixa.appendChild(C.el('p', {
-        class: 'muted', style: 'font-size:12.5px;line-height:1.7;margin-top:16px'
-      }, [
-        'Edite ', C.el('b', { text: 'app/js/autorizados.js' }),
-        ' e acrescente ao menos um e-mail com o nível ', C.el('b', { text: 'coordenador' }), '.'
-      ]));
+    if (!global.Nuvem || !global.Nuvem.disponivel()) {
+      caixa.appendChild(C.el('h4', { text: 'Sistema indisponível', style: 'margin-bottom:10px' }));
+      caixa.appendChild(C.el('div', { class: 'alert danger' },
+        'Não foi possível carregar o Firebase. Verifique a conexão e recarregue a página.'));
       return caixa;
     }
 
     caixa.appendChild(C.el('h4', { text: 'Entrar', style: 'margin-bottom:6px' }));
     caixa.appendChild(C.el('p', {
       class: 'muted', style: 'font-size:12.5px;line-height:1.6;margin:0 0 18px',
-      text: cfg.dominioInstitucional
-        ? 'Use a sua conta institucional @' + String(cfg.dominioInstitucional).replace(/^@/, '') + '.'
-        : 'Use a sua conta Google institucional.'
+      text: 'Use a sua conta Google institucional.'
     }));
 
     if (erroLogin) {
       caixa.appendChild(C.el('div', { class: 'alert danger', style: 'margin-bottom:16px' }, erroLogin));
     }
 
-    var alvoBotao = C.el('div', { style: 'min-height:44px' });
-    caixa.appendChild(alvoBotao);
-    /* O script do Google carrega de forma assíncrona; montar o botão no
-       próximo tique evita a corrida com o defer da tag. */
-    global.setTimeout(function () { montarBotaoGoogle(alvoBotao); }, 0);
+    caixa.appendChild(C.el('button', {
+      class: 'btn btn-primary btn-lg', style: 'width:100%',
+      text: carregando ? 'Entrando…' : 'Entrar com o Google',
+      disabled: carregando ? true : null,
+      onclick: entrar
+    }));
 
     caixa.appendChild(C.el('p', {
       class: 'muted', style: 'font-size:11.5px;line-height:1.6;margin-top:22px',
@@ -214,6 +173,49 @@
       ]),
       C.el('div', { class: 'login-r' }, painelDeEntrada())
     ]);
+  }
+
+  /* Banco vazio: a estrutura física precisa ser gravada uma vez antes de
+     qualquer tela ter o que mostrar. Só o coordenador provisiona. */
+  function provisionar() {
+    var podeFazer = S.pode('estrutura.editar');
+    var caixa = C.el('div', { class: 'login-l', style: 'max-width:640px' }, [
+      C.el('span', { class: 'brand', text: 'Ocupa' }),
+      C.el('h2', { text: 'Estrutura ainda não cadastrada', style: 'margin-top:14px' }),
+      C.el('p', {
+        class: 'muted', style: 'font-size:14px;line-height:1.7;margin-top:14px',
+        text: podeFazer
+          ? 'O banco está vazio. Vou gravar os 4 agrupamentos, as 8 clínicas e as 112 cadeiras, junto com a configuração inicial do semestre. Isso é feito uma única vez; nenhuma pessoa ou atividade é criada.'
+          : 'O sistema ainda não foi configurado pela coordenação. Assim que a estrutura das clínicas for cadastrada, esta tela dá lugar ao painel.'
+      })
+    ]);
+    if (podeFazer) {
+      var botao = C.el('button', {
+        class: 'btn btn-primary btn-lg', style: 'margin-top:24px',
+        text: 'Cadastrar a estrutura',
+        onclick: function () {
+          botao.disabled = true;
+          botao.textContent = 'Gravando…';
+          S.provisionarEstrutura().then(function (r) {
+            if (r && r.ok) { rota = 'painel'; desenhar(); C.toast('Estrutura cadastrada.'); }
+            else { botao.disabled = false; botao.textContent = 'Tentar de novo'; }
+          });
+        }
+      });
+      caixa.appendChild(botao);
+    }
+    return C.el('div', { class: 'login' }, caixa);
+  }
+
+  /* Tela intermediária: autenticando ou baixando o acervo. Sem ela a página
+     pisca em branco entre o clique e o painel. */
+  function aguardando(texto) {
+    return C.el('div', { class: 'login' }, C.el('div', {
+      class: 'login-l', style: 'justify-content:center'
+    }, [
+      C.el('span', { class: 'brand', text: 'Ocupa' }),
+      C.el('h2', { text: texto, style: 'margin-top:14px' })
+    ]));
   }
 
   /* ── Cabeçalho ────────────────────────────────────────────────────── */
@@ -252,10 +254,12 @@
         C.el('button', {
           class: 'chip-btn', text: 'Sair',
           onclick: function () {
-            /* Sem isto o Google reentra sozinho com a mesma conta no próximo
-               carregamento, e trocar de pessoa fica impossível. */
-            try { global.google.accounts.id.disableAutoSelect(); } catch (e) { }
-            S.sair(); rota = 'painel'; erroLogin = null; desenhar();
+            /* S.sair() derruba a sessão local e a do Firebase; o
+               onAuthStateChanged devolve a tela de entrada. */
+            rota = 'painel';
+            erroLogin = null;
+            S.sair();
+            desenhar();
           }
         })
       ])

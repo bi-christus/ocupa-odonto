@@ -1,33 +1,22 @@
 /* views/acessos.js — quem tem acesso ao sistema, e o que cada nível pode.
 
-   Esta tela é de CONSULTA. Ela já teve botões de conceder, editar, suspender
-   e remover acesso, e todos mentiam: gravavam no localStorage, que é isolado
-   por navegador. Pior, não era só o alcance — o portão de login é
-   Autorizados.buscar(email) em store.js, e os registros gravados aqui nem
-   participam dessa decisão. Conceder acesso pela tela não liberava a pessoa
-   nem na máquina de quem clicou.
+   Esta tela já foi só de consulta, e por um bom motivo: enquanto a lista
+   morava no navegador, conceder acesso por aqui não liberava ninguém.
 
-   Enquanto não houver servidor, a lista em app/js/autorizados.js é a única
-   coisa que concede acesso, e é ela que esta tela mostra. */
+   Com a lista no Firestore isso mudou — o que é gravado aqui vale para todo
+   mundo, imediatamente. A concessão voltou. Quem garante que só o
+   coordenador escreve são as Security Rules: a interface esconde o botão,
+   mas é o servidor que recusa. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI, A = global.Acesso;
 
   var vista = 'pessoas';
 
+  /* A lista vem do Firestore, já hidratada pelo store — `perfil` aqui é o
+     campo `nivel` do documento. */
   function listaAutorizada() {
-    var l = global.Autorizados;
-    return (l && l.length) ? l : [];
-  }
-
-  /* Registro local de quem já entrou NESTE navegador — serve só para mostrar
-     o último acesso. Não tem participação nenhuma na liberação. */
-  function registroLocal(email) {
-    var alvo = String(email || '').trim().toLowerCase(), achado = null;
-    S.estado.usuarios.forEach(function (u) {
-      if (String(u.email || '').trim().toLowerCase() === alvo) achado = u;
-    });
-    return achado;
+    return (S.estado && S.estado.usuarios) ? S.estado.usuarios : [];
   }
 
   function render(alvo) {
@@ -74,69 +63,179 @@
     });
 
     var caixa = C.el('div');
+    var eu = S.usuario();
+    var podeEditar = S.pode('acessos.editar');
 
-    caixa.appendChild(C.el('div', { class: 'alert', style: 'margin-bottom:22px' }, [
-      C.el('b', { text: 'Esta tela é de consulta.' }),
-      ' Quem tem acesso ao sistema é definido no arquivo ',
-      C.el('b', { text: 'app/js/autorizados.js' }),
-      '. Para liberar ou revogar alguém, esse arquivo precisa ser alterado e o ' +
-      'sistema publicado de novo — não há como fazer isso por aqui, e não ' +
-      'adiantaria: o sistema ainda não tem servidor, então qualquer cadastro ' +
-      'feito na tela ficaria só neste navegador.'
-    ]));
+    if (podeEditar) {
+      caixa.appendChild(C.el('div', { class: 'row', style: 'justify-content:flex-end;margin-bottom:18px' },
+        C.el('button', {
+          class: 'btn btn-primary', text: 'Conceder acesso',
+          onclick: function () { editar(null); }
+        })));
+    }
 
     if (!lista.length) {
-      caixa.appendChild(U.vazio('Nenhuma pessoa autorizada. O sistema está inacessível.'));
+      caixa.appendChild(U.vazio('Nenhuma pessoa autorizada. O sistema esta inacessivel.'));
       return caixa;
     }
 
     var tabela = C.el('table', { class: 'table' }, [
       C.el('thead', {}, C.el('tr', {}, [
         C.el('th', { text: 'Pessoa' }),
-        C.el('th', { text: 'Nível de acesso' }),
-        C.el('th', { text: 'Neste navegador' })
+        C.el('th', { text: 'Nivel de acesso' }),
+        C.el('th', { text: 'Situacao' }),
+        C.el('th', { text: 'Ultimo acesso' }),
+        C.el('th', { class: 'right', text: '' })
       ]))
     ]);
     var corpo = C.el('tbody');
-    var eu = S.usuario();
 
     lista.forEach(function (a) {
-      var local = registroLocal(a.email);
-      var nome = a.nome || (local && local.nome) || String(a.email).split('@')[0];
+      var nome = a.nome || String(a.email).split('@')[0];
       var souEu = eu && String(eu.email).toLowerCase() === String(a.email).toLowerCase();
-      var perfilConhecido = A.nomePerfil(a.perfil);
 
-      corpo.appendChild(C.el('tr', {}, [
+      corpo.appendChild(C.el('tr', { style: a.ativo ? '' : 'opacity:.5' }, [
         C.el('td', {}, C.el('div', { class: 'row', style: 'gap:10px' }, [
           C.el('span', {
             class: 'avatar', style: 'width:26px;height:26px;font-size:10px',
             text: C.iniciais(nome)
           }),
           C.el('span', {}, [
-            C.el('div', { style: 'font-weight:600', text: nome + (souEu ? ' · você' : '') }),
+            C.el('div', { style: 'font-weight:600', text: nome + (souEu ? ' - voce' : '') }),
             C.el('div', { class: 'muted', style: 'font-size:12px', text: a.email })
           ])
         ])),
         C.el('td', {}, ordem[a.perfil] === undefined
-          ? C.el('span', { class: 'badge danger', text: 'nível inválido: ' + a.perfil })
-          : C.el('span', { class: 'badge soft', text: perfilConhecido })),
+          ? C.el('span', { class: 'badge danger', text: 'nivel invalido: ' + a.perfil })
+          : C.el('span', { class: 'badge soft', text: A.nomePerfil(a.perfil) })),
+        C.el('td', {}, C.el('span', {
+          class: 'badge ' + (a.ativo ? 'ok' : 'neutral'),
+          text: a.ativo ? 'ativo' : 'suspenso'
+        })),
         C.el('td', { style: 'font-size:12.5px' },
-          local && local.ultimoAcesso ? C.fmtCarimbo(local.ultimoAcesso)
-            : C.el('span', { class: 'muted', text: 'nunca entrou aqui' }))
+          a.ultimoAcesso ? C.fmtCarimbo(a.ultimoAcesso)
+            : C.el('span', { class: 'muted', text: 'nunca entrou' })),
+        C.el('td', { class: 'right', style: 'white-space:nowrap' }, podeEditar ? [
+          C.el('button', { class: 'btn-ghost', text: 'Editar', onclick: function () { editar(a); } }),
+          souEu ? null : C.el('button', {
+            class: a.ativo ? 'btn-danger' : 'btn-ghost', style: 'margin-left:12px',
+            text: a.ativo ? 'Suspender' : 'Reativar',
+            onclick: function () { alternar(a); }
+          })
+        ] : null)
       ]));
     });
     tabela.appendChild(corpo);
     caixa.appendChild(C.el('div', { class: 'rolagem-x' }, tabela));
 
     caixa.appendChild(C.el('div', { class: 'alert', style: 'margin-top:22px' }, [
-      C.el('b', { text: '"Neste navegador"' }),
-      ' mostra o último acesso registrado nesta máquina, e só nela. Uma ' +
-      'pessoa pode ter entrado várias vezes de outro computador e aparecer ' +
-      'aqui como "nunca entrou" — os dados do sistema não são compartilhados ' +
-      'entre navegadores.'
+      C.el('b', { text: 'O acesso vale para todo mundo.' }),
+      ' A lista fica no servidor, entao conceder, suspender ou revogar aqui ' +
+      'tem efeito imediato para a pessoa, em qualquer computador. Suspender ' +
+      'nao apaga historico: o que a pessoa registrou continua na agenda e nos ' +
+      'relatorios.'
     ]));
 
     return caixa;
+    return caixa;
+  }
+
+  /* ── Conceder, alterar e revogar ──────────────────────────────────────
+     Grava na coleção `autorizados`. As Security Rules é que decidem se a
+     gravação passa — esconder o botão é conveniência, não controle. */
+  function alternar(a) {
+    var suspendendo = a.ativo;
+    U.confirmar({
+      titulo: suspendendo ? 'Suspender acesso' : 'Reativar acesso',
+      rotulo: suspendendo ? 'Suspender' : 'Reativar',
+      perigo: suspendendo,
+      conteudo: C.el('span', {}, [
+        C.el('b', { text: a.nome || a.email }),
+        suspendendo
+          ? ' deixa de entrar no sistema imediatamente, em qualquer computador. O histórico é preservado.'
+          : ' volta a entrar com o nível ' + A.nomePerfil(a.perfil) + '.'
+      ])
+    }, function () {
+      S.salvarAutorizado(a.email, { nome: a.nome, nivel: a.perfil, ativo: !a.ativo })
+        .then(function (r) {
+          if (r.ok) C.toast(suspendendo ? 'Acesso suspenso.' : 'Acesso reativado.');
+        });
+    });
+  }
+
+  function editar(a) {
+    var novo = !a;
+    var f = {
+      email: a ? a.email : '',
+      nome: a ? (a.nome || '') : '',
+      perfil: a ? a.perfil : 'professor',
+      ativo: a ? a.ativo : true
+    };
+    var erro = C.el('div');
+
+    return U.modal({
+      titulo: novo ? 'Conceder acesso' : 'Editar acesso',
+      subtitulo: novo ? 'A pessoa entra com a conta Google deste e-mail.' : f.email,
+      largura: '560px',
+      conteudo: C.el('div', { class: 'stack' }, [
+        erro,
+        C.el('div', { class: 'grid-fields' }, [
+          novo ? U.campo('E-mail institucional', C.el('input', {
+            class: 'input', type: 'email', value: f.email,
+            placeholder: 'nome.sobrenome@instituicao.edu.br',
+            oninput: function (ev) { f.email = ev.target.value; }
+          })) : null,
+          U.campo('Nome', C.el('input', {
+            class: 'input', value: f.nome,
+            oninput: function (ev) { f.nome = ev.target.value; }
+          }), 'Em branco, usa o nome da conta Google.'),
+          U.campo('Nível de acesso', U.selecao(A.PERFIS.map(function (p) {
+            return { valor: p.id, rotulo: p.nome };
+          }), f.perfil, function (v) { f.perfil = v; }))
+        ])
+      ]),
+      acoes: [
+        C.el('button', { class: 'btn btn-outline', text: 'Voltar', onclick: function () { U.fecharModal(); } }),
+        novo ? null : C.el('button', {
+          class: 'btn btn-danger', text: 'Remover do sistema',
+          onclick: function () { remover(a); }
+        }),
+        C.el('button', {
+          class: 'btn btn-primary', text: novo ? 'Conceder' : 'Salvar',
+          onclick: function () {
+            var email = String(f.email || '').trim().toLowerCase();
+            C.clear(erro);
+            if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+              erro.appendChild(C.el('div', { class: 'alert danger', text: 'Informe um e-mail válido.' }));
+              return;
+            }
+            U.fecharModal();
+            S.salvarAutorizado(email, { nome: f.nome, nivel: f.perfil, ativo: f.ativo })
+              .then(function (r) {
+                if (r.ok) C.toast(novo ? 'Acesso concedido.' : 'Acesso atualizado.');
+              });
+          }
+        })
+      ]
+    });
+  }
+
+  function remover(a) {
+    U.confirmar({
+      titulo: 'Remover do sistema',
+      rotulo: 'Remover',
+      perigo: true,
+      conteudo: C.el('span', {}, [
+        'Prefira ', C.el('b', { text: 'suspender' }),
+        ': remover apaga o registro de ',
+        C.el('b', { text: a.nome || a.email }),
+        ' e com ele o histórico de quando a pessoa entrou.'
+      ])
+    }, function () {
+      S.removerAutorizado(a.email).then(function (r) {
+        C.toast(r.ok ? 'Acesso removido.' : (r.mensagem || 'Não foi possível remover.'));
+      });
+    });
   }
 
   /* ── Níveis e matriz ──────────────────────────────────────────────── */

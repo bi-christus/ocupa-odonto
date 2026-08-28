@@ -13,15 +13,19 @@
 <div id="raiz" data-tema="claro"></div>
 <div id="toasts"></div>
 
-<!-- Login por conta Google. Carrega assíncrono; app.js monta o botão no
-     próximo tique para não correr com este defer. -->
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- Firebase, builds "compat": expõem o global `firebase` e encaixam no
+     padrão de IIFEs deste projeto. Os builds modulares (v9+) pressupõem ESM
+     e bundler, que aqui não existem. Sem defer: nuvem.js precisa do global
+     já disponível quando roda. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <script src="js/core.js"></script>
-<!-- config.js e autorizados.js são os dois arquivos de implantação: o que
-     precisa ser editado para o sistema entrar no ar. -->
 <script src="js/config.js"></script>
-<script src="js/autorizados.js"></script>
+<!-- Camada de nuvem: precisa vir antes do store, que a captura por
+     referência no topo da IIFE. -->
+<script src="js/nuvem.js"></script>
 <script src="js/acesso.js"></script>
 <script src="js/dados.js"></script>
 <script src="js/store.js"></script>
