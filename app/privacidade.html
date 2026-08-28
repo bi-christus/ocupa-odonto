@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de Privacidade · Ocupa</title>
+<style>
+  :root{ --tinta:#16181c; --papel:#ffffff; --fraca:#5b6169; --linha:#e2e5e9; --marca:#3d6186; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--papel); color:var(--tinta);
+        font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; }
+  .folha{ max-width:760px; margin:0 auto; padding:56px 24px 96px; }
+  .marca{ display:inline-block; border:2px solid var(--tinta); padding:2px 8px;
+          font-weight:700; letter-spacing:.14em; font-size:12px; }
+  h1{ font-size:34px; line-height:1.15; margin:28px 0 8px; letter-spacing:-.01em; }
+  h2{ font-size:19px; margin:38px 0 10px; letter-spacing:-.005em; }
+  .data{ color:var(--fraca); font-size:14px; margin:0 0 8px; }
+  p,li{ color:#2a2e34; }
+  ul{ padding-left:22px; }
+  li{ margin:6px 0; }
+  a{ color:var(--marca); }
+  .nota{ border-left:3px solid var(--linha); padding:2px 0 2px 16px; color:var(--fraca); font-size:15px; }
+  footer{ margin-top:56px; padding-top:20px; border-top:1px solid var(--linha);
+          color:var(--fraca); font-size:14px; }
+  @media (prefers-color-scheme: dark){
+    :root{ --tinta:#eef1f4; --papel:#16181c; --fraca:#9aa3ad; --linha:#2b2f36; --marca:#7fa9d4; }
+    p,li{ color:#d3d8de; }
+  }
+</style>
+</head>
+<body>
+<div class="folha">
+
+  <span class="marca">O OCUPA</span>
+
+  <h1>Política de Privacidade</h1>
+  <p class="data">Última atualização: 28 de agosto de 2026</p>
+
+  <p>O <strong>Ocupa</strong> é um sistema interno de controle de ocupação das clínicas
+  de Odontologia da Universidade Christus. Ele existe para organizar a agenda das
+  clínicas, das cadeiras e das turmas, e para registrar chamados de manutenção.
+  Esta página explica quais dados o sistema trata e por quê.</p>
+
+  <h2>Quem pode usar</h2>
+  <p>O acesso é restrito. Só entra quem foi expressamente autorizado pela coordenação
+  do curso e consta na lista de acesso do sistema. Não há cadastro aberto: uma conta
+  Google válida, por si só, não concede acesso.</p>
+
+  <h2>Quais dados são tratados</h2>
+  <p>Ao entrar com a conta Google, o sistema recebe do Google o seu nome, o seu
+  endereço de e-mail e o identificador da conta. Desses, o sistema <strong>armazena
+  apenas o nome e o e-mail</strong>, usados para identificar quem fez cada registro.</p>
+  <p>Além disso, o sistema guarda:</p>
+  <ul>
+    <li>o seu nível de acesso (coordenação, professor ou técnico) e a data do último acesso;</li>
+    <li>os registros acadêmicos e operacionais lançados por quem usa o sistema —
+        disciplinas, turmas, alunos, matrículas, ocupações de clínica, atribuições de
+        cadeira e chamados de manutenção;</li>
+    <li>a autoria e a data de cada lançamento, para que se saiba quem registrou o quê.</li>
+  </ul>
+  <p>O sistema <strong>não</strong> coleta senha, dados financeiros, documentos de
+  identificação, localização, dados de saúde de pacientes nem qualquer informação de
+  navegação para fins de publicidade.</p>
+
+  <h2>Como a autenticação funciona</h2>
+  <p>A entrada é feita pelo login do Google (Firebase Authentication). A sua senha
+  é digitada no ambiente do próprio Google e <strong>nunca</strong> passa pelo Ocupa,
+  que não tem acesso a ela em momento algum.</p>
+
+  <h2>Onde os dados ficam</h2>
+  <p>Os dados são armazenados no Cloud Firestore, do Google Cloud, em servidores
+  localizados no Brasil (região São Paulo). O acesso é controlado por regras aplicadas
+  no servidor: pessoas fora da lista de autorizados não conseguem ler nem gravar nada,
+  ainda que tenham uma conta Google.</p>
+
+  <h2>Com quem os dados são compartilhados</h2>
+  <p>Com ninguém. Os dados não são vendidos, cedidos, alugados nem usados para
+  publicidade ou treinamento de modelos. O único terceiro envolvido é o Google Cloud,
+  na condição de provedor da infraestrutura que hospeda o sistema.</p>
+
+  <h2>Por quanto tempo</h2>
+  <p>Os dados de acesso são mantidos enquanto a pessoa estiver autorizada a usar o
+  sistema. Os registros acadêmicos e de manutenção são mantidos como histórico
+  institucional do período letivo. Encerrado o vínculo, a coordenação pode suspender
+  o acesso e remover o cadastro da pessoa.</p>
+
+  <h2>Seus direitos</h2>
+  <p>Nos termos da Lei Geral de Proteção de Dados (Lei nº 13.709/2018), você pode
+  solicitar a confirmação do tratamento, o acesso aos seus dados, a correção de
+  informações incompletas ou desatualizadas e a exclusão do seu cadastro de acesso.
+  Basta escrever para o contato abaixo.</p>
+
+  <h2>Contato</h2>
+  <p>Dúvidas ou solicitações sobre esta política:
+  <a href="mailto:setorbiunichristus@gmail.com">setorbiunichristus@gmail.com</a></p>
+
+  <p class="nota">O tratamento dos dados descritos acima é realizado no âmbito das
+  atividades acadêmicas do curso de Odontologia da Universidade Christus, sob
+  responsabilidade da coordenação do curso.</p>
+
+  <footer>
+    Ocupa · Controle de ocupação das clínicas de Odontologia · Universidade Christus<br>
+    <a href="/">Voltar ao sistema</a> · <a href="/termos.html">Termos de Uso</a>
+  </footer>
+
+</div>
+</body>
+</html>

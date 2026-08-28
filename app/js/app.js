@@ -143,6 +143,18 @@
       class: 'muted', style: 'font-size:11.5px;line-height:1.6;margin-top:22px',
       text: 'O acesso é restrito à lista mantida pela coordenação.'
     }));
+
+    /* Exigência da verificação do Google para sair do modo de teste: as duas
+       páginas precisam estar linkadas e abrir sem autenticação. São arquivos
+       estáticos ao lado do index.html, servidos direto pelo host — não
+       passam por este JavaScript nem pelo login. */
+    caixa.appendChild(C.el('p', {
+      class: 'muted', style: 'font-size:11.5px;margin-top:14px'
+    }, [
+      C.el('a', { href: 'privacidade.html', text: 'Política de privacidade' }),
+      C.el('span', { style: 'margin:0 8px;opacity:.5', text: '·' }),
+      C.el('a', { href: 'termos.html', text: 'Termos de uso' })
+    ]));
     return caixa;
   }
 
