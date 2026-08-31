@@ -4,13 +4,15 @@
    ('a', 'b' ou 'ambas'), e quem traduz isso para texto é S.rotuloEscopo. */
 (function (global) {
   'use strict';
-  var C = global.Core, S = global.Store, U = global.UI, D = global.Dados;
+  var C = global.Core, S = global.Store, U = global.UI;
 
-  /* Guardada entre redesenhos, mas nunca entre usuários: a validação de
+  /* Guardadas entre redesenhos, mas nunca entre usuários: a validação de
      `render` exige que a turma escolhida esteja na lista visível de quem
      está na sessão — senão um coordenador que sai deixaria a turma dele
-     aberta na tela do professor que entra. */
+     aberta na tela do professor que entra. `vista` reseta sozinha porque
+     'turmas' é sempre uma aba válida, então não precisa da mesma checagem. */
   var turmaSel = null;
+  var vista = 'turmas';
 
   function naLista(lista, id) {
     for (var i = 0; i < lista.length; i++) if (lista[i].id === id) return true;
@@ -56,14 +58,25 @@
       C.el('div', {}, [
         C.el('h2', { text: 'Disciplinas · ' + e.periodoLetivo }),
         C.el('div', { class: 'muted', style: 'font-size:13.5px;margin-top:6px',
-          text: C.plural(lista.length, 'turma', 'turmas') + ' · ' +
-            C.plural(alunosVinculados, 'aluno vinculado', 'alunos vinculados') })
+          text: vista === 'turmas'
+            ? C.plural(lista.length, 'turma', 'turmas') + ' · ' +
+              C.plural(alunosVinculados, 'aluno vinculado', 'alunos vinculados')
+            : C.plural(e.disciplinas.length, 'disciplina cadastrada', 'disciplinas cadastradas') })
       ]),
-      S.pode('disciplinas.editar') ? C.el('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap' }, [
-        C.el('button', { class: 'btn-ghost', text: 'Nova turma', onclick: function () { editarTurma(null); } }),
-        C.el('button', { class: 'btn btn-primary', text: 'Nova disciplina', onclick: function () { editarDisciplina(null); } })
-      ]) : null
+      C.el('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap;align-items:center' }, [
+        C.el('div', { class: 'seg' }, [aba('turmas', 'Turmas'), aba('disciplinas', 'Disciplinas')]),
+        S.pode('disciplinas.editar') ? C.el('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap' }, [
+          C.el('button', { class: 'btn btn-primary', text: 'Nova disciplina', onclick: function () { editarDisciplina(null); } }),
+          C.el('button', { class: 'btn-ghost', text: 'Nova turma', onclick: function () { editarTurma(null); } })
+        ]) : null
+      ])
     ]));
+
+    /* Aba de controle do cadastro: existe para editar ou excluir uma
+       disciplina sem precisar ter (ou selecionar) uma turma dela — antes
+       disso só dava para editar a disciplina de dentro do detalhe de uma
+       turma já criada. */
+    if (vista === 'disciplinas') { alvo.appendChild(disciplinasLista()); return; }
 
     /* Estado vazio no lugar da grade inteira, com o motivo certo: para o
        professor a lista está vazia porque ele não coordena nada; para a
@@ -85,6 +98,82 @@
     ]));
   }
 
+  function aba(id, rotulo) {
+    return C.el('button', {
+      type: 'button', class: vista === id ? 'on' : '', text: rotulo,
+      onclick: function () { vista = id; global.App.recarregar(); }
+    });
+  }
+
+  /* ── Cadastro de disciplinas ──────────────────────────────────────────
+     Independente de turma: é aqui que dá para editar ou excluir uma
+     disciplina logo depois de criá-la, sem esperar existir turma alguma —
+     e é essa lista que alimenta o dropdown "Disciplina" do formulário de
+     turma, então mantê-la limpa mantém o dropdown limpo. */
+  function disciplinasLista() {
+    var e = S.estado;
+    var podeEditar = S.pode('disciplinas.editar');
+    if (!e.disciplinas.length) {
+      return U.vazio('Nenhuma disciplina cadastrada.' +
+        (podeEditar ? ' Comece por "Nova disciplina".' : ''));
+    }
+    var turmasPorDisciplina = {};
+    e.turmas.forEach(function (t) {
+      turmasPorDisciplina[t.disciplinaId] = (turmasPorDisciplina[t.disciplinaId] || 0) + 1;
+    });
+
+    var tabela = C.el('table', { class: 'table' }, [
+      C.el('thead', {}, C.el('tr', {}, [
+        C.el('th', { text: 'Código' }), C.el('th', { text: 'Nome' }),
+        C.el('th', { text: 'Especialidade' }), C.el('th', { text: 'Carga' }),
+        C.el('th', { text: 'Turmas' }), C.el('th', { class: 'right', text: '' })
+      ]))
+    ]);
+    var corpo = C.el('tbody');
+    e.disciplinas.slice().sort(function (a, b) {
+      return String(a.codigo).localeCompare(String(b.codigo), 'pt-BR');
+    }).forEach(function (d) {
+      var vinculadas = turmasPorDisciplina[d.id] || 0;
+      corpo.appendChild(C.el('tr', {}, [
+        C.el('td', { text: d.codigo }),
+        C.el('td', { text: d.nome }),
+        C.el('td', {}, d.especialidade
+          ? C.el('span', { text: d.especialidade })
+          : C.el('span', { class: 'muted', text: '—' })),
+        C.el('td', { class: 'num', text: d.cargaHoraria + ' h' }),
+        C.el('td', { class: 'num', text: String(vinculadas) }),
+        C.el('td', { class: 'right', style: 'white-space:nowrap' }, podeEditar ? [
+          C.el('button', { class: 'btn-ghost', text: 'Editar', onclick: function () { editarDisciplina(d.id); } }),
+          C.el('button', {
+            class: 'btn-danger', style: 'margin-left:12px', text: 'Excluir',
+            onclick: function () { confirmarExclusaoDisciplina(d, vinculadas); }
+          })
+        ] : null)
+      ]));
+    });
+    tabela.appendChild(corpo);
+    return C.el('div', { class: 'rolagem-x' }, tabela);
+  }
+
+  /* Sem cascata: excluir aqui não mexe em turmas. Com vínculo, a exclusão
+     fica bloqueada — o caminho é excluir ou reatribuir as turmas primeiro,
+     nunca deixar uma turma apontando para uma disciplina que sumiu. */
+  function confirmarExclusaoDisciplina(d, vinculadas) {
+    if (vinculadas > 0) {
+      C.toast(d.nome + ' tem ' + C.plural(vinculadas, 'turma vinculada', 'turmas vinculadas') +
+        '. Exclua ou reatribua antes de remover a disciplina.');
+      return;
+    }
+    U.confirmar({
+      titulo: 'Excluir disciplina', rotulo: 'Excluir', perigo: true,
+      conteudo: C.el('span', {}, ['A disciplina ', C.el('b', { text: d.nome }), ' sai do cadastro. Não há como desfazer.'])
+    }, function () {
+      S.excluirDisciplina(d.id);
+      C.toast('Disciplina excluída.');
+      global.App.recarregar();
+    });
+  }
+
   function listaTurmas(lista) {
     return C.el('div', {}, lista.map(function (t) {
       var d = S.disciplinaDaTurma(t);
@@ -101,7 +190,7 @@
           C.el('small', { text: C.plural(t.alunos.length, 'aluno', 'alunos') })
         ]),
         C.el('div', { style: 'font-size:13.5px', text: d ? d.nome : 'Disciplina removida' }),
-        C.el('small', { text: S.nomePessoa(t.professorCoordenadorId) + (d ? ' · ' + d.especialidade : '') })
+        C.el('small', { text: S.nomePessoa(t.professorCoordenadorId) + (d && d.especialidade ? ' · ' + d.especialidade : '') })
       ]);
     }));
   }
@@ -128,7 +217,8 @@
         C.el('div', { style: 'min-width:0' }, [
           C.el('h3', { text: d ? d.nome : 'Disciplina removida' }),
           C.el('div', { class: 'muted', style: 'font-size:13px;margin-top:4px',
-            text: d ? d.codigo + ' · turma ' + t.codigo + ' · ' + d.cargaHoraria + ' h · ' + d.especialidade
+            text: d ? d.codigo + ' · turma ' + t.codigo + ' · ' + d.cargaHoraria + ' h' +
+                    (d.especialidade ? ' · ' + d.especialidade : '')
                     : 'turma ' + t.codigo })
         ]),
         S.pode('disciplinas.editar') ? C.el('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap' }, [
@@ -326,8 +416,8 @@
   function editarDisciplina(id) {
     var d = id ? S.disciplina(id) : null;
     if (id && !d) { C.toast('Disciplina não encontrada.'); return; }
-    if (!d) d = { codigo: '', nome: '', especialidade: D.ESPECIALIDADES[0], cargaHoraria: 60 };
-    var f = { codigo: d.codigo, nome: d.nome, especialidade: d.especialidade, cargaHoraria: d.cargaHoraria };
+    if (!d) d = { codigo: '', nome: '', especialidade: '', cargaHoraria: 60 };
+    var f = { codigo: d.codigo, nome: d.nome, especialidade: d.especialidade || '', cargaHoraria: d.cargaHoraria };
     U.modal({
       titulo: id ? 'Editar disciplina' : 'Nova disciplina',
       largura: '620px',
@@ -336,9 +426,8 @@
           oninput: function (ev) { f.codigo = ev.target.value; } })),
         U.campo('Nome', C.el('input', { class: 'input', value: f.nome,
           oninput: function (ev) { f.nome = ev.target.value; } })),
-        U.campo('Especialidade', U.selecao(D.ESPECIALIDADES.map(function (x) {
-          return { valor: x, rotulo: x };
-        }), f.especialidade, function (v) { f.especialidade = v; })),
+        U.campo('Especialidade', C.el('input', { class: 'input', value: f.especialidade, placeholder: 'Opcional',
+          oninput: function (ev) { f.especialidade = ev.target.value; } })),
         U.campo('Carga horária', C.el('input', { class: 'input', type: 'number', min: '1', value: f.cargaHoraria,
           oninput: function (ev) { f.cargaHoraria = Number(ev.target.value); } }))
       ]),
@@ -349,7 +438,11 @@
           onclick: function () {
             if (!f.codigo.trim() || !f.nome.trim()) { C.toast('Código e nome são obrigatórios.'); return; }
             if (!(f.cargaHoraria > 0)) { C.toast('Informe uma carga horária maior que zero.'); return; }
-            S.salvarDisciplina(id, f);
+            var limpo = {
+              codigo: f.codigo.trim(), nome: f.nome.trim(),
+              especialidade: f.especialidade.trim(), cargaHoraria: f.cargaHoraria
+            };
+            S.salvarDisciplina(id, limpo);
             U.fecharModal(); C.toast('Disciplina salva.'); global.App.recarregar();
           }
         })
@@ -380,9 +473,8 @@
         U.campo('Disciplina', U.selecao(e.disciplinas.map(function (d) {
           return { valor: d.id, rotulo: d.codigo + ' · ' + d.nome };
         }), f.disciplinaId, function (v) { f.disciplinaId = v; })),
-        U.campo('Turma', U.selecao(['T1', 'T2', 'T3', 'T4'].map(function (x) {
-          return { valor: x, rotulo: x };
-        }), f.codigo, function (v) { f.codigo = v; })),
+        U.campo('Turma', C.el('input', { class: 'input', value: f.codigo, placeholder: 'T1',
+          oninput: function (ev) { f.codigo = ev.target.value; } })),
         U.campo('Professor coordenador', U.selecao(professores.map(function (p) {
           return { valor: p.id, rotulo: p.nome };
         }), f.professorCoordenadorId, function (v) { f.professorCoordenadorId = v; }))
@@ -405,7 +497,9 @@
         C.el('button', {
           class: 'btn btn-primary', text: 'Salvar',
           onclick: function () {
-            var salva = S.salvarTurma(id, f);
+            if (!f.codigo.trim()) { C.toast('Informe o identificador da turma.'); return; }
+            var salva = S.salvarTurma(id, { disciplinaId: f.disciplinaId, codigo: f.codigo.trim(),
+              professorCoordenadorId: f.professorCoordenadorId });
             turmaSel = salva ? salva.id : null;
             U.fecharModal(); C.toast('Turma salva.'); global.App.recarregar();
           }

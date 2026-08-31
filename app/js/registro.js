@@ -491,7 +491,7 @@
           var disc = S.disciplinaDaTurma(t);
           painelPre.appendChild(C.el('div', { class: 'muted' }, [
             rotulo + ' · ' + C.plural(cad, 'cadeira', 'cadeiras') +
-            (disc ? ' · ' + disc.especialidade : '') +
+            (disc && disc.especialidade ? ' · ' + disc.especialidade : '') +
             ' · professor coordenador: ' + S.nomePessoa(t.professorCoordenadorId)
           ]));
         }

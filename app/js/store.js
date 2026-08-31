@@ -849,6 +849,20 @@
     return d;
   }
 
+  /* Sem cascata: diferente de excluirTurma, uma disciplina com turma
+     vinculada não é removível — quem chama precisa checar antes (a view
+     bloqueia com um toast). Excluir aqui sem essa checagem deixaria turmas
+     apontando para um disciplinaId inexistente. */
+  function excluirDisciplina(id) {
+    var d = porId(estado.disciplinas, id);
+    if (!d) return;
+    estado.disciplinas = estado.disciplinas.filter(function (x) { return x.id !== id; });
+    commit();
+    persistir(N.apagar('disciplinas', id), function () {
+      estado.disciplinas.push(d);
+    });
+  }
+
   function salvarTurma(id, dados) {
     var t = id ? turma(id) : null;
     var novo = !t;
@@ -1120,7 +1134,8 @@
     ocuparCadeira: ocuparCadeira, liberarCadeira: liberarCadeira,
     abrirManutencao: abrirManutencao, encerrarManutencao: encerrarManutencao,
     calcularImpacto: calcularImpacto,
-    salvarDisciplina: salvarDisciplina, salvarTurma: salvarTurma, excluirTurma: excluirTurma,
+    salvarDisciplina: salvarDisciplina, excluirDisciplina: excluirDisciplina,
+    salvarTurma: salvarTurma, excluirTurma: excluirTurma,
     vincularAluno: vincularAluno, desvincularAluno: desvincularAluno,
     atualizarClinica: atualizarClinica, atualizarParametros: atualizarParametros,
     atualizarSemestre: atualizarSemestre,
