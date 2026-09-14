@@ -2,12 +2,13 @@
 
    O sistema nasce VAZIO de pessoas e de atividade: não há usuários, alunos,
    disciplinas, turmas, ocupações nem manutenções de exemplo. Quem entra é
-   criado no primeiro login pelo Google, com o nível vindo de autorizados.js.
+   criado no primeiro login pelo Google, com o nível vindo da coleção
+   `autorizados` no Firestore, aplicada pelas Security Rules.
 
    O que a semente traz é apenas o que é fato físico do curso — a estrutura
-   das clínicas — e a configuração de domínio (especialidades, categorias de
-   manutenção, tipos de atividade), que são vocabulário do negócio e não
-   dados de teste. Tudo o mais é cadastrado pela coordenação dentro do
+   das clínicas, incluindo a especialidade de cada uma — e o vocabulário de
+   domínio exportado em global.Dados (categorias de manutenção, tipos de
+   atividade). Tudo o mais é cadastrado pela coordenação dentro do
    sistema.                                                                 */
 (function (global) {
   'use strict';
@@ -33,7 +34,9 @@
     { id: 'bloqueio', rotulo: 'Bloqueio administrativo' }
   ];
 
-  /* Na ordem das clínicas 1 a 8. */
+  /* Especialidade de cada CLÍNICA, na ordem das clínicas 1 a 8. Nada a ver com
+     disciplina: disciplina tem só código e nome. Consumida apenas aqui, na
+     semente — por isso não é exportada em global.Dados. */
   var ESPECIALIDADES = ['Dentística', 'Periodontia', 'Endodontia', 'Prótese',
     'Odontopediatria', 'Cirurgia', 'Ortodontia', 'Clínica Integrada'];
 
@@ -99,7 +102,6 @@
   global.Dados = {
     semente: semente,
     CATEGORIAS_MANUTENCAO: CATEGORIAS_MANUTENCAO,
-    TIPOS_ATIVIDADE: TIPOS_ATIVIDADE,
-    ESPECIALIDADES: ESPECIALIDADES
+    TIPOS_ATIVIDADE: TIPOS_ATIVIDADE
   };
 })(window);

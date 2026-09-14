@@ -79,8 +79,10 @@
       titulo: '',
       tipoAtividade: 'reposicao',
       turmaVinculada: '',
-      /* O responsável padrão é sempre quem está registrando: é ele quem
-         responde pela ocupação e quem pode cancelá-la depois. */
+      /* O professor coordenador padrão é sempre quem está registrando: é ele
+         quem responde pela ocupação e quem pode cancelá-la depois. O campo
+         continua se chamando `responsavelId` no Firestore e em toda a lógica
+         de permissão — só o rótulo de tela virou "Professor coordenador". */
       responsavelId: u.id,
       descricao: ''
     };
@@ -353,7 +355,7 @@
           U.campo('Turma vinculada', U.selecao(opcoesTurma(turmasVisiveis, true), form.turmaVinculada, function (v) {
             form.turmaVinculada = v; atualizar();
           }), 'opcional'),
-          U.campo('Responsável', U.selecao(opcoesResponsavel(), form.responsavelId, function (v) {
+          U.campo('Professor coordenador', U.selecao(opcoesResponsavel(), form.responsavelId, function (v) {
             form.responsavelId = v; atualizar();
           }, u.perfil === 'professor' ? { disabled: true } : null))
         ]));
@@ -446,7 +448,7 @@
         } else if (form.data < minPontual || form.data > l.fim) {
           erros.push('A data precisa ficar entre ' + C.fmtDiaAno(minPontual) + ' e ' + C.fmtDiaAno(l.fim) + '.');
         }
-        if (!form.responsavelId || !S.pessoa(form.responsavelId)) erros.push('Informe o responsável.');
+        if (!form.responsavelId || !S.pessoa(form.responsavelId)) erros.push('Informe o professor coordenador.');
       }
       return erros;
     }
@@ -488,10 +490,8 @@
           ' · ' + C.fmtHoras(dur * datas.length) + ' no semestre'
         ]));
         if (t) {
-          var disc = S.disciplinaDaTurma(t);
           painelPre.appendChild(C.el('div', { class: 'muted' }, [
             rotulo + ' · ' + C.plural(cad, 'cadeira', 'cadeiras') +
-            (disc && disc.especialidade ? ' · ' + disc.especialidade : '') +
             ' · professor coordenador: ' + S.nomePessoa(t.professorCoordenadorId)
           ]));
         }
@@ -509,7 +509,7 @@
         ]));
         painelPre.appendChild(C.el('div', { class: 'muted' }, [
           S.rotuloTipoAtividade(form.tipoAtividade) + ' · ' + rotulo +
-          ' · ' + C.plural(cad, 'cadeira', 'cadeiras') + ' · responsável: ' + S.nomePessoa(form.responsavelId) +
+          ' · ' + C.plural(cad, 'cadeira', 'cadeiras') + ' · professor coordenador: ' + S.nomePessoa(form.responsavelId) +
           (form.turmaVinculada && S.turma(form.turmaVinculada)
             ? ' · ' + S.rotuloTurma(S.turma(form.turmaVinculada)) : '')
         ]));

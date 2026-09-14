@@ -125,7 +125,6 @@
     var tabela = C.el('table', { class: 'table' }, [
       C.el('thead', {}, C.el('tr', {}, [
         C.el('th', { text: 'Código' }), C.el('th', { text: 'Nome' }),
-        C.el('th', { text: 'Especialidade' }), C.el('th', { text: 'Carga' }),
         C.el('th', { text: 'Turmas' }), C.el('th', { class: 'right', text: '' })
       ]))
     ]);
@@ -137,10 +136,6 @@
       corpo.appendChild(C.el('tr', {}, [
         C.el('td', { text: d.codigo }),
         C.el('td', { text: d.nome }),
-        C.el('td', {}, d.especialidade
-          ? C.el('span', { text: d.especialidade })
-          : C.el('span', { class: 'muted', text: '—' })),
-        C.el('td', { class: 'num', text: d.cargaHoraria + ' h' }),
         C.el('td', { class: 'num', text: String(vinculadas) }),
         C.el('td', { class: 'right', style: 'white-space:nowrap' }, podeEditar ? [
           C.el('button', { class: 'btn-ghost', text: 'Editar', onclick: function () { editarDisciplina(d.id); } }),
@@ -190,7 +185,7 @@
           C.el('small', { text: C.plural(t.alunos.length, 'aluno', 'alunos') })
         ]),
         C.el('div', { style: 'font-size:13.5px', text: d ? d.nome : 'Disciplina removida' }),
-        C.el('small', { text: S.nomePessoa(t.professorCoordenadorId) + (d && d.especialidade ? ' · ' + d.especialidade : '') })
+        C.el('small', { text: S.nomePessoa(t.professorCoordenadorId) })
       ]);
     }));
   }
@@ -217,9 +212,7 @@
         C.el('div', { style: 'min-width:0' }, [
           C.el('h3', { text: d ? d.nome : 'Disciplina removida' }),
           C.el('div', { class: 'muted', style: 'font-size:13px;margin-top:4px',
-            text: d ? d.codigo + ' · turma ' + t.codigo + ' · ' + d.cargaHoraria + ' h' +
-                    (d.especialidade ? ' · ' + d.especialidade : '')
-                    : 'turma ' + t.codigo })
+            text: d ? d.codigo + ' · turma ' + t.codigo : 'turma ' + t.codigo })
         ]),
         S.pode('disciplinas.editar') ? C.el('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap' }, [
           d ? C.el('button', { class: 'btn-ghost', text: 'Editar disciplina', onclick: function () { editarDisciplina(d.id); } }) : null,
@@ -416,8 +409,8 @@
   function editarDisciplina(id) {
     var d = id ? S.disciplina(id) : null;
     if (id && !d) { C.toast('Disciplina não encontrada.'); return; }
-    if (!d) d = { codigo: '', nome: '', especialidade: '', cargaHoraria: 60 };
-    var f = { codigo: d.codigo, nome: d.nome, especialidade: d.especialidade || '', cargaHoraria: d.cargaHoraria };
+    if (!d) d = { codigo: '', nome: '' };
+    var f = { codigo: d.codigo, nome: d.nome };
     U.modal({
       titulo: id ? 'Editar disciplina' : 'Nova disciplina',
       largura: '620px',
@@ -425,11 +418,7 @@
         U.campo('Código', C.el('input', { class: 'input', value: f.codigo, placeholder: 'ODO-000',
           oninput: function (ev) { f.codigo = ev.target.value; } })),
         U.campo('Nome', C.el('input', { class: 'input', value: f.nome,
-          oninput: function (ev) { f.nome = ev.target.value; } })),
-        U.campo('Especialidade', C.el('input', { class: 'input', value: f.especialidade, placeholder: 'Opcional',
-          oninput: function (ev) { f.especialidade = ev.target.value; } })),
-        U.campo('Carga horária', C.el('input', { class: 'input', type: 'number', min: '1', value: f.cargaHoraria,
-          oninput: function (ev) { f.cargaHoraria = Number(ev.target.value); } }))
+          oninput: function (ev) { f.nome = ev.target.value; } }))
       ]),
       acoes: [
         C.el('button', { class: 'btn btn-outline', text: 'Cancelar', onclick: U.fecharModal }),
@@ -437,11 +426,7 @@
           class: 'btn btn-primary', text: 'Salvar',
           onclick: function () {
             if (!f.codigo.trim() || !f.nome.trim()) { C.toast('Código e nome são obrigatórios.'); return; }
-            if (!(f.cargaHoraria > 0)) { C.toast('Informe uma carga horária maior que zero.'); return; }
-            var limpo = {
-              codigo: f.codigo.trim(), nome: f.nome.trim(),
-              especialidade: f.especialidade.trim(), cargaHoraria: f.cargaHoraria
-            };
+            var limpo = { codigo: f.codigo.trim(), nome: f.nome.trim() };
             S.salvarDisciplina(id, limpo);
             U.fecharModal(); C.toast('Disciplina salva.'); global.App.recarregar();
           }

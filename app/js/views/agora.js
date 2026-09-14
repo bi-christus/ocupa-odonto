@@ -139,10 +139,6 @@
     return u.perfil === 'coordenador' || occ.responsavelId === u.id;
   }
 
-  function rotuloResponsavel(o) {
-    return o.origem === 'recorrente' ? 'Professor coordenador' : 'Responsável';
-  }
-
   /* ── Coluna esquerda ──────────────────────────────────────────────── */
   function listaAgrupamentos(hoje) {
     var caixa = C.el('div');
@@ -408,7 +404,7 @@
         U.kv('Período', a ? a.periodo + 'º período' : '—'),
         U.kv('Ocupação', occ.titulo),
         U.kv('Onde', S.rotuloEscopo(occ.agrupamentoId, occ.escopo)),
-        U.kv(rotuloResponsavel(occ), S.nomePessoa(occ.responsavelId)),
+        U.kv('Professor coordenador', S.nomePessoa(occ.responsavelId)),
         U.kv('Faixa', occ.inicio + '–' + occ.fim),
         U.kv('Registrado', C.fmtCarimbo(atrib.registradoEm))
       ]));

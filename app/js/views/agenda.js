@@ -485,7 +485,7 @@
         ? 'Aula recorrente do semestre'
         : S.rotuloTipoAtividade(o.tipoAtividade) + ' · ocorrência única'),
       o.turmaId ? U.kv('Turma', S.rotuloTurmaLongo(S.turma(o.turmaId))) : null,
-      U.kv(o.origem === 'recorrente' ? 'Professor coordenador' : 'Responsável', S.nomePessoa(o.responsavelId)),
+      U.kv('Professor coordenador', S.nomePessoa(o.responsavelId)),
       U.kv('Cadeiras', C.plural(o.cadeiras, 'cadeira') + ' de ' +
         S.cadeirasOperantesEscopo(o.agrupamentoId, o.escopo) + ' operantes'),
       U.kv('Situação', U.badgeStatus(st)),

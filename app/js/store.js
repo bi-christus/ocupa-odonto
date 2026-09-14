@@ -381,7 +381,6 @@
       turmaId: r.turmaId, cadeiras: r.cadeiras,
       titulo: d.codigo + ' ' + t.codigo,
       subtitulo: d.nome,
-      especialidade: d.especialidade,
       responsavelId: t.professorCoordenadorId,
       tipoAtividade: 'aula',
       descricao: ''
@@ -397,7 +396,6 @@
       turmaId: p.turmaId, cadeiras: p.cadeiras,
       titulo: p.titulo,
       subtitulo: t ? rotuloTurma(t) : rotuloTipoAtividade(p.tipoAtividade),
-      especialidade: t ? disciplinaDaTurma(t).especialidade : null,
       responsavelId: p.responsavelId,
       tipoAtividade: p.tipoAtividade,
       descricao: p.descricao || ''
@@ -838,11 +836,18 @@
     var novo = !d;
     if (!d) { d = { id: N.novoId('disciplinas') }; estado.disciplinas.push(d); }
     var antes = JSON.parse(JSON.stringify(d));
-    ['codigo', 'nome', 'especialidade', 'cargaHoraria'].forEach(function (k) {
+    ['codigo', 'nome'].forEach(function (k) {
       if (dados[k] !== undefined) d[k] = dados[k];
     });
     commit();
-    persistir(N.gravar('disciplinas', d.id, d), function () {
+    /* Payload explícito, como em salvarTurma — não o objeto `d` inteiro, que
+       carrega `id` e, nas disciplinas criadas antes desta mudança, os campos
+       extintos que a hidratação copia crus do Firestore (linha 67).
+       O que isto NÃO faz: N.gravar é set(dados, { merge: true }), então
+       `especialidade` e `cargaHoraria` continuam gravados nos documentos
+       antigos — deixar de enviá-los não os apaga. São lixo inerte, que nada
+       lê. Purgar de verdade exigiria FieldValue.delete() ou faxina manual. */
+    persistir(N.gravar('disciplinas', d.id, { codigo: d.codigo, nome: d.nome }), function () {
       if (novo) estado.disciplinas = estado.disciplinas.filter(function (x) { return x.id !== d.id; });
       else Object.keys(antes).forEach(function (k) { d[k] = antes[k]; });
     });

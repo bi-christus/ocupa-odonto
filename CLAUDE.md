@@ -96,7 +96,7 @@ hora, pelo snapshot de `autorizados`.
 | `autorizados` | e-mail em minúsculas | `nome`, `nivel`, `ativo`, `ultimoAcesso` |
 | `agrupamentos` | `ag1`–`ag4` | `nome`, `clinicas[]` |
 | `clinicas` | `cl1`–`cl8` | `nome`, `agrupamentoId`, `especialidade`, `cadeiras`, `primeiraCadeira`, `abertura`, `fechamento` |
-| `disciplinas` | auto | `codigo`, `nome`, `especialidade`, `cargaHoraria` |
+| `disciplinas` | auto | `codigo`, `nome` |
 | `turmas` | auto | `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo` |
 | `alunos` | auto | `nome`, `matricula`, `periodo` |
 | `matriculas` | `{turmaId}__{alunoId}` | `turmaId`, `alunoId` |
@@ -111,6 +111,24 @@ hora, pelo snapshot de `autorizados`.
 
 O store traduz `autorizados.nivel` para `perfil` na hidratação; as views não
 sabem da diferença.
+
+**Disciplina tem só `codigo` e `nome`.** `especialidade` é da CLÍNICA e não tem
+relação nenhuma com disciplina. O arquivo com mais ocorrências da palavra é
+`relatorios.js` — três colunas "Especialidade" em CSV, todas de clínica e
+nenhuma delas precisa mudar: nunca faça busca-e-substitui global lá.
+Disciplinas criadas antes de 14/09/2026 ainda carregam `especialidade` e
+`cargaHoraria` no documento do Firestore. `salvarDisciplina` deixou de enviá-los,
+mas como a gravação é `set(..., {merge:true})` isso **não os apaga** — são lixo
+inerte, que nada lê. Limpar de verdade exigiria `FieldValue.delete()`.
+
+**`responsavelId` aparece na tela como "Professor coordenador".** O campo guarda
+quem responde pela ocupação: na recorrente o store o copia de
+`turma.professorCoordenadorId`; na pontual é quem registrou, que pode não ser o
+coordenador da turma vinculada. O rótulo é único em todas as telas desde
+14/09/2026 — não volte a alternar para "Responsável", e não renomeie o campo,
+que governa quem pode cancelar (`agenda.js`, `agora.js`, `painel.js`).
+Cuidado: `acesso.js` descreve o perfil Técnico como "Responsável pelas cadeiras"
+— ali é adjetivo comum, não este campo.
 
 ---
 
