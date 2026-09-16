@@ -202,6 +202,11 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
 ## Regras de negócio a preservar
 
 - Faixa mínima de 120 minutos
+- Turnos (manhã 07:40–11:20, tarde 13:40–17:20, noite 18:20–22:00) são
+  **atalho do formulário, não restrição**: preenchem início e término de uma
+  vez, e a digitação livre do horário continua valendo. Vivem em
+  `Dados.TURNOS`. A marcação do botão é derivada do horário no formulário, não
+  um estado à parte — não transforme turno em campo gravado na ocupação
 - Bloqueio de sobreposição na mesma clínica
 - Ocupação das duas clínicas do mesmo agrupamento
 - Numeração contínua de cadeiras, 1 a 112

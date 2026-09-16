@@ -273,6 +273,76 @@
       }, { min: jan.abertura, max: jan.fechamento }));
     }
 
+    /* ── Turnos ───────────────────────────────────────────────────────
+       Atalho que preenche início e término de uma vez. NÃO substitui os
+       campos de hora: eles seguem livres, e digitar neles apenas desmarca o
+       turno — a marcação é derivada do horário, não um estado à parte, então
+       não existe como o botão e os campos discordarem.
+       Um turno que não cabe na janela do escopo, ou que seria menor que a
+       faixa mínima, aparece desabilitado com o motivo no title: melhor do que
+       oferecer um preenchimento que a validação recusaria logo em seguida. */
+    function turnoCabe(t) {
+      var jan = janela();
+      return C.toMin(t.inicio) >= C.toMin(jan.abertura) &&
+        C.toMin(t.fim) <= C.toMin(jan.fechamento) &&
+        C.toMin(t.fim) - C.toMin(t.inicio) >= duracaoMinima();
+    }
+    function turnoAtual() {
+      var achado = null;
+      D.TURNOS.forEach(function (t) {
+        if (t.inicio === form.inicio && t.fim === form.fim) achado = t.id;
+      });
+      return achado;
+    }
+
+    /* Único lugar que decide a aparência dos botões — quem monta e quem
+       re-sincroniza chamam a mesma função, então não há como as duas
+       versões divergirem.
+       Precisa existir separado da montagem porque os campos de hora chamam
+       só `atualizar()`, sem redesenhar (redesenhar roubaria o foco de quem
+       está digitando). Sem esta re-sincronização, escolher "Manhã" e depois
+       corrigir o término na mão deixava o botão aceso mentindo sobre o
+       horário que está de fato no formulário. */
+    var caixaTurnos = null;
+    function sincronizarTurnos() {
+      if (!caixaTurnos) return;
+      var atual = turnoAtual();
+      var jan = janela();
+      D.TURNOS.forEach(function (t) {
+        var b = caixaTurnos.querySelector('[data-turno="' + t.id + '"]');
+        if (!b) return;
+        var on = atual === t.id;
+        var cabe = turnoCabe(t);
+        b.className = on ? 'on' : '';
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.disabled = !cabe;
+        b.title = cabe
+          ? 'Preenche início e término com ' + t.inicio + '–' + t.fim
+          : 'Não cabe na janela deste escopo (' + jan.abertura + '–' + jan.fechamento + ').';
+      });
+    }
+    function blocoTurnos() {
+      caixaTurnos = C.el('div', { class: 'turnos' }, D.TURNOS.map(function (t) {
+        return C.el('button', {
+          type: 'button', 'data-turno': t.id,
+          onclick: function () {
+            form.inicio = t.inicio;
+            form.fim = t.fim;
+            desenhar();
+          }
+        }, [t.rotulo, C.el('small', { text: t.inicio + '–' + t.fim })]);
+      }));
+      sincronizarTurnos();
+      return C.el('div', { style: 'margin-top:16px' }, [
+        C.el('span', { class: 'eyebrow', style: 'display:block;margin-bottom:7px', text: 'Turno' }),
+        caixaTurnos,
+        C.el('small', {
+          class: 'muted', style: 'display:block;margin-top:7px;font-size:11.5px',
+          text: 'Atalho opcional — preenche os campos abaixo, que continuam livres.'
+        })
+      ]);
+    }
+
     /* ── Campos ───────────────────────────────────────────────────── */
     function opcoesTurma(lista, comVazio) {
       var arr = comVazio ? [{ valor: '', rotulo: '— sem turma vinculada —' }] : [];
@@ -306,6 +376,8 @@
           C.el('span', { class: 'eyebrow', style: 'display:block;margin-bottom:7px', text: 'Dias da semana' }),
           U.seletorDias(form.dias, function () { atualizar(); })
         ]));
+
+        corpo.appendChild(blocoTurnos());
 
         corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
           campoInicio(), campoTermino(), campoCadeiras()
@@ -347,7 +419,12 @@
           U.campo('Data', C.el('input', {
             class: 'input', type: 'date', value: form.data, min: minPontual, max: l.fim,
             oninput: function (ev) { form.data = ev.target.value; atualizar(); }
-          })),
+          }))
+        ]));
+
+        corpo.appendChild(blocoTurnos());
+
+        corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
           campoInicio(), campoTermino(), campoCadeiras()
         ]));
 
@@ -461,6 +538,7 @@
     }
 
     function atualizar() {
+      sincronizarTurnos();
       var erros = validar();
       var datas = datasAlvo();
       var choques = erros.length ? [] :

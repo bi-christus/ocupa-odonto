@@ -8,7 +8,7 @@
    O que a semente traz é apenas o que é fato físico do curso — a estrutura
    das clínicas, incluindo a especialidade de cada uma — e o vocabulário de
    domínio exportado em global.Dados (categorias de manutenção, tipos de
-   atividade). Tudo o mais é cadastrado pela coordenação dentro do
+   atividade, turnos). Tudo o mais é cadastrado pela coordenação dentro do
    sistema.                                                                 */
 (function (global) {
   'use strict';
@@ -32,6 +32,16 @@
     { id: 'extensao', rotulo: 'Projeto de extensão' },
     { id: 'evento', rotulo: 'Evento acadêmico' },
     { id: 'bloqueio', rotulo: 'Bloqueio administrativo' }
+  ];
+
+  /* Turnos fixos do curso. São ATALHO do formulário de ocupação: preenchem
+     início e término de uma vez. A digitação livre do horário continua
+     valendo — turno é conveniência, não restrição, e nada no sistema obriga
+     uma ocupação a começar ou terminar nestes horários. */
+  var TURNOS = [
+    { id: 'manha', rotulo: 'Manhã', inicio: '07:40', fim: '11:20' },
+    { id: 'tarde', rotulo: 'Tarde', inicio: '13:40', fim: '17:20' },
+    { id: 'noite', rotulo: 'Noite', inicio: '18:20', fim: '22:00' }
   ];
 
   /* Especialidade de cada CLÍNICA, na ordem das clínicas 1 a 8. Nada a ver com
@@ -102,6 +112,7 @@
   global.Dados = {
     semente: semente,
     CATEGORIAS_MANUTENCAO: CATEGORIAS_MANUTENCAO,
-    TIPOS_ATIVIDADE: TIPOS_ATIVIDADE
+    TIPOS_ATIVIDADE: TIPOS_ATIVIDADE,
+    TURNOS: TURNOS
   };
 })(window);
