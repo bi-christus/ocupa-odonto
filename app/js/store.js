@@ -326,15 +326,21 @@
   function nomePessoa(id) { var u = pessoa(id); return u ? u.nome : '—'; }
 
   function disciplinaDaTurma(t) { return t ? disciplina(t.disciplinaId) : null; }
+  /* A guarda de `d` não é zelo: o título de toda atividade pontual passa por
+     aqui desde 17/09/2026, e um `d` nulo estourava TypeError dentro da
+     montagem das ocorrências — o que derruba Agenda, Painel e Agora de uma
+     vez, não só a linha da turma. A tela de disciplinas impede excluir
+     disciplina com turma vinculada, mas nada impede alguém apagar o
+     documento direto no console do Firebase. */
   function rotuloTurma(t) {
     if (!t) return '—';
     var d = disciplinaDaTurma(t);
-    return d.codigo + ' ' + t.codigo;
+    return d ? d.codigo + ' ' + t.codigo : t.codigo;
   }
   function rotuloTurmaLongo(t) {
     if (!t) return '—';
     var d = disciplinaDaTurma(t);
-    return d.codigo + ' ' + t.codigo + ' · ' + d.nome;
+    return d ? d.codigo + ' ' + t.codigo + ' · ' + d.nome : t.codigo;
   }
   function turmasDoProfessor(uid) {
     return estado.turmas.filter(function (t) { return t.professorCoordenadorId === uid; });
@@ -386,16 +392,31 @@
       descricao: ''
     };
   }
+  /* Título DERIVADO: tipo + turma, ou tipo + quem pediu quando a atividade
+     não tem turma vinculada. Deixou de ser campo digitado em 17/09/2026 —
+     cada pessoa escrevia num formato diferente e a mesma atividade aparecia
+     com três nomes diferentes na agenda.
+     `titulo` aparece sozinho em dez lugares (bloco da agenda, gantt, CSV,
+     toasts), por isso carrega o tipo junto; o nome da disciplina vai para
+     `subtitulo`, como já acontece na recorrente. */
+  function tituloPontual(p, t) {
+    return rotuloTipoAtividade(p.tipoAtividade) + ' · ' +
+      (t ? rotuloTurma(t) : nomePessoa(p.responsavelId));
+  }
   function ocorrenciaDePontual(p) {
     var t = p.turmaId ? turma(p.turmaId) : null;
+    var d = t ? disciplinaDaTurma(t) : null;
     return {
       chave: 'p:' + p.id,
       origem: 'pontual', origemId: p.id,
       agrupamentoId: p.agrupamentoId, escopo: p.escopo,
       data: p.data, inicio: p.inicio, fim: p.fim,
       turmaId: p.turmaId, cadeiras: p.cadeiras,
-      titulo: p.titulo,
-      subtitulo: t ? rotuloTurma(t) : rotuloTipoAtividade(p.tipoAtividade),
+      titulo: tituloPontual(p, t),
+      subtitulo: d ? d.nome : '',
+      /* Só existe em ocupação gravada antes da mudança. O detalhe da agenda
+         mostra quando houver, para o texto que alguém escreveu não sumir. */
+      tituloOriginal: p.titulo || '',
       responsavelId: p.responsavelId,
       tipoAtividade: p.tipoAtividade,
       descricao: p.descricao || ''
@@ -605,7 +626,9 @@
       agrupamentoId: dados.agrupamentoId, escopo: dados.escopo || 'a',
       data: dados.data, inicio: dados.inicio, fim: dados.fim,
       tipoAtividade: dados.tipoAtividade, cadeiras: dados.cadeiras,
-      titulo: dados.titulo, descricao: dados.descricao || '',
+      /* Sem `titulo`: virou derivado. Gravar a chave aqui mandaria `undefined`
+         para o Firestore, que recusa o valor e derrubaria o registro inteiro. */
+      descricao: dados.descricao || '',
       turmaId: dados.turmaId || null, responsavelId: dados.responsavelId,
       excecoes: [],
       criadoPor: euId(), criadoEm: C.carimbo()
@@ -638,8 +661,10 @@
     var p = porId(estado.pontuais, id);
     if (!p) return;
     var antes = JSON.parse(JSON.stringify(p));
+    /* 'titulo' saiu da lista: é derivado do tipo e da turma. Deixá-lo aqui
+       seria convite para reintroduzir um título digitado. */
     ['agrupamentoId', 'escopo', 'data', 'inicio', 'fim', 'cadeiras',
-      'tipoAtividade', 'titulo', 'descricao', 'turmaId', 'responsavelId']
+      'tipoAtividade', 'descricao', 'turmaId', 'responsavelId']
       .forEach(function (k) { if (dados[k] !== undefined) p[k] = dados[k]; });
     commit();
     persistir(gravarOcupacaoNaNuvem(p, id), function () {
@@ -1096,10 +1121,16 @@
     return estado.clinicas.reduce(function (s, c) { return s + c.cadeiras; }, 0);
   }
 
+  /* Consulta os tipos vigentes E os legados: sem os legados, uma atividade
+     gravada antes de 17/09/2026 apareceria com o id cru ("reposicao").
+     'aula' é o tipo fixo das recorrentes — elas não têm campo de tipo, e
+     turma de graduação é o que o recorrente atende hoje. */
   function rotuloTipoAtividade(id) {
     var r = id;
-    D.TIPOS_ATIVIDADE.forEach(function (t) { if (t.id === id) r = t.rotulo; });
-    return id === 'aula' ? 'Aula de graduação' : r;
+    D.TIPOS_ATIVIDADE.concat(D.TIPOS_LEGADOS).forEach(function (t) {
+      if (t.id === id) r = t.rotulo;
+    });
+    return id === 'aula' ? 'Graduação' : r;
   }
   function rotuloCategoriaManutencao(id) {
     var r = id;

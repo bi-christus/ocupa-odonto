@@ -24,7 +24,18 @@
     { id: 'insumo', rotulo: 'Falta de insumo essencial', prazoDias: 2, criticidade: 'média' }
   ];
 
+  /* Tipo da ocupação: o curso trabalha com dois, e só. */
   var TIPOS_ATIVIDADE = [
+    { id: 'graduacao', rotulo: 'Graduação' },
+    { id: 'pos', rotulo: 'Pós-graduação' }
+  ];
+
+  /* Os sete tipos que existiam antes de 17/09/2026. Saíram do formulário mas
+     continuam aqui porque ocupação já gravada NÃO muda de tipo: sem esta
+     lista, uma atividade antiga apareceria na agenda como "reposicao", em
+     minúsculo e sem acento, que é o id cru. Não acrescente nada aqui — a
+     lista é histórico fechado. */
+  var TIPOS_LEGADOS = [
     { id: 'reposicao', rotulo: 'Reposição de aula' },
     { id: 'atendimento', rotulo: 'Atendimento extraordinário' },
     { id: 'avaliacao', rotulo: 'Avaliação prática' },
@@ -113,6 +124,7 @@
     semente: semente,
     CATEGORIAS_MANUTENCAO: CATEGORIAS_MANUTENCAO,
     TIPOS_ATIVIDADE: TIPOS_ATIVIDADE,
+    TIPOS_LEGADOS: TIPOS_LEGADOS,
     TURNOS: TURNOS
   };
 })(window);

@@ -76,8 +76,7 @@
       observacao: '',
       /* pontual */
       data: primeiroDiaUtil(menorData(maiorData(lim.inicio, C.hojeISO()), lim.fim)),
-      titulo: '',
-      tipoAtividade: 'reposicao',
+      tipoAtividade: 'graduacao',
       turmaVinculada: '',
       /* O professor coordenador padrão é sempre quem está registrando: é ele
          quem responde pela ocupação e quem pode cancelá-la depois. O campo
@@ -335,11 +334,7 @@
       sincronizarTurnos();
       return C.el('div', { style: 'margin-top:16px' }, [
         C.el('span', { class: 'eyebrow', style: 'display:block;margin-bottom:7px', text: 'Turno' }),
-        caixaTurnos,
-        C.el('small', {
-          class: 'muted', style: 'display:block;margin-top:7px;font-size:11.5px',
-          text: 'Atalho opcional — preenche os campos abaixo, que continuam livres.'
-        })
+        caixaTurnos
       ]);
     }
 
@@ -403,15 +398,13 @@
 
         acao.textContent = 'Criar recorrência';
       } else {
+        /* Não existe mais campo de título: o nome da atividade é derivado do
+           tipo e da turma (ou de quem pediu, quando não há turma). */
         corpo.appendChild(C.el('div', { class: 'grid-fields' }, [
-          U.campo('Título da atividade', C.el('input', {
-            class: 'input', type: 'text', value: form.titulo,
-            placeholder: 'Ex.: Reposição — Endodontia Clínica',
-            oninput: function (ev) { form.titulo = ev.target.value; atualizar(); }
-          })),
           U.campo('Tipo', U.selecao(D.TIPOS_ATIVIDADE.map(function (t) {
             return { valor: t.id, rotulo: t.rotulo };
-          }), form.tipoAtividade, function (v) { form.tipoAtividade = v; atualizar(); }))
+          }), form.tipoAtividade, function (v) { form.tipoAtividade = v; atualizar(); }),
+            'o nome da atividade vem do tipo e da turma')
         ]));
 
         corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
@@ -518,7 +511,6 @@
           erros.push('O período de vigência não gera nenhum encontro.');
         }
       } else {
-        if (!form.titulo.trim()) erros.push('Dê um título à atividade.');
         if (!C.dataValida(form.data)) erros.push('Informe a data.');
         else if (C.weekday(form.data) === 0) {
           erros.push('Domingo não entra na grade da semana — escolha de segunda a sábado.');
@@ -676,7 +668,7 @@
           agrupamentoId: form.agrupamentoId, escopo: form.escopo,
           data: form.data, inicio: form.inicio, fim: form.fim,
           tipoAtividade: form.tipoAtividade, cadeiras: form.cadeiras,
-          titulo: form.titulo.trim(), descricao: form.descricao,
+          descricao: form.descricao,
           turmaId: form.turmaVinculada || null, responsavelId: form.responsavelId
         });
         C.toast('Atividade registrada em ' + C.fmtDiaAno(form.data) + '.');

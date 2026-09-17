@@ -50,10 +50,13 @@
 
   var MATRIZ = {
     coordenador: PERMISSOES.map(function (p) { return p.id; }),
+    /* Manutenção saiu do professor: abrir chamado é da coordenação ou do
+       técnico. O professor continua com `estrutura.ver` — precisa saber qual
+       cadeira está interditada para planejar a aula, só não abre o registro. */
     professor: [
       'painel.ver', 'agenda.ver', 'agenda.criarPontual', 'agenda.cancelarPropria',
       'cadeira.ocupar', 'disciplinas.ver', 'alunos.vincular',
-      'estrutura.ver', 'manutencao.abrir', 'relatorios.ver'
+      'estrutura.ver', 'relatorios.ver'
     ],
     tecnico: [
       'agenda.ver', 'estrutura.ver', 'manutencao.abrir', 'manutencao.encerrar', 'relatorios.ver'

@@ -489,6 +489,10 @@
       U.kv('Cadeiras', C.plural(o.cadeiras, 'cadeira') + ' de ' +
         S.cadeirasOperantesEscopo(o.agrupamentoId, o.escopo) + ' operantes'),
       U.kv('Situação', U.badgeStatus(st)),
+      /* Ocupação gravada antes de 17/09/2026 tem título escrito à mão. O
+         nome exibido agora é derivado do tipo e da turma, então o texto
+         original só sobrevive aqui — some da tela se não for mostrado. */
+      o.tituloOriginal ? U.kv('Título original', o.tituloOriginal) : null,
       o.descricao ? C.el('div', { style: 'padding:16px 0 0;font-size:13.5px;line-height:1.6' }, o.descricao) : null
     ]);
 
@@ -558,7 +562,7 @@
 
     var conteudo = C.el('div', { class: 'stack' }, [
       C.el('div', { class: 'preview' }, [
-        C.el('div', {}, [C.el('b', { text: o.titulo }), ' · ' + o.subtitulo]),
+        C.el('div', {}, [C.el('b', { text: o.titulo }), o.subtitulo ? ' · ' + o.subtitulo : '']),
         C.el('div', { class: 'muted', text: C.nomeDia(C.weekday(o.data), true) + ', ' + C.fmtDiaAno(o.data) +
           ' · ' + o.inicio + '–' + o.fim + ' · ' + S.rotuloEscopo(o.agrupamentoId, o.escopo) })
       ]),

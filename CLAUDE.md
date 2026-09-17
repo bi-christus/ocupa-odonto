@@ -100,7 +100,7 @@ hora, pelo snapshot de `autorizados`.
 | `turmas` | auto | `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo` |
 | `alunos` | auto | `nome`, `matricula`, `periodo` |
 | `matriculas` | `{turmaId}__{alunoId}` | `turmaId`, `alunoId` |
-| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `cadeiras`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `titulo`, `descricao`, `turmaId`, `responsavelId` |
+| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `cadeiras`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId` (mais `titulo` só nas gravadas antes de 17/09/2026) |
 | `manutencoes` | auto | `protocolo`, `clinicaId`, `cadeira`, `categoria`, `criticidade`, `motivo`, `abertoPor`, `abertoEm`, `previsaoRetorno`, `status`, `fechadoPor`, `fechadoEm`, `laudo`, `impacto{}` |
 | `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `alunoId`, `data`, `registradoPor`, `registradoEm` |
 | `indices` | `ag1`–`ag4` | `agrupamentoId`, `itens[]` |
@@ -207,6 +207,19 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
   vez, e a digitação livre do horário continua valendo. Vivem em
   `Dados.TURNOS`. A marcação do botão é derivada do horário no formulário, não
   um estado à parte — não transforme turno em campo gravado na ocupação
+- **Tipo da ocupação é só `graduacao` ou `pos`.** Os sete tipos antigos
+  (reposicao, avaliacao, evento…) vivem em `Dados.TIPOS_LEGADOS`, fora do
+  formulário: servem só para `rotuloTipoAtividade` conseguir exibir ocupação
+  já gravada. Não acrescente nada lá. `aula` é o tipo fixo das recorrentes,
+  que não têm campo de tipo
+- **O título da ocupação é DERIVADO, não digitado**: `tipo · turma`, ou
+  `tipo · nome de quem pediu` quando não há turma vinculada
+  (`tituloPontual` em `store.js`). Não recrie o campo de título — cada pessoa
+  escrevia num formato diferente. O texto antigo sobrevive em `tituloOriginal`
+  e aparece no detalhe da ocorrência só quando existe
+- **Manutenção não é do professor.** Abrir chamado é coordenação ou técnico;
+  encerrar, idem. O professor mantém `estrutura.ver` para saber qual cadeira
+  está interditada, mas não abre registro
 - Bloqueio de sobreposição na mesma clínica
 - Ocupação das duas clínicas do mesmo agrupamento
 - Numeração contínua de cadeiras, 1 a 112

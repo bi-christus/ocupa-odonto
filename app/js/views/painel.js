@@ -197,7 +197,10 @@
             C.el('b', { style: 'font-weight:600', text: o.titulo }),
             C.el('span', {
               class: 'muted',
-              text: ' · ' + o.subtitulo + ' · ' + S.nomePessoa(o.responsavelId) +
+              /* `subtitulo` é o nome da disciplina e vem vazio na atividade
+                 pontual sem turma — sem a guarda sobraria um ' · ' solto. */
+              text: (o.subtitulo ? ' · ' + o.subtitulo : '') +
+                ' · ' + S.nomePessoa(o.responsavelId) +
                 ' · ' + C.plural(o.cadeiras, 'cadeira', 'cadeiras')
             })
           ]),
