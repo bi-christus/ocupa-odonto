@@ -26,9 +26,14 @@
       diaSel = (hoje >= refSemana && hoje <= fim) ? hoje : refSemana;
     }
 
+    /* A aba da lixeira só existe para quem pode recuperar: mostrar a lista
+       de excluídas a quem não pode fazer nada com ela é ruído. */
+    if (vista === 'excluidas' && !S.pode('agenda.excluir')) vista = 'semana';
+
     alvo.appendChild(cabecalho());
     if (vista === 'semana') alvo.appendChild(gradeSemana());
     else if (vista === 'dia') alvo.appendChild(gantt());
+    else if (vista === 'excluidas') alvo.appendChild(listaExcluidas());
     else alvo.appendChild(listaRecorrencias());
   }
 
@@ -47,11 +52,13 @@
     var podeCriar = S.pode('agenda.criarRecorrente') || S.pode('agenda.criarPontual');
     var titulo = vista === 'recorrencias'
       ? 'Recorrências · semestre ' + S.estado.periodoLetivo
-      : 'Ocupações · ' + rotuloSemana();
+      : vista === 'excluidas'
+        ? 'Reservas excluídas'
+        : 'Ocupações · ' + rotuloSemana();
     return C.el('div', { class: 'page-head' }, [
       C.el('h2', { text: titulo }),
       C.el('div', { class: 'row', style: 'gap:10px' }, [
-        vista !== 'recorrencias' ? C.el('div', { class: 'row', style: 'gap:4px' }, [
+        (vista !== 'recorrencias' && vista !== 'excluidas') ? C.el('div', { class: 'row', style: 'gap:4px' }, [
           C.el('button', { class: 'chip-btn', text: '‹', 'aria-label': 'Semana anterior', title: 'Semana anterior',
             onclick: function () { refSemana = C.addDays(refSemana, -7); diaSel = null; global.App.recarregar(); } }),
           C.el('button', { class: 'chip-btn', text: 'Hoje',
@@ -60,7 +67,8 @@
             onclick: function () { refSemana = C.addDays(refSemana, 7); diaSel = null; global.App.recarregar(); } })
         ]) : null,
         C.el('div', { class: 'seg' }, [
-          aba('semana', 'Semana'), aba('dia', 'Dia'), aba('recorrencias', 'Recorrências')
+          aba('semana', 'Semana'), aba('dia', 'Dia'), aba('recorrencias', 'Recorrências'),
+          S.pode('agenda.excluir') ? abaExcluidas() : null
         ]),
         podeCriar ? C.el('button', { class: 'btn btn-primary', text: 'Nova ocupação', onclick: novaOcupacao }) : null
       ])
@@ -72,6 +80,119 @@
       'aria-pressed': vista === id ? 'true' : 'false',
       onclick: function () { vista = id; global.App.recarregar(); }
     });
+  }
+  /* A contagem vai na própria aba: lixeira que não avisa que tem coisa
+     dentro é lixeira que ninguém abre. */
+  function abaExcluidas() {
+    var n = S.reservasExcluidas().length;
+    return C.el('button', {
+      type: 'button', class: vista === 'excluidas' ? 'on' : '',
+      'aria-pressed': vista === 'excluidas' ? 'true' : 'false',
+      text: n ? 'Excluídas · ' + n : 'Excluídas',
+      onclick: function () { vista = 'excluidas'; global.App.recarregar(); }
+    });
+  }
+
+  /* ── Excluir e recuperar ──────────────────────────────────────────────
+     Só coordenação (`agenda.excluir`). Exclusão é reversível: marca o
+     documento e solta o horário, mas não apaga nada. */
+  function excluirReserva(o) {
+    if (!S.pode('agenda.excluir')) { C.toast('Somente a coordenação exclui reservas.'); return; }
+    var motivo = '';
+    U.modal({
+      titulo: 'Excluir reserva',
+      subtitulo: S.rotuloReserva(o),
+      largura: '580px',
+      conteudo: C.el('div', { class: 'stack', style: 'gap:14px' }, [
+        C.el('p', { style: 'margin:0;font-size:13.5px;line-height:1.6',
+          text: o.tipo === 'pontual'
+            ? 'A atividade sai da agenda e o horário fica livre para outra reserva.'
+            : 'A recorrência sai da agenda inteira — todos os encontros do semestre — e os horários ficam livres.' }),
+        C.el('p', {
+          class: 'muted', style: 'margin:0;font-size:12.5px;line-height:1.6',
+          text: 'Não é definitivo: fica na aba Excluídas e pode ser recuperada. ' +
+            'Mas a recuperação pode falhar se alguém ocupar o horário nesse meio-tempo.'
+        }),
+        U.campo('Motivo', C.el('input', {
+          class: 'input', type: 'text', placeholder: 'Por que está sendo excluída',
+          oninput: function (ev) { motivo = ev.target.value; }
+        }), 'opcional')
+      ]),
+      acoes: [
+        C.el('button', { class: 'btn btn-outline', text: 'Voltar', onclick: U.fecharModal }),
+        C.el('button', {
+          class: 'btn btn-perigo', text: 'Excluir reserva',
+          onclick: function () {
+            U.fecharModal();
+            /* Reconferida aqui, não só na renderização. */
+            if (!S.pode('agenda.excluir')) { C.toast('Somente a coordenação exclui reservas.'); return; }
+            S.excluirReserva(o.id, motivo).then(function (r) {
+              if (r && r.ok) C.toast('Reserva excluída — está na aba Excluídas.');
+              global.App.recarregar();
+            });
+          }
+        })
+      ]
+    });
+  }
+
+  function recuperarReserva(o) {
+    if (!S.pode('agenda.excluir')) { C.toast('Somente a coordenação recupera reservas.'); return; }
+    /* A mensagem de choque, quando houver, vem do próprio store pelo toast:
+       o horário pode ter sido ocupado enquanto a reserva estava excluída. */
+    S.recuperarReserva(o.id).then(function (r) {
+      if (r && r.ok) C.toast('Reserva recuperada · ' + S.rotuloReserva(o) + '.');
+      global.App.recarregar();
+    });
+  }
+
+  function listaExcluidas() {
+    var lista = S.reservasExcluidas();
+    if (!lista.length) {
+      return U.vazio('Nenhuma reserva excluída. O que a coordenação excluir aparece aqui e pode ser recuperado.');
+    }
+    var tabela = C.el('table', { class: 'table' }, [
+      C.el('thead', {}, C.el('tr', {}, [
+        C.el('th', { text: 'Tipo' }), C.el('th', { text: 'Reserva' }),
+        C.el('th', { text: 'Onde' }), C.el('th', { text: 'Quando' }),
+        C.el('th', { text: 'Excluída' }), C.el('th', { class: 'right', text: '' })
+      ]))
+    ]);
+    var corpo = C.el('tbody');
+    lista.forEach(function (o) {
+      corpo.appendChild(C.el('tr', {}, [
+        C.el('td', {}, C.el('span', {
+          class: 'badge ' + (o.tipo === 'pontual' ? 'soft' : 'neutral'),
+          text: o.tipo === 'pontual' ? 'Pontual' : 'Recorrente'
+        })),
+        C.el('td', { text: S.rotuloReserva(o) }),
+        C.el('td', { text: S.rotuloEscopo(o.agrupamentoId, o.escopo) }),
+        C.el('td', { style: 'font-size:12.5px', text: o.tipo === 'pontual'
+          ? C.fmtDiaAno(o.data) + ' · ' + o.inicio + '–' + o.fim
+          : C.listaDias(o.dias) + ' · ' + o.inicio + '–' + o.fim }),
+        C.el('td', { style: 'font-size:12.5px' }, [
+          C.el('div', { text: C.fmtCarimbo(o.excluidaEm) }),
+          C.el('div', { class: 'muted', text: S.nomePessoa(o.excluidaPor) }),
+          o.motivoExclusao
+            ? C.el('div', { class: 'muted', text: 'Motivo: ' + o.motivoExclusao })
+            : null
+        ]),
+        C.el('td', { class: 'right', style: 'white-space:nowrap' }, C.el('button', {
+          class: 'btn-ghost', text: 'Recuperar',
+          onclick: function () { recuperarReserva(o); }
+        }))
+      ]));
+    });
+    tabela.appendChild(corpo);
+    return C.el('div', {}, [
+      C.el('div', {
+        class: 'alert', style: 'margin-bottom:18px',
+        text: 'Reserva excluída não aparece na agenda e não bloqueia horário. ' +
+          'Recuperar devolve a reserva com os registros de cadeira que ela tinha — ' +
+          'mas passa pela checagem de sobreposição, e falha se o horário já estiver ocupado.'
+      }),
+      C.el('div', { class: 'rolagem-x' }, tabela)
+    ]);
   }
 
   function novaOcupacao() {
@@ -357,7 +478,7 @@
 
   function listaRecorrencias() {
     var hoje = C.hojeISO();
-    var regras = S.estado.recorrencias.slice().sort(function (a, b) {
+    var regras = S.recorrenciasAtivas().slice().sort(function (a, b) {
       return (a.dias[0] - b.dias[0]) || C.toMin(a.inicio) - C.toMin(b.inicio);
     });
     if (!regras.length) return U.vazio('Nenhuma recorrência criada neste semestre.');
@@ -399,6 +520,12 @@
           S.pode('agenda.criarRecorrente') && !encerrada ? C.el('button', {
             class: 'btn-danger', style: 'margin-left:12px', text: 'Encerrar',
             onclick: function () { encerrarRegra(r); }
+          }) : null,
+          /* Encerrar preserva o histórico e para daqui pra frente; excluir
+             tira a recorrência inteira da agenda, e dá para desfazer. */
+          S.pode('agenda.excluir') ? C.el('button', {
+            class: 'btn-danger', style: 'margin-left:12px', text: 'Excluir',
+            onclick: function () { excluirReserva(r); }
           }) : null
         ])
       ]));
@@ -503,6 +630,19 @@
       largura: '620px',
       conteudo: conteudo,
       acoes: [
+        /* Excluir age no DOCUMENTO, não nesta data: numa recorrente derruba o
+           semestre inteiro. Por isso o rótulo é diferente de "Cancelar
+           ocupação", que tira só este encontro. */
+        S.pode('agenda.excluir') ? C.el('button', {
+          class: 'btn btn-danger', style: 'margin-right:auto',
+          text: o.origem === 'recorrente' ? 'Excluir recorrência' : 'Excluir reserva',
+          onclick: function () {
+            var bruta = S.reservaPorId(o.origemId);
+            if (!bruta) { C.toast('Reserva não encontrada.'); return; }
+            U.fecharModal();
+            excluirReserva(bruta);
+          }
+        }) : null,
         podeCancelar ? C.el('button', {
           class: 'btn btn-outline', text: 'Cancelar ocupação',
           onclick: function () { U.fecharModal(); cancelar(o, function () { global.App.recarregar(); }); }

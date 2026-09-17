@@ -195,6 +195,27 @@
     });
   }
 
+  /* Exclusão REVERSÍVEL: a entrada sai do índice, o documento FICA. As duas
+     coisas na mesma transação, e nenhuma das duas é dispensável — apagar o
+     documento não deixaria nada para recuperar, e deixar a entrada no índice
+     faria a reserva sumir de todas as telas e continuar bloqueando o horário,
+     que é o fantasma descrito no comentário de removerOcupacao. */
+  function desindexarOcupacao(agrupamentoId, ocupacaoId, dados) {
+    var refIndice = db.collection('indices').doc(String(agrupamentoId));
+    var refOcup = db.collection('ocupacoes').doc(String(ocupacaoId));
+    return db.runTransaction(function (t) {
+      return t.get(refIndice).then(function (d) {
+        var itens = (d.exists && d.data() && d.data().itens) ? d.data().itens : [];
+        t.set(refIndice, {
+          agrupamentoId: agrupamentoId,
+          itens: itens.filter(function (i) { return i.id !== ocupacaoId; })
+        }, { merge: true });
+        t.set(refOcup, dados, { merge: true });
+        return ocupacaoId;
+      });
+    });
+  }
+
   /* Atualiza só o resumo no índice — usado quando a ocupação muda de
      vigência ou é encerrada, sem sair do sistema. */
   function atualizarIndice(agrupamentoId, ocupacaoId, resumo) {
@@ -219,6 +240,6 @@
     assinarVivas: assinarVivas, encerrarAssinaturas: encerrarAssinaturas,
     novoId: novoId, gravar: gravar, apagar: apagar, apagarVarios: apagarVarios,
     gravarOcupacao: gravarOcupacao, removerOcupacao: removerOcupacao,
-    atualizarIndice: atualizarIndice
+    desindexarOcupacao: desindexarOcupacao, atualizarIndice: atualizarIndice
   };
 })(window);

@@ -196,7 +196,7 @@
     /* Quais clínicas a turma toca: a recorrência guarda agrupamento +
        escopo, então quem abre isso em clínicas é o Store. */
     var usadas = {};
-    S.estado.recorrencias.forEach(function (r) {
+    S.recorrenciasAtivas().forEach(function (r) {
       if (r.turmaId !== t.id) return;
       var n = encontrosDaRegra(r);
       encontros += n; horas += n * C.duracaoH(r.inicio, r.fim);
@@ -242,14 +242,11 @@
   }
 
   function horarios(t) {
-    var regras = S.estado.recorrencias.filter(function (r) { return r.turmaId === t.id; });
-    /* Só o que está aprovado: pedido pendente ou recusado não é horário da
-       turma, e listá-lo aqui faria a turma parecer ter aula que ninguém
-       confirmou. Esta lista lê `estado.pontuais` direto, por fora do funil de
-       `ocorrenciasDoDia` que já filtra — então o filtro tem de vir junto. */
-    var pontuais = S.estado.pontuais.filter(function (p) {
-      return p.turmaId === t.id && S.situacaoDe(p) === 'aprovada';
-    });
+    /* Pelos seletores do store: fora o que foi excluído e o pedido que a
+       coordenação ainda não aprovou. Listar pendente aqui faria a turma
+       parecer ter aula que ninguém confirmou. */
+    var regras = S.recorrenciasAtivas().filter(function (r) { return r.turmaId === t.id; });
+    var pontuais = S.pontuaisAtivas().filter(function (p) { return p.turmaId === t.id; });
     var caixa = C.el('div', { style: 'margin-bottom:34px' }, C.el('h5', { text: 'Horários', style: 'margin-bottom:14px' }));
 
     if (!regras.length && !pontuais.length) {

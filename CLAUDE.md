@@ -100,7 +100,7 @@ hora, pelo snapshot de `autorizados`.
 | `turmas` | auto | `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo` |
 | `alunos` | auto | `nome`, `matricula`, `periodo` |
 | `matriculas` | `{turmaId}__{alunoId}` | `turmaId`, `alunoId` |
-| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` (mais `titulo` só nas gravadas antes de 17/09/2026) |
+| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]`, `excluidaEm`, `excluidaPor`, `motivoExclusao` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` (mais `titulo` só nas gravadas antes de 17/09/2026) |
 | `manutencoes` | auto | `protocolo`, `clinicaId`, `cadeira`, `categoria`, `criticidade`, `motivo`, `abertoPor`, `abertoEm`, `previsaoRetorno`, `status`, `fechadoPor`, `fechadoEm`, `laudo`, `impacto{}` |
 | `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `nome`, `alunoId` (nulo nos registros novos), `data`, `registradoPor`, `registradoEm` |
 | `indices` | `ag1`–`ag4` | `agrupamentoId`, `itens[]` |
@@ -187,6 +187,43 @@ no dia do deploy.
 
 ---
 
+## Exclusão de reservas — reversível
+
+`agenda.excluir`, só do coordenador. Excluir **não apaga o documento**: grava
+`excluidaEm`/`excluidaPor`/`motivoExclusao` e tira a entrada do
+`indices/{agrupamentoId}` — `N.desindexarOcupacao` faz as duas coisas na mesma
+transação. Nenhuma das duas é dispensável: sem a marca não há o que recuperar;
+sem sair do índice a reserva sumiria de todas as telas e continuaria bloqueando
+o horário, que é o fantasma que o comentário de `removerOcupacao` já descrevia.
+
+A lixeira é a aba **Excluídas** da Agenda, com contagem no rótulo, e só aparece
+para quem pode recuperar. **Recuperar passa pela transação e pode falhar por
+choque** — enquanto a reserva estava excluída o horário estava livre, e alguém
+pode ter ocupado. Falhar aí é o comportamento correto. Pedido ainda não
+aprovado volta sem indexar, como nasceu.
+
+As atribuições de cadeira **não** são limpas na exclusão: é isso que faz a
+recuperação devolver a reserva como ela era, com os registros de uso.
+
+**Use os seletores `S.recorrenciasAtivas()` e `S.pontuaisAtivas()`**, nunca
+`estado.recorrencias`/`estado.pontuais` direto numa tela. Os seletores já
+descontam excluídas e pedidos não aprovados; eu esqueci esse filtro duas vezes
+em telas que liam as coleções cruas, e o sintoma é sutil — reserva excluída
+reaparecendo na tela de disciplinas, pedido pendente passando por aula
+confirmada.
+
+Distinção que o vocabulário precisa manter:
+- **Cancelar ocupação** — tira UM encontro da recorrência (vira exceção, com
+  motivo); numa pontual, remove o documento. Professor cancela o que é dele.
+- **Encerrar recorrência** — para de hoje em diante, preserva o histórico.
+- **Excluir reserva** — tira a reserva inteira da agenda, reversível, só
+  coordenação.
+
+`excluirRecorrencia` (apagava de vez, nunca teve botão) foi substituída por
+`excluirReserva`, que serve recorrência e pontual.
+
+---
+
 ## Sobreposição — a transação
 
 Com duas pessoas gravando ao mesmo tempo, validar-e-gravar é condição de corrida,
@@ -212,7 +249,7 @@ o índice se divide por mês.
 
 ## Acesso
 
-Três níveis — `coordenador`, `professor`, `tecnico` — e **18 permissões** em
+Três níveis — `coordenador`, `professor`, `tecnico` — e **19 permissões** em
 `acesso.js`. "Técnico de manutenção" é só rótulo de tela. Não existe perfil
 "administrador"; coordenador cumpre esse papel.
 

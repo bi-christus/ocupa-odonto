@@ -429,7 +429,7 @@
     if (barrado('relatorios.ver')) return;
     var linhas = [['Turma', 'Disciplina', 'Professor coordenador', 'Agrupamento', 'Escopo', 'Dias',
       'Início', 'Fim', 'Cadeiras reservadas', 'Vigência início', 'Vigência fim', 'Encontros', 'Exceções']];
-    S.estado.recorrencias.forEach(function (r) {
+    S.recorrenciasAtivas().forEach(function (r) {
       var t = S.turma(r.turmaId), d = S.disciplinaDaTurma(t);
       var fim = fimEfetivoDaRegra(r);
       /* Só conta a exceção que cai dentro da vigência efetiva: subtrair o

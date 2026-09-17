@@ -31,6 +31,7 @@
     { id: 'agenda.criarPontual', area: 'Agenda', rotulo: 'Registrar atividade pontual' },
     { id: 'agenda.aprovar', area: 'Agenda', rotulo: 'Aprovar e recusar pedidos de ocupação' },
     { id: 'agenda.cancelarQualquer', area: 'Agenda', rotulo: 'Cancelar qualquer registro' },
+    { id: 'agenda.excluir', area: 'Agenda', rotulo: 'Excluir e recuperar reservas' },
     { id: 'agenda.cancelarPropria', area: 'Agenda', rotulo: 'Cancelar os próprios registros' },
     { id: 'cadeira.ocupar', area: 'Operação', rotulo: 'Ocupar e liberar cadeiras' },
     { id: 'disciplinas.ver', area: 'Disciplinas', rotulo: 'Consultar disciplinas e turmas' },

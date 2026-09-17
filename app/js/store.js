@@ -445,7 +445,10 @@
   /* Ocorrências de um dia, ordenadas por horário. */
   function ocorrenciasDoDia(data, filtro) {
     var dow = C.weekday(data), saida = [];
-    estado.recorrencias.forEach(function (r) {
+    /* Pelos seletores: reserva excluída não é ocupação, e pedido pendente ou
+       recusado também não. Esta função é o funil de Agenda, Agora, Painel,
+       relatórios e `conflitos` — filtrar aqui cobre o sistema inteiro. */
+    recorrenciasAtivas().forEach(function (r) {
       if (r.dias.indexOf(dow) === -1) return;
       if (data < r.vigenciaInicio || data > r.vigenciaFim) return;
       /* encerradaEm é o primeiro dia inválido: "de hoje em diante" inclui hoje. */
@@ -455,14 +458,8 @@
       if (!casaFiltro(o, filtro)) return;
       saida.push(o);
     });
-    estado.pontuais.forEach(function (p) {
+    pontuaisAtivas().forEach(function (p) {
       if (p.data !== data) return;
-      /* Pedido pendente ou recusado não é ocupação: não aparece na agenda,
-         não conta em relatório e não entra em conflito. Esta função é o funil
-         único de todas as telas, então filtrar aqui cobre o sistema inteiro
-         — inclusive `conflitos`, que é o que faz o pedido não segurar
-         horário contra outro pedido. */
-      if (situacaoDe(p) !== 'aprovada') return;
       var o = ocorrenciaDePontual(p);
       if (!casaFiltro(o, filtro)) return;
       saida.push(o);
@@ -544,6 +541,38 @@
   function ehPendente(o) { return situacaoDe(o) === 'pendente'; }
   function precisaAprovacao() {
     return !!usuarioAtual && usuarioAtual.perfil === 'professor' && exigirAprovacao();
+  }
+
+  /* ── Exclusão reversível ──────────────────────────────────────────────
+     Excluir reserva não apaga documento: grava `excluidaEm` e tira a entrada
+     do índice de sobreposição. As duas coisas importam — sem a marca não há
+     o que recuperar; sem sair do índice a reserva desapareceria de todas as
+     telas e continuaria bloqueando o horário.
+
+     Os SELETORES abaixo existem para a regra morar num lugar só. Nesta mesma
+     sequência de mudanças eu já esqueci o filtro duas vezes em telas que leem
+     `estado.recorrencias`/`estado.pontuais` direto — quem monta tela nova usa
+     o seletor e recebe o filtro de graça. */
+  function estaExcluida(o) { return !!(o && o.excluidaEm); }
+  /* A ocorrência é derivada e não serve para excluir: a exclusão é do
+     DOCUMENTO. `origemId` de uma ocorrência recorrente é a regra inteira. */
+  function reservaPorId(id) {
+    return porId(estado.recorrencias, id) || porId(estado.pontuais, id);
+  }
+  function recorrenciasAtivas() {
+    return estado.recorrencias.filter(function (r) { return !estaExcluida(r); });
+  }
+  function pontuaisAtivas() {
+    return estado.pontuais.filter(function (p) {
+      return !estaExcluida(p) && situacaoDe(p) === 'aprovada';
+    });
+  }
+  /* Lixeira: as duas coleções juntas, da exclusão mais recente para a mais
+     antiga, que é a ordem em que alguém procura o que acabou de apagar. */
+  function reservasExcluidas() {
+    return estado.recorrencias.concat(estado.pontuais)
+      .filter(estaExcluida)
+      .sort(function (a, b) { return String(b.excluidaEm).localeCompare(String(a.excluidaEm)); });
   }
 
   /* `excedeCapacidade` deixou de existir junto com a quantidade pedida no
@@ -688,6 +717,15 @@
   function rotuloPedido(p) {
     return tituloPontual(p, p.turmaId ? turma(p.turmaId) : null);
   }
+
+  /* Rótulo de uma reserva CRUA (o documento), não de ocorrência: a lixeira
+     lista documentos, que não passam por `ocorrenciaDeRegra`/`DePontual`.
+     Serve os dois tipos. */
+  function rotuloReserva(o) {
+    if (!o) return '—';
+    if (o.tipo === 'pontual') return rotuloPedido(o);
+    return rotuloTipoAtividade('aula') + ' · ' + rotuloTurma(turma(o.turmaId));
+  }
   function pedidosPendentes() {
     return estado.pontuais.filter(ehPendente).sort(ordemDePedido);
   }
@@ -829,14 +867,50 @@
       function () { r.encerradaEm = antes; });
   }
 
-  function excluirRecorrencia(id) {
-    var r = porId(estado.recorrencias, id);
-    if (!r) return;
-    estado.recorrencias = estado.recorrencias.filter(function (x) { return x.id !== id; });
+  /* Substituiu o antigo `excluirRecorrencia`, que apagava o documento de vez
+     e nunca foi ligado a botão nenhum. Serve recorrência e pontual: a marca
+     e a saída do índice são as mesmas nos dois casos.
+     As atribuições de cadeira NÃO são limpas — é isso que faz a recuperação
+     devolver a reserva como ela era, com os registros de uso. */
+  function excluirReserva(id, motivo) {
+    var o = porId(estado.recorrencias, id) || porId(estado.pontuais, id);
+    if (!o) return global.Promise.resolve({ ok: false, mensagem: 'Reserva não encontrada.' });
+    if (estaExcluida(o)) return global.Promise.resolve({ ok: false, mensagem: 'Reserva já está excluída.' });
+    var antes = {
+      excluidaEm: o.excluidaEm, excluidaPor: o.excluidaPor, motivoExclusao: o.motivoExclusao
+    };
+    o.excluidaEm = C.carimbo();
+    o.excluidaPor = euId();
+    o.motivoExclusao = String(motivo || '').trim();
     commit();
-    persistir(N.removerOcupacao(r.agrupamentoId, id), function () {
-      estado.recorrencias.push(r);
+    return persistir(N.desindexarOcupacao(o.agrupamentoId, o.id, {
+      excluidaEm: o.excluidaEm, excluidaPor: o.excluidaPor, motivoExclusao: o.motivoExclusao
+    }), function () {
+      Object.keys(antes).forEach(function (k) { o[k] = antes[k]; });
     });
+  }
+
+  /* Recuperar reindexa pela transação, e PODE FALHAR por choque: enquanto a
+     reserva estava na lixeira o horário estava livre, e alguém pode ter
+     ocupado. Falhar aqui é o comportamento certo — o contrário seria criar
+     duas reservas no mesmo horário pelas costas da validação.
+     Pedido que ainda não foi aprovado volta sem indexar, como nasceu. */
+  function recuperarReserva(id) {
+    var o = porId(estado.recorrencias, id) || porId(estado.pontuais, id);
+    if (!o) return global.Promise.resolve({ ok: false, mensagem: 'Reserva não encontrada.' });
+    if (!estaExcluida(o)) return global.Promise.resolve({ ok: false, mensagem: 'Reserva não está excluída.' });
+    var antes = {
+      excluidaEm: o.excluidaEm, excluidaPor: o.excluidaPor, motivoExclusao: o.motivoExclusao
+    };
+    o.excluidaEm = null;
+    o.excluidaPor = null;
+    o.motivoExclusao = '';
+    commit();
+    var indexavel = !(o.tipo === 'pontual' && situacaoDe(o) !== 'aprovada');
+    return persistir(
+      indexavel ? gravarOcupacaoNaNuvem(o) : N.gravar('ocupacoes', o.id, o),
+      function () { Object.keys(antes).forEach(function (k) { o[k] = antes[k]; }); }
+    );
   }
 
   function restaurarExcecao(regraId, data) {
@@ -1310,7 +1384,11 @@
     aprovarPedido: aprovarPedido, recusarPedido: recusarPedido,
     retirarPedido: retirarPedido,
     cancelarOcorrencia: cancelarOcorrencia, encerrarRecorrencia: encerrarRecorrencia,
-    excluirRecorrencia: excluirRecorrencia, restaurarExcecao: restaurarExcecao,
+    restaurarExcecao: restaurarExcecao,
+    estaExcluida: estaExcluida, rotuloReserva: rotuloReserva, reservaPorId: reservaPorId,
+    recorrenciasAtivas: recorrenciasAtivas, pontuaisAtivas: pontuaisAtivas,
+    reservasExcluidas: reservasExcluidas,
+    excluirReserva: excluirReserva, recuperarReserva: recuperarReserva,
     atribuicoesDa: atribuicoesDa, atribuicaoDaCadeira: atribuicaoDaCadeira,
     ocuparCadeira: ocuparCadeira, liberarCadeira: liberarCadeira,
     abrirManutencao: abrirManutencao, encerrarManutencao: encerrarManutencao,
