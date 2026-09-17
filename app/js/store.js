@@ -23,7 +23,8 @@
       semestre: { inicio: '', fim: '' },
       parametros: {
         faixaMinimaMin: 120, capacidadeSemanalH: 60, bloquearSobreposicao: true,
-        exigirMotivoManutencao: true, aberturaPadrao: '07:00', fechamentoPadrao: '22:00'
+        exigirMotivoManutencao: true, exigirAprovacaoProfessor: true,
+        aberturaPadrao: '07:00', fechamentoPadrao: '22:00'
       },
       agrupamentos: [], clinicas: [], usuarios: [], alunos: [], disciplinas: [],
       turmas: [], recorrencias: [], pontuais: [], manutencoes: [], atribuicoes: []
@@ -450,6 +451,12 @@
     });
     estado.pontuais.forEach(function (p) {
       if (p.data !== data) return;
+      /* Pedido pendente ou recusado não é ocupação: não aparece na agenda,
+         não conta em relatório e não entra em conflito. Esta função é o funil
+         único de todas as telas, então filtrar aqui cobre o sistema inteiro
+         — inclusive `conflitos`, que é o que faz o pedido não segurar
+         horário contra outro pedido. */
+      if (situacaoDe(p) !== 'aprovada') return;
       var o = ocorrenciaDePontual(p);
       if (!casaFiltro(o, filtro)) return;
       saida.push(o);
@@ -508,6 +515,29 @@
       });
     });
     return achados;
+  }
+
+  /* ── Aprovação de pedidos ─────────────────────────────────────────────
+     Com a exigência ligada, ocupação criada por PROFESSOR nasce 'pendente':
+     é pedido, não reserva. Pedido NÃO entra no índice de sobreposição, então
+     não segura horário — vários professores podem pedir o mesmo, e é a
+     APROVAÇÃO que passa pela transação e pode falhar por choque.
+
+     Ocupação gravada antes de 17/09/2026 não tem `situacao`. A ausência vale
+     como aprovada: tratar como pendente faria a agenda inteira desaparecer
+     da tela no dia do deploy.
+
+     ATENÇÃO — hoje esta barreira é só de interface. A Security Rule de
+     `ocupacoes` ainda deixa professor gravar direto, então o servidor aceita
+     um registro que não passou por aqui. Enquanto a regra não for ajustada
+     no console, isto é convenção de tela, não controle. */
+  function exigirAprovacao() {
+    return estado.parametros.exigirAprovacaoProfessor !== false;
+  }
+  function situacaoDe(o) { return (o && o.situacao) || 'aprovada'; }
+  function ehPendente(o) { return situacaoDe(o) === 'pendente'; }
+  function precisaAprovacao() {
+    return !!usuarioAtual && usuarioAtual.perfil === 'professor' && exigirAprovacao();
   }
 
   /* Capacidade: a ocorrência cabe nas cadeiras operantes do escopo?
@@ -621,6 +651,7 @@
   }
 
   function criarPontual(dados) {
+    var soPedido = precisaAprovacao();
     var p = {
       id: N.novoId('ocupacoes'), tipo: 'pontual',
       agrupamentoId: dados.agrupamentoId, escopo: dados.escopo || 'a',
@@ -631,14 +662,94 @@
       descricao: dados.descricao || '',
       turmaId: dados.turmaId || null, responsavelId: dados.responsavelId,
       excecoes: [],
+      situacao: soPedido ? 'pendente' : 'aprovada',
       criadoPor: euId(), criadoEm: C.carimbo()
     };
     estado.pontuais.push(p);
     commit();
-    persistir(gravarOcupacaoNaNuvem(p), function () {
+    /* Pedido é gravação simples: não reserva nada, logo não passa pela
+       transação nem entra no índice. Quem indexa é `aprovarPedido`. */
+    persistir(soPedido ? N.gravar('ocupacoes', p.id, p) : gravarOcupacaoNaNuvem(p), function () {
       estado.pontuais = estado.pontuais.filter(function (x) { return x.id !== p.id; });
     });
     return p;
+  }
+
+  /* ── Mutações: fila de aprovação ──────────────────────────────────── */
+  /* Pedido pendente é filtrado em `ocorrenciasDoDia`, então nunca chega a
+     virar ocorrência — a fila precisa do rótulo por outro caminho. Reusa
+     `tituloPontual` para a fila e a agenda não divergirem no mesmo pedido. */
+  function rotuloPedido(p) {
+    return tituloPontual(p, p.turmaId ? turma(p.turmaId) : null);
+  }
+  function pedidosPendentes() {
+    return estado.pontuais.filter(ehPendente).sort(ordemDePedido);
+  }
+  /* O professor acompanha os próprios pedidos, recusados incluídos: recusa
+     sem retorno visível para quem pediu é pior do que recusa. */
+  function meusPedidos() {
+    var eu = euId();
+    return estado.pontuais.filter(function (p) {
+      return situacaoDe(p) !== 'aprovada' && (p.responsavelId === eu || p.criadoPor === eu);
+    }).sort(ordemDePedido);
+  }
+  function ordemDePedido(a, b) {
+    return String(a.data).localeCompare(String(b.data)) || C.toMin(a.inicio) - C.toMin(b.inicio);
+  }
+
+  /* Aprovar é o instante em que o pedido passa a reservar de verdade: é aqui
+     que ele entra na transação e no índice, e aqui que o choque pode barrar.
+     Devolve promessa porque a coordenação precisa saber se passou — se dois
+     pedidos disputam o mesmo horário, o segundo falha e o motivo aparece. */
+  function aprovarPedido(id) {
+    var p = porId(estado.pontuais, id);
+    if (!p || !ehPendente(p)) return global.Promise.resolve({ ok: false, mensagem: 'Pedido não está pendente.' });
+    var antes = { situacao: p.situacao, decididoPor: p.decididoPor, decididoEm: p.decididoEm };
+    p.situacao = 'aprovada';
+    p.decididoPor = euId();
+    p.decididoEm = C.carimbo();
+    commit();
+    return persistir(gravarOcupacaoNaNuvem(p), function () {
+      Object.keys(antes).forEach(function (k) { p[k] = antes[k]; });
+    });
+  }
+
+  /* Recusa não toca o índice: o pedido nunca esteve lá. O motivo é opcional,
+     e vai como string vazia quando não houver — nunca undefined, que o
+     Firestore recusa. */
+  function recusarPedido(id, motivo) {
+    var p = porId(estado.pontuais, id);
+    if (!p || !ehPendente(p)) return global.Promise.resolve({ ok: false, mensagem: 'Pedido não está pendente.' });
+    var antes = {
+      situacao: p.situacao, motivoRecusa: p.motivoRecusa,
+      decididoPor: p.decididoPor, decididoEm: p.decididoEm
+    };
+    p.situacao = 'recusada';
+    p.motivoRecusa = String(motivo || '').trim();
+    p.decididoPor = euId();
+    p.decididoEm = C.carimbo();
+    commit();
+    return persistir(N.gravar('ocupacoes', p.id, {
+      situacao: p.situacao, motivoRecusa: p.motivoRecusa,
+      decididoPor: p.decididoPor, decididoEm: p.decididoEm
+    }), function () {
+      Object.keys(antes).forEach(function (k) { p[k] = antes[k]; });
+    });
+  }
+
+  /* Quem pediu pode retirar o próprio pedido enquanto ninguém decidiu —
+     sem isto, um pedido feito por engano só sairia pela recusa da
+     coordenação, e a pessoa ficaria esperando por um erro dela mesma. */
+  function retirarPedido(id) {
+    var p = porId(estado.pontuais, id);
+    if (!p || !ehPendente(p)) return global.Promise.resolve({ ok: false });
+    var eu = euId();
+    if (p.responsavelId !== eu && p.criadoPor !== eu && !pode('agenda.aprovar')) {
+      return global.Promise.resolve({ ok: false, mensagem: 'Este pedido é de outra pessoa.' });
+    }
+    estado.pontuais = estado.pontuais.filter(function (x) { return x.id !== id; });
+    commit();
+    return persistir(N.apagar('ocupacoes', id), function () { estado.pontuais.push(p); });
   }
 
   function atualizarRecorrencia(id, dados) {
@@ -1164,6 +1275,11 @@
     conflitos: conflitos, excedeCapacidade: excedeCapacidade,
     criarRecorrencia: criarRecorrencia, criarPontual: criarPontual,
     atualizarRecorrencia: atualizarRecorrencia, atualizarPontual: atualizarPontual,
+    exigirAprovacao: exigirAprovacao, situacaoDe: situacaoDe,
+    rotuloPedido: rotuloPedido,
+    pedidosPendentes: pedidosPendentes, meusPedidos: meusPedidos,
+    aprovarPedido: aprovarPedido, recusarPedido: recusarPedido,
+    retirarPedido: retirarPedido,
     cancelarOcorrencia: cancelarOcorrencia, encerrarRecorrencia: encerrarRecorrencia,
     excluirRecorrencia: excluirRecorrencia, restaurarExcecao: restaurarExcecao,
     atribuicoesDa: atribuicoesDa, atribuicaoDaCadeira: atribuicaoDaCadeira,

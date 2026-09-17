@@ -280,6 +280,12 @@
        Um turno que não cabe na janela do escopo, ou que seria menor que a
        faixa mínima, aparece desabilitado com o motivo no title: melhor do que
        oferecer um preenchimento que a validação recusaria logo em seguida. */
+    /* Professor com a exigência ligada não registra: pede. Muda o rótulo do
+       botão, o aviso do formulário e o toast — a ação é outra. */
+    function souPedido() {
+      return u.perfil === 'professor' && S.exigirAprovacao();
+    }
+
     function turnoCabe(t) {
       var jan = janela();
       return C.toMin(t.inicio) >= C.toMin(jan.abertura) &&
@@ -398,6 +404,16 @@
 
         acao.textContent = 'Criar recorrência';
       } else {
+        /* Dizer que o pedido NÃO segura o horário é obrigatório: quem pede
+           assume que pedir já garante, e aí descobre no dia. */
+        if (souPedido()) {
+          corpo.appendChild(C.el('div', {
+            class: 'alert', style: 'margin-bottom:16px',
+            text: 'Isto vai para a coordenação como pedido. Não reserva a clínica enquanto ' +
+              'não for aprovado, e o mesmo horário pode ser pedido por outra pessoa nesse meio-tempo.'
+          }));
+        }
+
         /* Não existe mais campo de título: o nome da atividade é derivado do
            tipo e da turma (ou de quem pediu, quando não há turma). */
         corpo.appendChild(C.el('div', { class: 'grid-fields' }, [
@@ -437,7 +453,9 @@
             oninput: function (ev) { form.descricao = ev.target.value; }
           }))));
 
-        acao.textContent = 'Registrar atividade';
+        /* O botão não pode prometer "registrar" quando o que vai acontecer é
+           um pedido esperando a coordenação. */
+        acao.textContent = souPedido() ? 'Solicitar ocupação' : 'Registrar atividade';
       }
       atualizar();
     }
@@ -671,7 +689,9 @@
           descricao: form.descricao,
           turmaId: form.turmaVinculada || null, responsavelId: form.responsavelId
         });
-        C.toast('Atividade registrada em ' + C.fmtDiaAno(form.data) + '.');
+        C.toast(res && res.situacao === 'pendente'
+          ? 'Pedido enviado para a coordenação — vale só depois de aprovado.'
+          : 'Atividade registrada em ' + C.fmtDiaAno(form.data) + '.');
       }
       if (opcoes.aoRegistrar) opcoes.aoRegistrar(res, modo);
     }

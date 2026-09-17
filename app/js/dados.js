@@ -103,6 +103,11 @@
         capacidadeSemanalH: 60,
         bloquearSobreposicao: true,
         exigirMotivoManutencao: true,
+        /* Ligado por padrão: a coordenação desliga pela tela de Estrutura se
+           quiser que o professor registre direto. Em banco que já existe o
+           campo não está gravado, e a ausência também vale como ligado
+           (store.exigirAprovacao) — o pedido da coordenação foi exigir. */
+        exigirAprovacaoProfessor: true,
         aberturaPadrao: '07:00',
         fechamentoPadrao: '22:00'
       },

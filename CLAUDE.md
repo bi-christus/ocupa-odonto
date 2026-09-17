@@ -92,7 +92,7 @@ hora, pelo snapshot de `autorizados`.
 
 | Coleção | Id do documento | Campos |
 |---|---|---|
-| `config` | `sistema` (doc único) | `versao`, `periodoLetivo`, `semestre{inicio,fim}`, `parametros{faixaMinimaMin, capacidadeSemanalH, bloquearSobreposicao, exigirMotivoManutencao, aberturaPadrao, fechamentoPadrao}` |
+| `config` | `sistema` (doc único) | `versao`, `periodoLetivo`, `semestre{inicio,fim}`, `parametros{faixaMinimaMin, capacidadeSemanalH, bloquearSobreposicao, exigirMotivoManutencao, exigirAprovacaoProfessor, aberturaPadrao, fechamentoPadrao}` |
 | `autorizados` | e-mail em minúsculas | `nome`, `nivel`, `ativo`, `ultimoAcesso` |
 | `agrupamentos` | `ag1`–`ag4` | `nome`, `clinicas[]` |
 | `clinicas` | `cl1`–`cl8` | `nome`, `agrupamentoId`, `especialidade`, `cadeiras`, `primeiraCadeira`, `abertura`, `fechamento` |
@@ -100,7 +100,7 @@ hora, pelo snapshot de `autorizados`.
 | `turmas` | auto | `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo` |
 | `alunos` | auto | `nome`, `matricula`, `periodo` |
 | `matriculas` | `{turmaId}__{alunoId}` | `turmaId`, `alunoId` |
-| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `cadeiras`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId` (mais `titulo` só nas gravadas antes de 17/09/2026) |
+| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `cadeiras`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` (mais `titulo` só nas gravadas antes de 17/09/2026) |
 | `manutencoes` | auto | `protocolo`, `clinicaId`, `cadeira`, `categoria`, `criticidade`, `motivo`, `abertoPor`, `abertoEm`, `previsaoRetorno`, `status`, `fechadoPor`, `fechadoEm`, `laudo`, `impacto{}` |
 | `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `alunoId`, `data`, `registradoPor`, `registradoEm` |
 | `indices` | `ag1`–`ag4` | `agrupamentoId`, `itens[]` |
@@ -132,6 +132,38 @@ Cuidado: `acesso.js` descreve o perfil Técnico como "Responsável pelas cadeira
 
 ---
 
+## Aprovação de pedidos
+
+Com `parametros.exigirAprovacaoProfessor` ligado (o padrão — **ausência do
+campo também vale como ligado**), ocupação criada por professor nasce
+`situacao: 'pendente'`: é pedido, não reserva. A coordenação aprova ou recusa
+pela fila no Painel; `agenda.aprovar` é a permissão, só do coordenador. O
+próprio autor pode retirar o pedido enquanto ninguém decidiu.
+
+**Pedido não segura horário.** Ele não entra em `indices/{agrupamentoId}`,
+então vários professores podem pedir o mesmo horário. É a **aprovação** que
+passa pela transação e pode falhar por choque — e aí a coordenação vê a
+mensagem. Por isso o formulário avisa, com todas as letras, que pedir não
+reserva.
+
+O filtro que sustenta tudo isso é uma linha em `ocorrenciasDoDia`: pontual com
+`situacao` diferente de `'aprovada'` é descartada ali. Como essa função é o
+funil único de Agenda, Agora, Painel, relatórios e `conflitos`, filtrar ali
+cobre o sistema inteiro. A fila lê `estado.pontuais` direto, por fora do funil.
+
+Ocupação gravada antes de 17/09/2026 não tem `situacao`, e `situacaoDe` trata a
+ausência como aprovada — o contrário faria a agenda inteira desaparecer da tela
+no dia do deploy.
+
+> ⚠️ **Esta barreira é só de interface hoje.** A Security Rule de `ocupacoes`
+> ainda permite `professor` gravar direto, então o servidor aceita registro que
+> não passou pela fila. Enquanto a regra não for ajustada no console, isto é
+> convenção de tela, não controle — o mesmo erro que a tela Acessos já cometeu
+> aqui. A regra precisa exigir `situacao == 'pendente'` no `create` de
+> professor e proibi-lo de alterar `situacao` no `update`.
+
+---
+
 ## Sobreposição — a transação
 
 Com duas pessoas gravando ao mesmo tempo, validar-e-gravar é condição de corrida,
@@ -157,7 +189,7 @@ o índice se divide por mês.
 
 ## Acesso
 
-Três níveis — `coordenador`, `professor`, `tecnico` — e **17 permissões** em
+Três níveis — `coordenador`, `professor`, `tecnico` — e **18 permissões** em
 `acesso.js`. "Técnico de manutenção" é só rótulo de tela. Não existe perfil
 "administrador"; coordenador cumpre esse papel.
 

@@ -342,7 +342,31 @@
         U.kv('Faixa mínima', pill(rotuloFaixa(p.faixaMinimaMin), 'soft')),
         U.kv('Cancelamento', pill(perfisCom('agenda.cancelarQualquer'), 'neutral')),
         U.kv('Motivo na manutenção', pill(p.exigirMotivoManutencao ? 'obrigatório' : 'opcional',
-          p.exigirMotivoManutencao ? 'neutral' : 'warn'))
+          p.exigirMotivoManutencao ? 'neutral' : 'warn')),
+        /* Liga/desliga direto na linha, sem passar pelo modal: é uma chave de
+           uma volta, e a coordenação precisa conseguir virar na hora.
+           `exige` é capturado antes do clique de propósito — `p` é a mesma
+           referência de estado.parametros, e ler no handler daria o valor já
+           trocado. */
+        (function () {
+          var exige = S.exigirAprovacao();
+          return U.kv('Ocupação do professor', C.el('span', { class: 'row', style: 'gap:10px' }, [
+            pill(exige ? 'exige aprovação' : 'direta', exige ? 'neutral' : 'warn'),
+            editar ? C.el('button', {
+              class: 'chip-btn', text: exige ? 'Desligar' : 'Ligar',
+              title: exige
+                ? 'Desligar: o professor volta a registrar ocupação direto, sem passar pela coordenação.'
+                : 'Ligar: a ocupação do professor passa a ser pedido e só vale depois de a coordenação aprovar.',
+              onclick: function () {
+                S.atualizarParametros({ exigirAprovacaoProfessor: !exige });
+                C.toast(!exige
+                  ? 'Ocupação do professor passa a exigir aprovação.'
+                  : 'Professor volta a registrar ocupação direto.');
+                global.App.recarregar();
+              }
+            }) : null
+          ]));
+        })()
       ]),
       editar ? C.el('button', {
         class: 'btn btn-outline', style: 'margin-top:18px', text: 'Ajustar parâmetros', onclick: editarParametros

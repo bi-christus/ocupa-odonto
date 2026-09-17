@@ -14,6 +14,9 @@
 
     alvo.appendChild(kpis(hoje, seg));
 
+    var fila = filaDePedidos();
+    if (fila) alvo.appendChild(fila);
+
     alvo.appendChild(C.el('section', { class: 'split', style: 'margin-top:32px' }, [
       C.el('div', { class: 'stack', style: 'gap:28px;min-width:0' }, [
         cartaoRegistro(),
@@ -45,6 +48,122 @@
         C.el('b', {}, [String(k[1]), C.el('small', { text: k[2] })])
       ]);
     }));
+  }
+
+  /* ── Fila de aprovação ────────────────────────────────────────────────
+     Fica logo abaixo dos indicadores e só existe quando há algo esperando:
+     bloco vazio todo dia ensina a ignorar o bloco.
+     A coordenação vê todos os pendentes; o professor vê os próprios, e os
+     recusados também — recusa que não chega a quem pediu não é decisão, é
+     silêncio. */
+  function filaDePedidos() {
+    var souCoord = S.pode('agenda.aprovar');
+    var lista = souCoord ? S.pedidosPendentes() : S.meusPedidos();
+    if (!lista.length) return null;
+
+    var tabela = C.el('table', { class: 'table' }, [
+      C.el('thead', {}, C.el('tr', {}, [
+        C.el('th', { text: 'Quando' }), C.el('th', { text: 'Onde' }),
+        C.el('th', { text: 'Atividade' }), C.el('th', { text: 'Situação' }),
+        C.el('th', { class: 'right', text: '' })
+      ]))
+    ]);
+    var corpo = C.el('tbody');
+    lista.forEach(function (p) {
+      var sit = S.situacaoDe(p);
+      corpo.appendChild(C.el('tr', { style: sit === 'recusada' ? 'opacity:.6' : '' }, [
+        C.el('td', { style: 'white-space:nowrap', text: C.fmtDiaAno(p.data) + ' · ' + p.inicio + '–' + p.fim }),
+        C.el('td', { text: S.rotuloEscopo(p.agrupamentoId, p.escopo) }),
+        C.el('td', {}, [
+          C.el('div', { text: S.rotuloPedido(p) }),
+          p.motivoRecusa
+            ? C.el('small', { class: 'muted', style: 'display:block', text: 'Motivo: ' + p.motivoRecusa })
+            : null
+        ]),
+        C.el('td', {}, C.el('span', {
+          class: 'badge ' + (sit === 'pendente' ? 'warn' : 'danger'),
+          text: sit === 'pendente' ? 'aguardando' : 'recusado'
+        })),
+        C.el('td', { class: 'right', style: 'white-space:nowrap' }, acoesDoPedido(p, sit, souCoord))
+      ]));
+    });
+    tabela.appendChild(corpo);
+
+    return C.el('section', { class: 'card', style: 'margin-top:28px' }, [
+      C.el('div', {
+        class: 'row', style: 'gap:12px;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px'
+      }, [
+        C.el('h5', { text: souCoord ? 'Pedidos aguardando aprovação' : 'Meus pedidos' }),
+        C.el('span', { class: 'badge soft', text: C.plural(lista.length, 'pedido', 'pedidos') })
+      ]),
+      C.el('div', { class: 'rolagem-x' }, tabela)
+    ]);
+  }
+
+  function acoesDoPedido(p, sit, souCoord) {
+    if (sit !== 'pendente') return null;
+    if (souCoord) {
+      return [
+        C.el('button', { class: 'btn-ghost', text: 'Aprovar', onclick: function () { aprovarPedido(p); } }),
+        C.el('button', {
+          class: 'btn-danger', style: 'margin-left:12px', text: 'Recusar',
+          onclick: function () { recusarPedido(p); }
+        })
+      ];
+    }
+    return C.el('button', { class: 'btn-ghost', text: 'Retirar', onclick: function () { retirarPedido(p); } });
+  }
+
+  /* A aprovação é o primeiro instante em que o pedido disputa horário de
+     verdade: se dois professores pediram o mesmo, o segundo falha AQUI, e a
+     mensagem do choque vem do próprio store pelo toast. */
+  function aprovarPedido(p) {
+    S.aprovarPedido(p.id).then(function (r) {
+      if (r && r.ok) C.toast('Pedido aprovado · ' + S.rotuloPedido(p) + '.');
+      global.App.recarregar();
+    });
+  }
+
+  function recusarPedido(p) {
+    var motivo = '';
+    U.modal({
+      titulo: 'Recusar pedido',
+      subtitulo: S.rotuloPedido(p) + ' · ' + C.fmtDiaAno(p.data),
+      largura: '560px',
+      conteudo: U.campo('Motivo', C.el('textarea', {
+        class: 'input', rows: '2',
+        placeholder: 'Quem pediu vê este texto no painel dele.',
+        oninput: function (ev) { motivo = ev.target.value; }
+      }), 'opcional'),
+      acoes: [
+        C.el('button', { class: 'btn btn-outline', text: 'Voltar', onclick: U.fecharModal }),
+        C.el('button', {
+          class: 'btn btn-perigo', text: 'Recusar',
+          onclick: function () {
+            U.fecharModal();
+            S.recusarPedido(p.id, motivo).then(function (r) {
+              if (r && r.ok) C.toast('Pedido recusado.');
+              global.App.recarregar();
+            });
+          }
+        })
+      ]
+    });
+  }
+
+  function retirarPedido(p) {
+    U.confirmar({
+      titulo: 'Retirar pedido', rotulo: 'Retirar', perigo: true,
+      conteudo: C.el('span', {}, [
+        'O pedido ', C.el('b', { text: S.rotuloPedido(p) }),
+        ' sai da fila da coordenação. Não há como desfazer.'
+      ])
+    }, function () {
+      S.retirarPedido(p.id).then(function (r) {
+        if (r && r.ok) C.toast('Pedido retirado.');
+        global.App.recarregar();
+      });
+    });
   }
 
   /* ── Registro ─────────────────────────────────────────────────────── */
