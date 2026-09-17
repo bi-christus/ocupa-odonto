@@ -384,7 +384,8 @@
         C.el('td', { text: S.rotuloEscopo(r.agrupamentoId, r.escopo) }),
         C.el('td', { text: C.listaDias(r.dias) }),
         C.el('td', { class: 'num', text: r.inicio + '–' + r.fim }),
-        C.el('td', { class: 'num', text: String(r.cadeiras) }),
+        /* Derivado: `cadeiras` saiu do documento. */
+        C.el('td', { class: 'num', text: String(S.capacidadeEscopo(r.agrupamentoId, r.escopo)) }),
         C.el('td', { class: 'num', style: 'font-size:12.5px',
           text: C.fmtDia(r.vigenciaInicio) + ' – ' + C.fmtDia(fimEfetivo) }),
         C.el('td', {}, encerrada

@@ -13,15 +13,8 @@
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI, D = global.Dados;
 
-  /* Inteiro de verdade a partir do que o usuário digitou. O `max` de um
-     <input type="number"> fora de <form> é decorativo: '5000', '1e5', '2.5'
-     e '-3' chegam aqui inteiros de mentira, e 5000 cadeiras montariam 5000
-     botões na tela de operação. */
-  function inteiroDe(bruto) {
-    var s = String(bruto === null || bruto === undefined ? '' : bruto).trim();
-    if (!/^\d+$/.test(s)) return NaN;
-    return Number(s);
-  }
+  /* `inteiroDe` saiu junto com o campo de quantidade de cadeiras: não há mais
+     número digitado para sanear. A reserva é sempre o escopo inteiro. */
 
   function maiorData(a, b) { if (!a) return b; if (!b) return a; return a > b ? a : b; }
   function menorData(a, b) { if (!a) return b; if (!b) return a; return a < b ? a : b; }
@@ -70,7 +63,6 @@
       turmaId: turmasVisiveis.length ? turmasVisiveis[0].id : null,
       dias: [1, 3],
       inicio: '07:30', fim: '11:30',
-      cadeiras: 10, cadeirasBruto: '10',
       vigenciaInicio: menorData(maiorData(lim.inicio, C.hojeISO()), lim.fim),
       vigenciaFim: lim.fim,
       observacao: '',
@@ -86,7 +78,6 @@
       descricao: ''
     };
     encaixarNaJanela();
-    encaixarCadeiras();
 
     var raiz = C.clear(alvo);
     var corpo = C.el('div');
@@ -191,20 +182,6 @@
       return Math.max(60, Number((e.parametros || {}).faixaMinimaMin) || 60);
     }
 
-    /* Ao apertar o escopo de 'ambas' para uma clínica só, o número de
-       cadeiras precisa cair para o novo teto antes de revalidar. */
-    function encaixarCadeiras() {
-      var teto = S.capacidadeEscopo(form.agrupamentoId, form.escopo);
-      var n = inteiroDe(form.cadeirasBruto);
-      if (isNaN(n)) return;
-      if (n > teto) {
-        form.cadeiras = teto;
-        form.cadeirasBruto = String(teto);
-      } else {
-        form.cadeiras = n;
-      }
-    }
-
     function valorEscopo(agrupamentoId, escopo) { return agrupamentoId + '|' + escopo; }
 
     /* Lista única de escopos: as duas clínicas de cada agrupamento e a
@@ -232,7 +209,6 @@
       if (!S.agrupamento(p[0])) return;
       form.agrupamentoId = p[0];
       form.escopo = p[1] === 'b' || p[1] === 'ambas' ? p[1] : 'a';
-      encaixarCadeiras();
       encaixarNaJanela();
       desenhar();
     }
@@ -244,19 +220,21 @@
         'cadeiras ' + f[0] + '–' + f[1]);
     }
 
-    function campoCadeiras() {
-      var teto = S.capacidadeEscopo(form.agrupamentoId, form.escopo);
+    /* Não existe mais campo de quantidade: reservar uma clínica reserva as 14
+       cadeiras dela, e o escopo duplo reserva as 28. O que o professor
+       registra depois, cadeira por cadeira, é quem está em uso — e é isso que
+       mede a ocupação nos relatórios. A linha abaixo mostra o que a reserva
+       compromete, sem pedir número. */
+    function avisoDaReserva() {
+      var cap = S.capacidadeEscopo(form.agrupamentoId, form.escopo);
       var operantes = S.cadeirasOperantesEscopo(form.agrupamentoId, form.escopo);
-      return U.campo('Cadeiras', C.el('input', {
-        class: 'input', type: 'number', min: '1', max: String(teto), step: '1',
-        value: form.cadeirasBruto,
-        oninput: function (ev) {
-          form.cadeirasBruto = ev.target.value;
-          var n = inteiroDe(ev.target.value);
-          form.cadeiras = isNaN(n) ? 0 : n;
-          atualizar();
-        }
-      }), 'até ' + C.plural(operantes, 'cadeira operante', 'cadeiras operantes'));
+      var texto = 'Reserva ' + C.plural(cap, 'cadeira', 'cadeiras') + ' — ' +
+        S.rotuloEscopo(form.agrupamentoId, form.escopo) + ' por inteiro.';
+      if (operantes < cap) {
+        texto += ' ' + C.plural(cap - operantes, 'cadeira está', 'cadeiras estão') +
+          ' em manutenção, então ' + operantes + ' ficam utilizáveis.';
+      }
+      return C.el('div', { class: 'alert', style: 'margin-top:16px', text: texto });
     }
 
     function campoInicio() {
@@ -381,8 +359,10 @@
         corpo.appendChild(blocoTurnos());
 
         corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
-          campoInicio(), campoTermino(), campoCadeiras()
+          campoInicio(), campoTermino()
         ]));
+
+        corpo.appendChild(avisoDaReserva());
 
         corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
           U.campo('Repete de', C.el('input', {
@@ -434,8 +414,10 @@
         corpo.appendChild(blocoTurnos());
 
         corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
-          campoInicio(), campoTermino(), campoCadeiras()
+          campoInicio(), campoTermino()
         ]));
+
+        corpo.appendChild(avisoDaReserva());
 
         corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
           U.campo('Turma vinculada', U.selecao(opcoesTurma(turmasVisiveis, true), form.turmaVinculada, function (v) {
@@ -500,17 +482,9 @@
         }
       }
 
-      /* Cadeiras — o max do input é decorativo fora de <form>. */
-      var teto = S.capacidadeEscopo(form.agrupamentoId, form.escopo);
-      var n = inteiroDe(form.cadeirasBruto);
-      if (isNaN(n) || n < 1) {
-        erros.push('Informe quantas cadeiras a ocupação usa — um número inteiro de 1 a ' + teto + '.');
-      } else if (n > teto) {
-        erros.push('A ocupação não cabe: o limite aqui é de ' + C.plural(teto, 'cadeira', 'cadeiras') + '.');
-      } else if (S.excedeCapacidade(form.agrupamentoId, form.escopo, n)) {
-        erros.push('Restam ' + C.plural(S.cadeirasOperantesEscopo(form.agrupamentoId, form.escopo),
-          'cadeira operante', 'cadeiras operantes') + ' — as demais estão em manutenção.');
-      }
+      /* Sem validação de quantidade de cadeiras: não há número a validar. A
+         reserva é o escopo inteiro, e cadeira em manutenção não impede a
+         reserva — só reduz o que fica utilizável, o que o aviso já diz. */
 
       if (modo === 'recorrente') {
         if (!form.turmaId || !S.turma(form.turmaId)) erros.push('Selecione a disciplina · turma.');
@@ -554,7 +528,8 @@
       var choques = erros.length ? [] :
         S.conflitos(form.agrupamentoId, form.escopo, datas, form.inicio, form.fim);
       var rotulo = S.rotuloEscopo(form.agrupamentoId, form.escopo);
-      var cad = isNaN(inteiroDe(form.cadeirasBruto)) ? 0 : inteiroDe(form.cadeirasBruto);
+      /* A prévia diz o que a reserva compromete — o escopo inteiro. */
+      var cad = S.capacidadeEscopo(form.agrupamentoId, form.escopo);
 
       /* Prévia */
       C.clear(painelPre);
@@ -655,7 +630,7 @@
       var r = S.criarRecorrencia({
         agrupamentoId: form.agrupamentoId, escopo: form.escopo,
         turmaId: form.turmaId, dias: form.dias,
-        inicio: form.inicio, fim: form.fim, cadeiras: form.cadeiras,
+        inicio: form.inicio, fim: form.fim,
         vigenciaInicio: form.vigenciaInicio, vigenciaFim: form.vigenciaFim,
         observacao: form.observacao
       });
@@ -685,7 +660,7 @@
         res = S.criarPontual({
           agrupamentoId: form.agrupamentoId, escopo: form.escopo,
           data: form.data, inicio: form.inicio, fim: form.fim,
-          tipoAtividade: form.tipoAtividade, cadeiras: form.cadeiras,
+          tipoAtividade: form.tipoAtividade,
           descricao: form.descricao,
           turmaId: form.turmaVinculada || null, responsavelId: form.responsavelId
         });

@@ -100,14 +100,37 @@ hora, pelo snapshot de `autorizados`.
 | `turmas` | auto | `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo` |
 | `alunos` | auto | `nome`, `matricula`, `periodo` |
 | `matriculas` | `{turmaId}__{alunoId}` | `turmaId`, `alunoId` |
-| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `cadeiras`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` (mais `titulo` só nas gravadas antes de 17/09/2026) |
+| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` (mais `titulo` só nas gravadas antes de 17/09/2026) |
 | `manutencoes` | auto | `protocolo`, `clinicaId`, `cadeira`, `categoria`, `criticidade`, `motivo`, `abertoPor`, `abertoEm`, `previsaoRetorno`, `status`, `fechadoPor`, `fechadoEm`, `laudo`, `impacto{}` |
-| `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `alunoId`, `data`, `registradoPor`, `registradoEm` |
+| `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `nome`, `alunoId` (nulo nos registros novos), `data`, `registradoPor`, `registradoEm` |
 | `indices` | `ag1`–`ag4` | `agrupamentoId`, `itens[]` |
 
 **Não existe coleção `cadeiras`.** Cadeira é derivada de `primeiraCadeira` +
 `cadeiras` da clínica. O estado de uma cadeira vive em `manutencoes` e
 `atribuicoes`.
+
+**Reserva é sempre integral, e `ocupacoes.cadeiras` não existe mais.** Reservar
+uma clínica reserva as 14 cadeiras dela; escopo duplo reserva as 28. O número
+é DERIVADO do escopo (`capacidadeEscopo`) na montagem da ocorrência, e o valor
+gravado nos documentos antigos é ignorado — ocupação que reservava 10 de 14
+passa a valer como clínica inteira. Não recrie o campo de quantidade no
+formulário, e não leia `r.cadeiras`/`p.cadeiras` do documento cru: vem
+`undefined` nos registros novos.
+
+Disso decorre que **não existe cadeira "livre" dentro de clínica reservada**.
+`statusCadeira` só devolve `manut`, `ocupada` (uso registrado) ou `vaga`
+(reservada, ninguém registrou ainda).
+
+**Quem mede ocupação é `atribuicoes`, não a reserva.** Registrar cadeira em uso
+não depende de aluno cadastrado: o professor marca a cadeira e escreve o nome
+em texto livre, opcional (`nome`), como quem abre um chamado de manutenção.
+`alunoId` continua no modelo por causa dos registros antigos e vem `null` nos
+novos — use `S.nomeNaCadeira(atrib)`, que resolve aluno cadastrado, nome livre
+ou "sem identificação". O CSV semanal tem as duas colunas separadas, e é
+"Cadeiras em uso" que significa algo: "Cadeiras reservadas" é sempre 14 ou 28.
+Por isso `calcularImpacto` compara o uso registrado com o que resta operante —
+comparar com a reserva marcaria toda ocupação como afetada por qualquer
+interdição.
 
 O store traduz `autorizados.nivel` para `perfil` na hidratação; as views não
 sabem da diferença.

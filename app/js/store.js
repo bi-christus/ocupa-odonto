@@ -385,7 +385,12 @@
       origem: 'recorrente', origemId: r.id,
       agrupamentoId: r.agrupamentoId, escopo: r.escopo,
       data: data, inicio: r.inicio, fim: r.fim,
-      turmaId: r.turmaId, cadeiras: r.cadeiras,
+      turmaId: r.turmaId,
+      /* Reserva é sempre integral: 14 cadeiras numa clínica, 28 nas duas do
+         agrupamento. `cadeiras` virou DERIVADO do escopo em 17/09/2026 e o
+         valor gravado no documento é ignorado — ocupação antiga que reservava
+         10 de 14 passa a valer como clínica inteira, que é a regra nova. */
+      cadeiras: capacidadeEscopo(r.agrupamentoId, r.escopo),
       titulo: d.codigo + ' ' + t.codigo,
       subtitulo: d.nome,
       responsavelId: t.professorCoordenadorId,
@@ -412,7 +417,8 @@
       origem: 'pontual', origemId: p.id,
       agrupamentoId: p.agrupamentoId, escopo: p.escopo,
       data: p.data, inicio: p.inicio, fim: p.fim,
-      turmaId: p.turmaId, cadeiras: p.cadeiras,
+      turmaId: p.turmaId,
+      cadeiras: capacidadeEscopo(p.agrupamentoId, p.escopo),
       titulo: tituloPontual(p, t),
       subtitulo: d ? d.nome : '',
       /* Só existe em ocupação gravada antes da mudança. O detalhe da agenda
@@ -540,12 +546,10 @@
     return !!usuarioAtual && usuarioAtual.perfil === 'professor' && exigirAprovacao();
   }
 
-  /* Capacidade: a ocorrência cabe nas cadeiras operantes do escopo?
-     Escopo duplo tem o dobro de cadeiras — é o que torna possível registrar
-     uma ocupação das duas clínicas. */
-  function excedeCapacidade(agrupamentoId, escopo, cadeiras) {
-    return cadeiras > cadeirasOperantesEscopo(agrupamentoId, escopo);
-  }
+  /* `excedeCapacidade` deixou de existir junto com a quantidade pedida no
+     formulário: não há mais número a comparar com o teto, porque a reserva é
+     sempre o escopo inteiro. Quem mede ocupação de verdade agora é a
+     contagem de cadeiras registradas em uso (`atribuicoesDa`). */
 
   /* ── Escrita ──────────────────────────────────────────────────────────
      Toda mutação aplica a mudança no cache PRIMEIRO e persiste em seguida.
@@ -632,7 +636,8 @@
       agrupamentoId: dados.agrupamentoId, escopo: dados.escopo || 'a',
       turmaId: dados.turmaId,
       dias: dados.dias.slice().sort(), inicio: dados.inicio, fim: dados.fim,
-      cadeiras: dados.cadeiras,
+      /* Sem `cadeiras`: a reserva é o escopo inteiro e o número é derivado na
+         leitura. Gravar a chave mandaria `undefined`, que o Firestore recusa. */
       /* A vigência nunca escapa do semestre: fora dele a agenda geraria
          encontros que nenhuma tela consegue mostrar. */
       vigenciaInicio: maiorISO(dados.vigenciaInicio, estado.semestre.inicio),
@@ -656,9 +661,10 @@
       id: N.novoId('ocupacoes'), tipo: 'pontual',
       agrupamentoId: dados.agrupamentoId, escopo: dados.escopo || 'a',
       data: dados.data, inicio: dados.inicio, fim: dados.fim,
-      tipoAtividade: dados.tipoAtividade, cadeiras: dados.cadeiras,
-      /* Sem `titulo`: virou derivado. Gravar a chave aqui mandaria `undefined`
-         para o Firestore, que recusa o valor e derrubaria o registro inteiro. */
+      tipoAtividade: dados.tipoAtividade,
+      /* Sem `titulo` nem `cadeiras`: os dois viraram derivados. Gravar a chave
+         mandaria `undefined`, que o Firestore recusa — e derrubaria o registro
+         inteiro no primeiro clique. */
       descricao: dados.descricao || '',
       turmaId: dados.turmaId || null, responsavelId: dados.responsavelId,
       excecoes: [],
@@ -756,7 +762,8 @@
     var r = porId(estado.recorrencias, id);
     if (!r) return;
     var antes = JSON.parse(JSON.stringify(r));
-    ['agrupamentoId', 'escopo', 'turmaId', 'inicio', 'fim', 'cadeiras',
+    /* 'cadeiras' saiu: derivado do escopo. */
+    ['agrupamentoId', 'escopo', 'turmaId', 'inicio', 'fim',
       'vigenciaInicio', 'vigenciaFim', 'observacao']
       .forEach(function (k) { if (dados[k] !== undefined) r[k] = dados[k]; });
     if (dados.dias) r.dias = dados.dias.slice().sort();
@@ -772,9 +779,9 @@
     var p = porId(estado.pontuais, id);
     if (!p) return;
     var antes = JSON.parse(JSON.stringify(p));
-    /* 'titulo' saiu da lista: é derivado do tipo e da turma. Deixá-lo aqui
-       seria convite para reintroduzir um título digitado. */
-    ['agrupamentoId', 'escopo', 'data', 'inicio', 'fim', 'cadeiras',
+    /* 'titulo' e 'cadeiras' saíram da lista: são derivados. Deixá-los aqui
+       seria convite para reintroduzir campo digitado. */
+    ['agrupamentoId', 'escopo', 'data', 'inicio', 'fim',
       'tipoAtividade', 'descricao', 'turmaId', 'responsavelId']
       .forEach(function (k) { if (dados[k] !== undefined) p[k] = dados[k]; });
     commit();
@@ -852,6 +859,16 @@
     for (var i = 0; i < l.length; i++) if (l[i].cadeira === numero) return l[i];
     return null;
   }
+  /* Quem está na cadeira: aluno cadastrado (registro antigo), nome escrito à
+     mão, ou nada — marcar a cadeira como ocupada sem dizer quem é um uso
+     legítimo, então a ausência de nome não é falta de dado. */
+  function nomeNaCadeira(a) {
+    if (!a) return '—';
+    var al = a.alunoId ? aluno(a.alunoId) : null;
+    if (al) return al.nome;
+    return a.nome || 'sem identificação';
+  }
+
   function limparAtribuicoes(chave) {
     var alvo = atribuicoesDa(chave);
     if (!alvo.length) return;
@@ -863,12 +880,19 @@
   /* `numero` é o número GLOBAL da cadeira. Guardar a clínica derivada dele
      evita a colisão antiga, em que a cadeira 7 da Clínica 1 e a 7 da
      Clínica 2 gravavam a mesma chave numa ocupação conjunta. */
-  function ocuparCadeira(o, numero, alunoId) {
+  function ocuparCadeira(o, numero, alunoId, nome) {
     if (atribuicaoDaCadeira(o.chave, numero)) return false;
     var c = clinicaDaCadeira(numero);
     var registro = {
       id: N.novoId('atribuicoes'), chave: o.chave, clinicaId: c ? c.id : null,
-      cadeira: numero, alunoId: alunoId, data: o.data,
+      cadeira: numero,
+      /* Registrar cadeira em uso deixou de depender de aluno cadastrado em
+         17/09/2026: o professor marca a cadeira e, se quiser, escreve quem
+         está nela. `null` e string vazia o Firestore aceita — undefined não.
+         `alunoId` sobrevive por causa dos registros antigos. */
+      alunoId: alunoId || null,
+      nome: String(nome || '').trim(),
+      data: o.data,
       registradoPor: euId(), registradoEm: C.carimbo()
     };
     estado.atribuicoes.push(registro);
@@ -902,9 +926,14 @@
     var operantesDepois = cadeirasOperantes(clinicaId) - (jaInterditada ? 0 : 1);
     /* Uma ocupação de escopo duplo dispõe das cadeiras das duas clínicas —
        comparar com o total de uma só superestimaria o impacto. */
+    /* Mede pelo USO registrado, não pela reserva. Com reserva sempre integral,
+       comparar contra `o.cadeiras` (agora igual à capacidade do escopo) faria
+       QUALQUER interdição marcar TODAS as ocupações como afetadas — aviso que
+       grita sempre é aviso que ninguém lê. Afetada é a ocupação que já tem
+       mais cadeiras em uso do que restará de operante. */
     var afetadas = ocorrenciasIntervalo(hoje, fim, clinicaId).filter(function (o) {
       var disponiveis = cadeirasOperantesEscopo(o.agrupamentoId, o.escopo) - (jaInterditada ? 0 : 1);
-      return o.cadeiras > disponiveis;
+      return atribuicoesDa(o.chave).length > disponiveis;
     });
     var turmasAfetadas = [];
     afetadas.forEach(function (o) {
@@ -1272,7 +1301,7 @@
     cadeirasOperantes: cadeirasOperantes, historicoCadeira: historicoCadeira,
     ocorrenciasDoDia: ocorrenciasDoDia, ocorrenciasIntervalo: ocorrenciasIntervalo,
     datasDaRegra: datasDaRegra, statusOcorrencia: statusOcorrencia,
-    conflitos: conflitos, excedeCapacidade: excedeCapacidade,
+    conflitos: conflitos, nomeNaCadeira: nomeNaCadeira,
     criarRecorrencia: criarRecorrencia, criarPontual: criarPontual,
     atualizarRecorrencia: atualizarRecorrencia, atualizarPontual: atualizarPontual,
     exigirAprovacao: exigirAprovacao, situacaoDe: situacaoDe,

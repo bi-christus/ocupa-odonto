@@ -396,8 +396,12 @@
 
   function csvSemana(seg) {
     if (barrado('relatorios.ver')) return;
+    /* Duas colunas de cadeira, e a diferença importa: "Cadeiras reservadas" é
+       o escopo inteiro, porque reserva virou integral; "Cadeiras em uso" é
+       quanto o professor registrou de fato. É a segunda que mede ocupação —
+       a primeira é sempre 14 ou 28 e não diz nada sozinha. */
     var linhas = [['Data', 'Dia', 'Agrupamento', 'Escopo', 'Início', 'Fim', 'Horas', 'Tipo',
-      'Título', 'Turma', 'Professor coordenador', 'Cadeiras']];
+      'Título', 'Turma', 'Professor coordenador', 'Cadeiras reservadas', 'Cadeiras em uso']];
     S.ocorrenciasIntervalo(seg, S.fimDaSemana(seg)).forEach(function (o) {
       linhas.push([
         C.fmtDiaAno(o.data), C.nomeDia(C.weekday(o.data), true),
@@ -405,7 +409,7 @@
         o.inicio, o.fim, decimal(C.duracaoH(o.inicio, o.fim)),
         o.origem === 'recorrente' ? 'Recorrente' : 'Pontual',
         o.titulo, o.turmaId ? S.rotuloTurma(S.turma(o.turmaId)) : '',
-        S.nomePessoa(o.responsavelId), o.cadeiras
+        S.nomePessoa(o.responsavelId), o.cadeiras, S.atribuicoesDa(o.chave).length
       ]);
     });
     C.baixarCSV('agenda-da-semana.csv', linhas);
@@ -424,7 +428,7 @@
   function csvRecorrencias() {
     if (barrado('relatorios.ver')) return;
     var linhas = [['Turma', 'Disciplina', 'Professor coordenador', 'Agrupamento', 'Escopo', 'Dias',
-      'Início', 'Fim', 'Cadeiras', 'Vigência início', 'Vigência fim', 'Encontros', 'Exceções']];
+      'Início', 'Fim', 'Cadeiras reservadas', 'Vigência início', 'Vigência fim', 'Encontros', 'Exceções']];
     S.estado.recorrencias.forEach(function (r) {
       var t = S.turma(r.turmaId), d = S.disciplinaDaTurma(t);
       var fim = fimEfetivoDaRegra(r);
@@ -440,7 +444,8 @@
       linhas.push([
         d.codigo + ' ' + t.codigo, d.nome, S.nomePessoa(t.professorCoordenadorId),
         S.nomeAgrupamento(r.agrupamentoId), S.rotuloEscopo(r.agrupamentoId, r.escopo),
-        C.listaDias(r.dias), r.inicio, r.fim, r.cadeiras,
+        C.listaDias(r.dias), r.inicio, r.fim,
+        S.capacidadeEscopo(r.agrupamentoId, r.escopo),
         C.fmtDiaAno(r.vigenciaInicio), C.fmtDiaAno(fim),
         datas.length,
         r.excecoes.length

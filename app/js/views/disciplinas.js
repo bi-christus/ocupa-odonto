@@ -243,7 +243,13 @@
 
   function horarios(t) {
     var regras = S.estado.recorrencias.filter(function (r) { return r.turmaId === t.id; });
-    var pontuais = S.estado.pontuais.filter(function (p) { return p.turmaId === t.id; });
+    /* Só o que está aprovado: pedido pendente ou recusado não é horário da
+       turma, e listá-lo aqui faria a turma parecer ter aula que ninguém
+       confirmou. Esta lista lê `estado.pontuais` direto, por fora do funil de
+       `ocorrenciasDoDia` que já filtra — então o filtro tem de vir junto. */
+    var pontuais = S.estado.pontuais.filter(function (p) {
+      return p.turmaId === t.id && S.situacaoDe(p) === 'aprovada';
+    });
     var caixa = C.el('div', { style: 'margin-bottom:34px' }, C.el('h5', { text: 'Horários', style: 'margin-bottom:14px' }));
 
     if (!regras.length && !pontuais.length) {
@@ -269,7 +275,9 @@
         ]),
         C.el('td', { text: C.listaDias(r.dias) + ' · até ' + C.fmtDia(fimEfetivo(r)) }),
         C.el('td', { class: 'num', text: r.inicio + '–' + r.fim }),
-        C.el('td', { class: 'num', text: String(r.cadeiras) })
+        /* Derivado do escopo: `cadeiras` não é mais gravado no documento, e
+           ler o campo cru mostraria "undefined" nas ocupações novas. */
+        C.el('td', { class: 'num', text: String(S.capacidadeEscopo(r.agrupamentoId, r.escopo)) })
       ]));
     });
     pontuais.forEach(function (p) {
@@ -281,9 +289,10 @@
             ? C.el('span', { class: 'badge conjunta', style: 'margin-left:8px', text: 'Conjunta' })
             : null
         ]),
-        C.el('td', { text: C.fmtDiaAno(p.data) + ' · ' + p.titulo }),
+        /* `titulo` e `cadeiras` também são derivados agora. */
+        C.el('td', { text: C.fmtDiaAno(p.data) + ' · ' + S.rotuloPedido(p) }),
         C.el('td', { class: 'num', text: p.inicio + '–' + p.fim }),
-        C.el('td', { class: 'num', text: String(p.cadeiras) })
+        C.el('td', { class: 'num', text: String(S.capacidadeEscopo(p.agrupamentoId, p.escopo)) })
       ]));
     });
     tabela.appendChild(corpo);
