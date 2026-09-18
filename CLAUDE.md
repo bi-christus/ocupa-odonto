@@ -44,9 +44,11 @@ firebase-app-compat.js
 firebase-auth-compat.js
 firebase-firestore-compat.js
 core.js  config.js  nuvem.js  acesso.js  dados.js  store.js  ui.js
-registro.js  manutencao.js  painel.js  agora.js  agenda.js
+registro.js  manutencao.js  impressao.js  painel.js  agora.js  agenda.js
 disciplinas.js  relatorios.js  estrutura.js  acessos.js  app.js
 ```
+
+`impressao.js` vem antes das views porque Agenda e Relatórios chamam as duas.
 
 Também na raiz de `app/`: `privacidade.html` e `termos.html` — páginas estáticas,
 sem script algum, exigidas pelo Google. Não as transforme em rota do app.
@@ -96,7 +98,7 @@ hora, pelo snapshot de `autorizados`.
 | `autorizados` | e-mail em minúsculas | `nome`, `nivel`, `ativo`, `ultimoAcesso` |
 | `agrupamentos` | `ag1`–`ag4` | `nome`, `clinicas[]` |
 | `clinicas` | `cl1`–`cl8` | `nome`, `agrupamentoId`, `especialidade`, `cadeiras`, `primeiraCadeira`, `abertura`, `fechamento` |
-| `disciplinas` | auto | `codigo`, `nome` |
+| `disciplinas` | auto | `codigo`, `nome`, `nivel` (`graduacao` \| `pos`) |
 | `turmas` | auto | `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo` |
 | `alunos` | auto | `nome`, `matricula`, `periodo` |
 | `matriculas` | `{turmaId}__{alunoId}` | `turmaId`, `alunoId` |
@@ -135,7 +137,44 @@ interdição.
 O store traduz `autorizados.nivel` para `perfil` na hidratação; as views não
 sabem da diferença.
 
-**Disciplina tem só `codigo` e `nome`.** `especialidade` é da CLÍNICA e não tem
+### Pós-graduação — especialização sem disciplina e sem turma
+
+A pós não trabalha com código de disciplina nem com identificador de turma:
+uma **especialização** é o nome dela mais o professor responsável, e é só isso
+que a aba **Pós-graduação** (em Disciplinas) pede.
+
+Por baixo ela é gravada nas coleções que já existem — uma `disciplina` com
+`nivel: 'pos'` e **uma** `turma` criada pelo sistema, com `codigo: 'PÓS'`, que
+o formulário nunca mostra. Duas razões:
+
+- a reserva **recorrente** aponta para uma turma, e é de
+  `turma.professorCoordenadorId` que sai o `responsavelId` da ocupação — quem
+  governa quem pode cancelar. Sem turma a especialização só conseguiria
+  lançar atividade pontual, que não é o caso de uso;
+- coleção nova (`especializacoes`) exigiria **publicar Security Rule nova no
+  console antes de funcionar** — até lá o `match /{document=**}` recusaria
+  toda gravação. Mudança que só funciona depois de alguém mexer no console
+  não pode ir para `main`.
+
+Consequências para quem mexer aqui:
+
+- **Use os seletores.** `S.especializacoes()`, `S.disciplinasDeGraduacao()` e
+  `S.turmasDeGraduacao()` — ler `estado.disciplinas`/`estado.turmas` cru faz a
+  turma interna da pós vazar para as listas da graduação, onde ela não tem
+  código para exibir, não recebe aluno e não é editável.
+- **Rotule pelo Store.** `S.rotuloTurma` devolve o NOME da especialização na
+  pós e `d.codigo + ' ' + t.codigo` na graduação; `S.rotuloTurmaLongo` e
+  `S.subtituloTurma` seguem a mesma regra. Montar rótulo com `d.codigo` na mão
+  imprime `POS-01 PÓS` na agenda — e ainda estoura se a disciplina tiver sido
+  apagada por fora.
+- `codigo` da especialização é gerado (`POS-01`, `POS-02`…) só porque o
+  documento e as colunas de CSV anteriores à pós contam com ele.
+- Excluir especialização é em cascata: a turma sai primeiro, porque é
+  `excluirTurma` que tira as recorrências do índice de sobreposição.
+- Disciplina **sem** `nivel` é da graduação — é o estado de tudo que foi
+  gravado antes de 18/09/2026.
+
+**Disciplina da graduação tem só `codigo` e `nome`.** `especialidade` é da CLÍNICA e não tem
 relação nenhuma com disciplina. O arquivo com mais ocorrências da palavra é
 `relatorios.js` — três colunas "Especialidade" em CSV, todas de clínica e
 nenhuma delas precisa mudar: nunca faça busca-e-substitui global lá.
@@ -223,6 +262,60 @@ Distinção que o vocabulário precisa manter:
 `excluirReserva`, que serve recorrência e pontual.
 
 ---
+
+## Lançar pelo clique na grade
+
+A Agenda cria ocupação como um calendário: clicar no vazio abre o formulário
+já preenchido. `Registro.montar(alvo, { inicial })` é o caminho — `inicial`
+aceita `{ data, inicio, fim, agrupamentoId, escopo }` e **confere tudo** antes
+de entrar no formulário, porque clique devolve coordenada de tela, não
+garantia de que o agrupamento existe ou de que a data cabe no semestre.
+
+- **Semana:** a célula da hora dá dia e hora. O clique só vale no VAZIO da
+  célula (`ev.target === cel`); sobre o bloco de uma ocupação quem responde é
+  o detalhe dela.
+- **Dia:** a pista do agrupamento dá mais: o eixo X vira horário (encaixado em
+  meia hora) e o eixo Y diz qual das duas clínicas foi apontada — faixa de
+  cima é escopo `a`, a de baixo é `b`. As guias horizontais levam
+  `pointer-events:none`, senão o clique na linha de 1px não chega à trilha.
+- **Onde não dá para criar não há affordance nenhuma.** `podeCriarEm(data)`
+  cobre a mesma faixa que o formulário aceita — de hoje (ou da abertura do
+  semestre) ao fim do semestre. Abrir formulário que já nasce recusado ensina
+  o contrário do que a regra diz.
+- O modo padrão do clique é **pontual**: dia e hora concretos descrevem uma
+  atividade única. Trocar para recorrente preserva horário, dia da semana
+  (vira o único dia marcado) e começo da vigência.
+- A duração de partida é a **faixa mínima**, não o turno. Turno é atalho do
+  formulário, e aplicá-lo por conta própria sobrescreveria o horário que a
+  pessoa acabou de apontar.
+
+## Impressão e PDF
+
+**Não há biblioteca de PDF, e não vai haver** — o projeto é ES5 sem bundler.
+`js/impressao.js` monta um documento limpo, anexa ao `<body>` **fora de
+`#raiz`** e chama `window.print()`; o CSS de impressão esconde `#raiz` e
+mostra só ele. O PDF sai pelo destino "Salvar como PDF" do navegador, e
+`document.title` é trocado na hora para o arquivo não sair chamado "Ocupa ·
+Controle de clínicas…".
+
+Não use `window.open`: o bloqueador de pop-up derruba sem avisar e sem deixar
+a pessoa entender por que nada aconteceu.
+
+- Três folhas: semana (paisagem, a grade da aba Agenda), dia (retrato, uma
+  tabela por agrupamento) e recorrências (retrato). O botão da Agenda imprime
+  **a vista aberta**; Relatórios traz as duas primeiras como cartão.
+- A grade impressa usa `S.janelaHoras` e `S.baldesPorHora` — as mesmas da
+  tela. As duas moram no Store justamente por isso: cópia em cada lado
+  divergiria na primeira clínica que mudasse de horário, e a folha passaria a
+  mostrar uma semana que não é a que está na tela.
+- **A folha se apoia em BORDA, não em fundo.** O navegador imprime sem cor de
+  fundo por padrão: traço contínuo é aula recorrente, tracejado é atividade
+  pontual, e "2 clínicas" vai por escrito.
+- A orientação do papel entra como `<style>` com `@page` criado e descartado
+  junto do documento — `@page` não aceita seletor de classe.
+- A limpeza é do evento `afterprint`; o prazo de 120 s é só rede de segurança
+  para o navegador que não dispara o evento, senão o título da página ficaria
+  trocado para sempre.
 
 ## Sobreposição — a transação
 
@@ -330,6 +423,10 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
    um `sed` já apagou uma chamada de `S.sair()` e deixou meio comentário,
    quebrando o parse do app inteiro — o balanceamento de chaves passou limpo e
    só o navegador pegou.
+   `_auditoria/harness.html` existe para isso: carrega o app inteiro trocando
+   só o `nuvem.js` por um dublê com acervo de mentira, e `?perfil=` entra como
+   coordenador, professor ou técnico sem login e sem tocar em produção. Fora
+   de `app/`, então não é publicado.
 4. Nunca reescreva um arquivo digitando conteúdo vindo de saída de ferramenta
    (pode estar truncada). Edite in place.
 5. Não semeie nem edite dados de produção pelo console do Firebase sem avisar.
@@ -347,6 +444,12 @@ sobreposição (inclusive escopo duplo) e ciclo de manutenção.
 
 Banco no estado limpo de produção: 4 agrupamentos, 8 clínicas, `config` e dois
 coordenadores — `setorbiunichristus@gmail.com` e `napa21@christus.com.br`.
+
+Em 18/09/2026 entraram, verificados em navegador nos três perfis: lançamento
+pelo clique na grade, folha de impressão/PDF e cadastro de especialização da
+pós. A verificação rodou contra um `window.Nuvem` de mentira — o código de
+produção inteiro, com o Firestore trocado —, e não contra o banco real: nenhum
+dado de produção foi criado ou alterado.
 
 ### Pendências
 

@@ -76,7 +76,11 @@
 
     /* Quarto elemento: a permissão exigida. O pop() antigo só removia o
        último cartão — o técnico de manutenção continuava baixando o
-       cadastro nominal de todo o corpo discente. */
+       cadastro nominal de todo o corpo discente.
+       Quinto, quando existe: a versão impressa. CSV é o formato de quem vai
+       recalcular; PDF é o de quem vai pendurar na parede da clínica ou levar
+       para a reunião — e por isso ele sai desenhado como a aba Agenda, não
+       como uma planilha. Onde não há forma visual a defender, só CSV. */
     var fichas = [
       ['Semanal · ocupação e manutenção',
         C.plural(e.clinicas.length, 'clínica') + ' · ' + C.plural(diasDaSemana(seg).length, 'dia'),
@@ -84,9 +88,10 @@
       ['Ocupação por clínica', C.plural(e.clinicas.length, 'linha'),
         function () { csvClinicas(seg); }, 'relatorios.consolidado'],
       ['Agenda da semana', C.plural(S.ocorrenciasIntervalo(seg, fim).length, 'registro'),
-        function () { csvSemana(seg); }, 'relatorios.ver'],
+        function () { csvSemana(seg); }, 'relatorios.ver',
+        function () { pdfSemana(seg); }],
       ['Recorrências do semestre', C.plural(e.recorrencias.length, 'regra'),
-        csvRecorrencias, 'relatorios.ver'],
+        csvRecorrencias, 'relatorios.ver', pdfRecorrencias],
       ['Disciplinas e alunos', C.plural(vinculos, 'vínculo'),
         csvAlunos, 'relatorios.pessoas'],
       ['Manutenção', C.plural(e.manutencoes.length, 'registro'),
@@ -102,7 +107,14 @@
         return C.el('div', { class: 'card' }, [
           C.el('h5', { text: f[0] }),
           C.el('div', { class: 'muted', style: 'font-size:12.5px;margin:8px 0 16px', text: f[1] }),
-          C.el('button', { class: 'btn btn-primary btn-sm', text: 'Exportar CSV', onclick: f[2] })
+          C.el('div', { class: 'row', style: 'gap:8px' }, [
+            C.el('button', { class: 'btn btn-primary btn-sm', text: 'Exportar CSV', onclick: f[2] }),
+            f[4] ? C.el('button', {
+              class: 'btn btn-outline btn-sm', text: 'PDF',
+              title: 'Abre a impressão do navegador — escolha "Salvar como PDF" para gerar o arquivo',
+              onclick: f[4]
+            }) : null
+          ])
         ]);
       })));
     } else {
@@ -252,9 +264,9 @@
     ]);
     var corpo = C.el('tbody');
     dados.forEach(function (d) {
-      var t = d.turma, disc = S.disciplinaDaTurma(t);
+      var t = d.turma;
       corpo.appendChild(C.el('tr', {}, [
-        C.el('td', { text: disc.codigo + ' ' + t.codigo + ' · ' + disc.nome }),
+        C.el('td', { text: S.rotuloTurmaLongo(t) }),
         C.el('td', { text: S.nomePessoa(t.professorCoordenadorId) }),
         C.el('td', { class: 'num', style: 'width:78px', text: C.fmtHoras(d.horas) }),
         C.el('td', { class: 'num', style: 'width:70px', text: String(t.alunos.length) }),
@@ -414,6 +426,17 @@
     });
     C.baixarCSV('agenda-da-semana.csv', linhas);
     C.toast('Relatório exportado.');
+  }
+
+  /* As duas versões impressas passam pela mesma barreira de permissão do
+     CSV correspondente: mudar de formato não muda quem pode ver. */
+  function pdfSemana(seg) {
+    if (barrado('relatorios.ver')) return;
+    global.Impressao.semana(seg);
+  }
+  function pdfRecorrencias() {
+    if (barrado('relatorios.ver')) return;
+    global.Impressao.recorrencias();
   }
 
   /* `encerradaEm` é o PRIMEIRO dia inválido, e pode ser posterior à

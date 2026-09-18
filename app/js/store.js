@@ -336,15 +336,86 @@
   function rotuloTurma(t) {
     if (!t) return '—';
     var d = disciplinaDaTurma(t);
-    return d ? d.codigo + ' ' + t.codigo : t.codigo;
+    if (!d) return t.codigo;
+    /* Na pós o nome da especialização É o rótulo. Código de disciplina e
+       identificador de turma existem no documento porque o resto do sistema
+       pressupõe os dois, mas ninguém da pós os conhece — imprimir
+       "POS-01 PÓS" na agenda seria mostrar a plumbing. */
+    if (ehEspecializacao(d)) return d.nome;
+    return d.codigo + ' ' + t.codigo;
   }
   function rotuloTurmaLongo(t) {
     if (!t) return '—';
     var d = disciplinaDaTurma(t);
-    return d ? d.codigo + ' ' + t.codigo + ' · ' + d.nome : t.codigo;
+    if (!d) return t.codigo;
+    if (ehEspecializacao(d)) return 'Pós-graduação · ' + d.nome;
+    return d.codigo + ' ' + t.codigo + ' · ' + d.nome;
+  }
+  /* Linha de apoio do bloco na agenda: na graduação é o nome da disciplina,
+     que o rótulo curto não traz; na pós o nome já está no rótulo, então
+     sobra dizer de que nível é a atividade. */
+  function subtituloTurma(t) {
+    var d = disciplinaDaTurma(t);
+    if (!d) return '';
+    return ehEspecializacao(d) ? 'Pós-graduação' : d.nome;
   }
   function turmasDoProfessor(uid) {
     return estado.turmas.filter(function (t) { return t.professorCoordenadorId === uid; });
+  }
+
+  /* ── Pós-graduação ────────────────────────────────────────────────────
+     A pós não tem disciplina nem turma: tem o nome da especialização e o
+     professor responsável por ela. Mas a reserva recorrente aponta para uma
+     TURMA — é dela que sai o `responsavelId` da ocupação, e é ele que
+     governa quem pode cancelar. Sem turma, uma especialização só conseguiria
+     lançar atividade pontual, que não é o caso de uso (pós ocupa clínica
+     toda semana, o semestre inteiro).
+
+     Por isso a especialização é gravada nas coleções que já existem: uma
+     `disciplina` com `nivel: 'pos'` e UMA turma criada pelo sistema, que o
+     formulário da pós nunca mostra. A alternativa — coleção nova
+     `especializacoes` — exigiria publicar Security Rule nova no console
+     antes de funcionar, e até lá toda gravação seria recusada pelo
+     `match /{document=**}` que fecha o resto. Mudança de modelo que só
+     funciona depois de alguém mexer no console não pode ir para `main`.
+
+     Disciplina sem `nivel` é da graduação: é o estado de todo documento
+     gravado antes desta mudança. */
+  var CODIGO_TURMA_POS = 'PÓS';
+
+  function ehEspecializacao(d) { return !!d && d.nivel === 'pos'; }
+  function especializacoes() {
+    return estado.disciplinas.filter(ehEspecializacao).sort(function (a, b) {
+      return String(a.nome).localeCompare(String(b.nome), 'pt-BR');
+    });
+  }
+  function disciplinasDeGraduacao() {
+    return estado.disciplinas.filter(function (d) { return !ehEspecializacao(d); });
+  }
+  function turmasDeGraduacao() {
+    return estado.turmas.filter(function (t) { return !ehEspecializacao(disciplinaDaTurma(t)); });
+  }
+  function turmaDaEspecializacao(disciplinaId) {
+    var achada = null;
+    estado.turmas.forEach(function (t) {
+      if (!achada && t.disciplinaId === disciplinaId) achada = t;
+    });
+    return achada;
+  }
+  function professorDaEspecializacao(disciplinaId) {
+    var t = turmaDaEspecializacao(disciplinaId);
+    return t ? t.professorCoordenadorId : null;
+  }
+  /* O código não é pedido a ninguém — a pós não trabalha com código de
+     disciplina. Ele existe porque o documento e as colunas de CSV anteriores
+     à pós contam com ele. Sequencial sobre o que já está cadastrado. */
+  function proximoCodigoPos() {
+    var maior = 0;
+    estado.disciplinas.forEach(function (d) {
+      var m = /^POS-(\d+)$/.exec(String(d.codigo || ''));
+      if (m && Number(m[1]) > maior) maior = Number(m[1]);
+    });
+    return 'POS-' + C.pad(maior + 1);
   }
 
   /* ── Manutenção: capacidade efetiva ───────────────────────────────── */
@@ -379,7 +450,7 @@
 
   /* ── Expansão de recorrências ─────────────────────────────────────── */
   function ocorrenciaDeRegra(r, data) {
-    var t = turma(r.turmaId), d = disciplinaDaTurma(t);
+    var t = turma(r.turmaId);
     return {
       chave: 'r:' + r.id + ':' + data,
       origem: 'recorrente', origemId: r.id,
@@ -391,9 +462,12 @@
          valor gravado no documento é ignorado — ocupação antiga que reservava
          10 de 14 passa a valer como clínica inteira, que é a regra nova. */
       cadeiras: capacidadeEscopo(r.agrupamentoId, r.escopo),
-      titulo: d.codigo + ' ' + t.codigo,
-      subtitulo: d.nome,
-      responsavelId: t.professorCoordenadorId,
+      /* Pelo rótulo, e não por `d.codigo + t.codigo`: é o único que sabe que
+         a pós se chama pelo nome da especialização — e o único que não
+         estoura quando a disciplina foi apagada por fora, no console. */
+      titulo: rotuloTurma(t),
+      subtitulo: subtituloTurma(t),
+      responsavelId: t ? t.professorCoordenadorId : null,
       tipoAtividade: 'aula',
       descricao: ''
     };
@@ -500,6 +574,55 @@
     if (C.toMin(agora) < C.toMin(o.inicio)) return 'agendada';
     if (C.toMin(agora) >= C.toMin(o.fim)) return 'encerrada';
     return 'em_andamento';
+  }
+
+  /* ── Régua de horas da grade ──────────────────────────────────────────
+     Mora aqui, e não na Agenda, porque a versão impressa precisa produzir
+     EXATAMENTE a mesma grade da tela — é o que a impressão promete. Duas
+     cópias da derivação divergiriam na primeira clínica que mudasse de
+     horário, e a folha impressa passaria a mostrar uma semana que não é a
+     que está na tela.
+
+     A janela nunca é menor que 07h–21h, e cresce com o que existir: os
+     horários gravados em cada clínica, os parâmetros do polo e as próprias
+     ocupações das datas mostradas — uma ocupação das 22:00 às 23:00 estava
+     sendo descartada em silêncio quando o teto era fixo. Devolve
+     [primeiraHora, ultimaHora], ambas inclusivas. */
+  var H0_MIN = 7, H1_MIN = 21;
+  function janelaHoras(datas) {
+    var p = estado.parametros || {};
+    var ini = Math.min(H0_MIN * 60, C.toMin(p.aberturaPadrao || '07:00'));
+    var fim = Math.max((H1_MIN + 1) * 60, C.toMin(p.fechamentoPadrao || '22:00'));
+    estado.clinicas.forEach(function (c) {
+      if (c.abertura) ini = Math.min(ini, C.toMin(c.abertura));
+      if (c.fechamento) fim = Math.max(fim, C.toMin(c.fechamento));
+    });
+    (datas || []).forEach(function (d) {
+      ocorrenciasDoDia(d).forEach(function (o) {
+        ini = Math.min(ini, C.toMin(o.inicio));
+        fim = Math.max(fim, C.toMin(o.fim));
+      });
+    });
+    var h0 = Math.floor(ini / 60);
+    var h1 = Math.ceil(fim / 60) - 1;
+    if (h1 < h0) h1 = h0;
+    if (h1 > 23) h1 = 23;
+    return [h0, h1];
+  }
+
+  /* Distribui ocorrências na linha da hora em que COMEÇAM. O que começa
+     antes da abertura entra na primeira linha e o que começa depois da
+     última entra na última — nada some da grade. */
+  function baldesPorHora(itens, h0, h1) {
+    var mapa = {};
+    itens.forEach(function (o) {
+      var h = Math.floor(C.toMin(o.inicio) / 60);
+      if (h < h0) h = h0;
+      if (h > h1) h = h1;
+      if (!mapa[h]) mapa[h] = [];
+      mapa[h].push(o);
+    });
+    return mapa;
   }
 
   /* ── Conflitos ────────────────────────────────────────────────────── */
@@ -1075,7 +1198,7 @@
     var novo = !d;
     if (!d) { d = { id: N.novoId('disciplinas') }; estado.disciplinas.push(d); }
     var antes = JSON.parse(JSON.stringify(d));
-    ['codigo', 'nome'].forEach(function (k) {
+    ['codigo', 'nome', 'nivel'].forEach(function (k) {
       if (dados[k] !== undefined) d[k] = dados[k];
     });
     commit();
@@ -1086,11 +1209,52 @@
        `especialidade` e `cargaHoraria` continuam gravados nos documentos
        antigos — deixar de enviá-los não os apaga. São lixo inerte, que nada
        lê. Purgar de verdade exigiria FieldValue.delete() ou faxina manual. */
-    persistir(N.gravar('disciplinas', d.id, { codigo: d.codigo, nome: d.nome }), function () {
+    persistir(N.gravar('disciplinas', d.id, {
+      codigo: d.codigo, nome: d.nome,
+      /* `nivel` separa a disciplina da graduação da especialização da pós.
+         Vai explícito mesmo na graduação para o campo existir em todo
+         documento novo; a ausência continua valendo como graduação, que é o
+         estado de tudo que foi gravado antes disto. */
+      nivel: d.nivel === 'pos' ? 'pos' : 'graduacao'
+    }), function () {
       if (novo) estado.disciplinas = estado.disciplinas.filter(function (x) { return x.id !== d.id; });
       else Object.keys(antes).forEach(function (k) { d[k] = antes[k]; });
     });
     return d;
+  }
+
+  /* ── Mutações: especialização da pós ──────────────────────────────────
+     Duas gravações, cada uma com o próprio desfazer: a disciplina que guarda
+     o nome e a turma que o sistema mantém por trás. Se a segunda falhar, a
+     especialização fica sem turma e sem agenda possível — salvar de novo
+     recria, porque `turmaDaEspecializacao` devolve null e o caminho é o
+     mesmo do cadastro novo. */
+  function salvarEspecializacao(id, dados) {
+    var nome = String(dados.nome || '').trim();
+    var prof = dados.professorResponsavelId;
+    if (!nome || !prof) return null;
+    var atual = id ? disciplina(id) : null;
+    if (id && !atual) return null;
+    var d = salvarDisciplina(id, {
+      codigo: (atual && atual.codigo) || proximoCodigoPos(),
+      nome: nome, nivel: 'pos'
+    });
+    var t = turmaDaEspecializacao(d.id);
+    salvarTurma(t ? t.id : null, {
+      disciplinaId: d.id, codigo: CODIGO_TURMA_POS, professorCoordenadorId: prof
+    });
+    return d;
+  }
+
+  /* A turma sai primeiro: é `excluirTurma` que tira as recorrências do
+     índice de sobreposição. Excluir só a disciplina deixaria a reserva
+     segurando horário para sempre. */
+  function excluirEspecializacao(id) {
+    var d = disciplina(id);
+    if (!ehEspecializacao(d)) return;
+    var t = turmaDaEspecializacao(id);
+    if (t) excluirTurma(t.id);
+    excluirDisciplina(id);
   }
 
   /* Sem cascata: diferente de excluirTurma, uma disciplina com turma
@@ -1370,11 +1534,17 @@
     turma: turma, disciplina: disciplina,
     aluno: aluno, pessoa: pessoa, nomePessoa: nomePessoa,
     disciplinaDaTurma: disciplinaDaTurma, rotuloTurma: rotuloTurma, rotuloTurmaLongo: rotuloTurmaLongo,
-    turmasDoProfessor: turmasDoProfessor,
+    subtituloTurma: subtituloTurma, turmasDoProfessor: turmasDoProfessor,
+    ehEspecializacao: ehEspecializacao, especializacoes: especializacoes,
+    disciplinasDeGraduacao: disciplinasDeGraduacao, turmasDeGraduacao: turmasDeGraduacao,
+    turmaDaEspecializacao: turmaDaEspecializacao,
+    professorDaEspecializacao: professorDaEspecializacao,
+    salvarEspecializacao: salvarEspecializacao, excluirEspecializacao: excluirEspecializacao,
     manutencoesAbertas: manutencoesAbertas, cadeiraEmManutencao: cadeiraEmManutencao,
     cadeirasOperantes: cadeirasOperantes, historicoCadeira: historicoCadeira,
     ocorrenciasDoDia: ocorrenciasDoDia, ocorrenciasIntervalo: ocorrenciasIntervalo,
     datasDaRegra: datasDaRegra, statusOcorrencia: statusOcorrencia,
+    janelaHoras: janelaHoras, baldesPorHora: baldesPorHora,
     conflitos: conflitos, nomeNaCadeira: nomeNaCadeira,
     criarRecorrencia: criarRecorrencia, criarPontual: criarPontual,
     atualizarRecorrencia: atualizarRecorrencia, atualizarPontual: atualizarPontual,

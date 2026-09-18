@@ -22,7 +22,9 @@
   /* montar(alvo, opcoes) → renderiza no elemento `alvo`.
      opcoes.modo          'recorrente' | 'pontual' (inicial)
      opcoes.aoRegistrar   callback(resultado) após gravar
-     opcoes.compacto      true no painel (esconde o título interno) */
+     opcoes.compacto      true no painel (esconde o título interno)
+     opcoes.inicial       pré-preenchimento vindo do clique na agenda —
+                          { data, inicio, fim, agrupamentoId, escopo } */
   function montar(alvo, opcoes) {
     opcoes = opcoes || {};
     var u = S.usuario();
@@ -77,6 +79,7 @@
       responsavelId: u.id,
       descricao: ''
     };
+    aplicarInicial(opcoes.inicial);
     encaixarNaJanela();
 
     var raiz = C.clear(alvo);
@@ -180,6 +183,33 @@
     }
     function duracaoMinima() {
       return Math.max(60, Number((e.parametros || {}).faixaMinimaMin) || 60);
+    }
+
+    /* ── Pré-preenchimento vindo do clique na agenda ──────────────────
+       A agenda passa o que o clique já determinou — dia, hora, agrupamento e
+       escopo — e o resto do formulário continua nos padrões. Nada entra sem
+       ser conferido: o clique devolve coordenada de tela, não garantia de
+       que o agrupamento ainda existe ou de que a data cabe no semestre.
+       A hora entra crua; quem encaixa na janela de funcionamento é
+       `encaixarNaJanela`, chamada logo depois. */
+    function aplicarInicial(ini) {
+      if (!ini) return;
+      var achou = false;
+      agrupamentosValidos.forEach(function (g) { if (g.id === ini.agrupamentoId) achou = true; });
+      if (achou) {
+        form.agrupamentoId = ini.agrupamentoId;
+        form.escopo = (ini.escopo === 'b' || ini.escopo === 'ambas') ? ini.escopo : 'a';
+      }
+      if (/^\d{1,2}:\d{2}$/.test(String(ini.inicio))) form.inicio = ini.inicio;
+      if (/^\d{1,2}:\d{2}$/.test(String(ini.fim))) form.fim = ini.fim;
+      if (C.dataValida(ini.data) && C.weekday(ini.data) !== 0) {
+        form.data = ini.data;
+        /* Trocar de modo preserva o que já foi preenchido, então o dia
+           clicado também precisa fazer sentido na recorrente: vira o único
+           dia da semana marcado e o começo da vigência. */
+        form.dias = [C.weekday(ini.data)];
+        if (ini.data >= lim.inicio && ini.data <= lim.fim) form.vigenciaInicio = ini.data;
+      }
     }
 
     function valorEscopo(agrupamentoId, escopo) { return agrupamentoId + '|' + escopo; }
@@ -326,9 +356,11 @@
     function opcoesTurma(lista, comVazio) {
       var arr = comVazio ? [{ valor: '', rotulo: '— sem turma vinculada —' }] : [];
       if (!comVazio && !lista.length) arr.push({ valor: '', rotulo: '— nenhuma turma disponível —' });
+      /* Pelo rótulo longo do Store: na graduação dá o mesmo texto de sempre
+         ("ODO-101 T1 · Clínica Integrada") e na pós dá "Pós-graduação ·
+         Implantodontia", em vez do código interno da especialização. */
       return arr.concat(lista.map(function (t) {
-        var d = S.disciplinaDaTurma(t);
-        return { valor: t.id, rotulo: (d ? d.codigo + ' ' : '') + t.codigo + (d ? ' · ' + d.nome : '') };
+        return { valor: t.id, rotulo: S.rotuloTurmaLongo(t) };
       }));
     }
     function opcoesResponsavel() {

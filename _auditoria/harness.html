@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ocupa · harness de verificação (não vai para produção)</title>
+<link rel="stylesheet" href="../app/styles.css">
+<style>
+  #hns{position:fixed;right:0;bottom:0;z-index:999;background:#111;color:#fff;
+    font:11px/1.5 system-ui;padding:6px 10px;display:flex;gap:8px;align-items:center}
+  #hns button,#hns a{background:#333;color:#fff;border:0;padding:4px 8px;font:inherit;text-decoration:none}
+</style>
+</head>
+<body>
+<div id="raiz" data-tema="claro"></div>
+<div id="toasts"></div>
+<div id="hns">
+  <b>harness</b>
+  <a href="?perfil=coordenador">coordenador</a>
+  <a href="?perfil=professor">professor</a>
+  <a href="?perfil=tecnico">técnico</a>
+  <button onclick="verFolha()">ver folha impressa</button>
+  <span id="hns-log"></span>
+</div>
+
+<script src="../app/js/core.js"></script>
+<script src="../app/js/config.js"></script>
+
+<!-- No lugar de nuvem.js: mesma posição, mesma API. O store captura
+     window.Nuvem por referência no topo da IIFE, então tudo abaixo é o
+     código real de produção falando com um Firestore de mentira. -->
+<script>
+(function (global) {
+  'use strict';
+  var PERFIL = (/[?&]perfil=([a-z]+)/.exec(location.search) || [])[1] || 'coordenador';
+  var CONTAS = {
+    coordenador: { email: 'coord@teste.br', displayName: 'Andréa Coordenação' },
+    professor: { email: 'prof@teste.br', displayName: 'Filipe Professor' },
+    tecnico: { email: 'tec@teste.br', displayName: 'Murilo Técnico' }
+  };
+  var AUTORIZADOS = [
+    { id: 'coord@teste.br', nome: 'Andréa Coordenação', nivel: 'coordenador', ativo: true },
+    { id: 'prof@teste.br', nome: 'Filipe Professor', nivel: 'professor', ativo: true },
+    { id: 'tec@teste.br', nome: 'Murilo Técnico', nivel: 'tecnico', ativo: true }
+  ];
+  var seq = 0;
+  global.__escritas = [];
+  global.__indices = {};
+
+  function acervo() {
+    var C = global.Core, D = global.Dados;
+    var s = D.semente();
+    var hoje = C.hojeISO(), seg = C.startOfWeek(hoje);
+    var disciplinas = [
+      { id: 'd1', codigo: 'ODO-301', nome: 'Clínica Integrada I', nivel: 'graduacao' },
+      { id: 'd2', codigo: 'ODO-402', nome: 'Prótese Dentária' },
+      { id: 'd3', codigo: 'POS-01', nome: 'Implantodontia', nivel: 'pos' }
+    ];
+    var turmas = [
+      { id: 't1', disciplinaId: 'd1', codigo: 'T1', professorCoordenadorId: 'prof@teste.br', periodoLetivo: s.periodoLetivo },
+      { id: 't2', disciplinaId: 'd2', codigo: 'T2', professorCoordenadorId: 'coord@teste.br', periodoLetivo: s.periodoLetivo },
+      { id: 't3', disciplinaId: 'd3', codigo: 'PÓS', professorCoordenadorId: 'prof@teste.br', periodoLetivo: s.periodoLetivo }
+    ];
+    var ocupacoes = [
+      { id: 'r1', tipo: 'recorrente', agrupamentoId: 'ag1', escopo: 'a', turmaId: 't1',
+        dias: [1, 3], inicio: '07:40', fim: '11:20', vigenciaInicio: s.semestre.inicio,
+        vigenciaFim: s.semestre.fim, periodoLetivo: s.periodoLetivo, excecoes: [],
+        criadoPor: 'coord@teste.br', criadoEm: C.carimbo() },
+      { id: 'r2', tipo: 'recorrente', agrupamentoId: 'ag2', escopo: 'ambas', turmaId: 't3',
+        dias: [2], inicio: '18:20', fim: '22:00', vigenciaInicio: s.semestre.inicio,
+        vigenciaFim: s.semestre.fim, periodoLetivo: s.periodoLetivo, excecoes: [],
+        criadoPor: 'coord@teste.br', criadoEm: C.carimbo() },
+      { id: 'r3', tipo: 'recorrente', agrupamentoId: 'ag3', escopo: 'b', turmaId: 't2',
+        dias: [4, 5], inicio: '13:40', fim: '17:20', vigenciaInicio: s.semestre.inicio,
+        vigenciaFim: s.semestre.fim, periodoLetivo: s.periodoLetivo, excecoes: [],
+        criadoPor: 'coord@teste.br', criadoEm: C.carimbo() },
+      { id: 'p1', tipo: 'pontual', agrupamentoId: 'ag4', escopo: 'a', data: C.addDays(seg, 1),
+        inicio: '13:40', fim: '17:20', tipoAtividade: 'graduacao', descricao: 'Atendimento extra do semestre.',
+        turmaId: 't1', responsavelId: 'coord@teste.br', situacao: 'aprovada', excecoes: [],
+        criadoPor: 'coord@teste.br', criadoEm: C.carimbo() },
+      { id: 'p2', tipo: 'pontual', agrupamentoId: 'ag4', escopo: 'b', data: C.addDays(seg, 2),
+        inicio: '07:40', fim: '11:20', tipoAtividade: 'pos', descricao: 'Pedido aguardando a coordenação.',
+        turmaId: 't3', responsavelId: 'prof@teste.br', situacao: 'pendente', excecoes: [],
+        criadoPor: 'prof@teste.br', criadoEm: C.carimbo() }
+    ];
+    return {
+      config: { versao: s.versao, periodoLetivo: s.periodoLetivo, semestre: s.semestre, parametros: s.parametros },
+      agrupamentos: s.agrupamentos, clinicas: s.clinicas, autorizados: AUTORIZADOS,
+      disciplinas: disciplinas, turmas: turmas,
+      alunos: [{ id: 'a1', nome: 'Ana Souza', matricula: '2021001', periodo: 8 },
+               { id: 'a2', nome: 'Bruno Lima', matricula: '2021002', periodo: 8 }],
+      matriculas: [{ id: 't1__a1', turmaId: 't1', alunoId: 'a1' }, { id: 't1__a2', turmaId: 't1', alunoId: 'a2' }],
+      ocupacoes: ocupacoes,
+      manutencoes: [{ id: 'm1', protocolo: 'MAN-0001', clinicaId: 'cl1', cadeira: 3,
+        categoria: 'equipamento', criticidade: 'alta', motivo: 'Refletor queimado',
+        abertoPor: 'tec@teste.br', abertoEm: C.carimbo(), status: 'aberta', impacto: {} }],
+      atribuicoes: [{ id: 'at1', chave: 'r:r1:' + C.addDays(seg, 0), clinicaId: 'cl1', cadeira: 1,
+        nome: 'Ana Souza', alunoId: null, data: C.addDays(seg, 0),
+        registradoPor: 'prof@teste.br', registradoEm: C.carimbo() }]
+    };
+  }
+
+  function ok(v) { return global.Promise.resolve(v); }
+  function log(m) { global.__escritas.push(m); var n = document.getElementById('hns-log'); if (n) n.textContent = m; }
+
+  global.Nuvem = {
+    iniciar: function () { return true; },
+    disponivel: function () { return true; },
+    COLECOES: [],
+    entrarComGoogle: function () { return ok({ user: CONTAS[PERFIL] }); },
+    sair: function () { return ok(); },
+    aoMudarSessao: function (cb) { global.setTimeout(function () { cb(CONTAS[PERFIL]); }, 0); },
+    contaAtual: function () { return CONTAS[PERFIL]; },
+    lerAutorizado: function (email) {
+      var a = null;
+      AUTORIZADOS.forEach(function (x) { if (x.id === email) a = x; });
+      return ok(a);
+    },
+    lerColecao: function () { return ok([]); },
+    lerConfig: function () { return ok(acervo().config); },
+    carregarTudo: function () { return ok(acervo()); },
+    assinarVivas: function () { },
+    encerrarAssinaturas: function () { },
+    novoId: function (c) { return c + '_' + (++seq); },
+    gravar: function (c, id, d) { log('gravar ' + c + '/' + id + ' ' + JSON.stringify(d).slice(0, 160)); return ok(id); },
+    apagar: function (c, id) { log('apagar ' + c + '/' + id); return ok(); },
+    apagarVarios: function (c, ids) { log('apagarVarios ' + c + ' ' + ids.length); return ok(); },
+    /* Reproduz a transação: roda o validador contra o índice em memória e
+       recusa igual ao Firestore quando há choque. */
+    gravarOcupacao: function (agId, id, dados, validar, resumo) {
+      var itens = global.__indices[agId] || [];
+      var choque = validar(itens);
+      if (choque) return global.Promise.reject({ conflito: true, mensagem: choque });
+      global.__indices[agId] = itens.filter(function (i) { return i.id !== id; }).concat([resumo]);
+      log('gravarOcupacao ' + agId + '/' + id + ' · índice com ' + global.__indices[agId].length);
+      return ok(id);
+    },
+    removerOcupacao: function (agId, id) { log('removerOcupacao ' + agId + '/' + id); return ok(true); },
+    desindexarOcupacao: function (agId, id) { log('desindexar ' + agId + '/' + id); return ok(id); },
+    atualizarIndice: function (agId, id) { log('atualizarIndice ' + agId + '/' + id); return ok(true); }
+  };
+
+  /* A impressão real abriria o diálogo do sistema e travaria a verificação:
+     aqui ela só marca que foi chamada, e o documento montado fica no DOM
+     para ser inspecionado. */
+  global.print = function () { log('window.print() chamado · documento montado no DOM'); };
+
+  /* Troca o @media print para screen, para conferir a folha na tela com as
+     regras de impressão de verdade — e não com uma cópia delas. */
+  global.verFolha = function () {
+    var achou = 0;
+    for (var i = 0; i < document.styleSheets.length; i++) {
+      var f = document.styleSheets[i];
+      var regras;
+      try { regras = f.cssRules; } catch (e) { continue; }
+      for (var j = 0; j < regras.length; j++) {
+        var r = regras[j];
+        if (r.type === 4 && String(r.conditionText || r.media.mediaText).indexOf('print') !== -1) {
+          r.media.mediaText = 'screen'; achou++;
+        }
+      }
+    }
+    log('regras @media print promovidas para screen: ' + achou);
+  };
+})(window);
+</script>
+
+<script src="../app/js/acesso.js"></script>
+<script src="../app/js/dados.js"></script>
+<script src="../app/js/store.js"></script>
+<script src="../app/js/ui.js"></script>
+<script src="../app/js/registro.js"></script>
+<script src="../app/js/manutencao.js"></script>
+<script src="../app/js/impressao.js"></script>
+<script src="../app/js/views/painel.js"></script>
+<script src="../app/js/views/agora.js"></script>
+<script src="../app/js/views/agenda.js"></script>
+<script src="../app/js/views/disciplinas.js"></script>
+<script src="../app/js/views/relatorios.js"></script>
+<script src="../app/js/views/estrutura.js"></script>
+<script src="../app/js/views/acessos.js"></script>
+<script src="../app/js/app.js"></script>
+</body>
+</html>

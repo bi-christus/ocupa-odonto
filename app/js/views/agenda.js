@@ -10,8 +10,8 @@
   var refSemana = null;
   var diaSel = null;
 
-  /* Janela mínima da régua de horas, alargada por janelaHoras(). */
-  var H0_MIN = 7, H1_MIN = 21;
+  /* A régua de horas vem de S.janelaHoras: a versão impressa precisa montar
+     a mesma grade, e uma cópia da derivação em cada lado divergiria. */
   /* Altura, em pixels, da faixa de uma clínica na pista do agrupamento.
      Uma ocupação das duas clínicas ocupa as duas faixas. */
   var ALTURA_FAIXA = 32;
@@ -70,9 +70,27 @@
           aba('semana', 'Semana'), aba('dia', 'Dia'), aba('recorrencias', 'Recorrências'),
           S.pode('agenda.excluir') ? abaExcluidas() : null
         ]),
-        podeCriar ? C.el('button', { class: 'btn btn-primary', text: 'Nova ocupação', onclick: novaOcupacao }) : null
+        /* A lixeira é a única aba sem versão impressa: lista de reserva
+           excluída não é documento que circula. */
+        vista !== 'excluidas' ? C.el('button', {
+          class: 'chip-btn', text: 'Imprimir · PDF',
+          title: 'Abre a impressão do navegador — escolha "Salvar como PDF" para gerar o arquivo',
+          onclick: imprimirVista
+        }) : null,
+        podeCriar ? C.el('button', {
+          class: 'btn btn-primary', text: 'Nova ocupação',
+          onclick: function () { novaOcupacao(); }
+        }) : null
       ])
     ]);
+  }
+
+  /* Imprime o que está na tela, na mesma forma em que está: é o que a folha
+     promete ao sair da aba Agenda. */
+  function imprimirVista() {
+    if (vista === 'dia') global.Impressao.dia(diaSel);
+    else if (vista === 'recorrencias') global.Impressao.recorrencias();
+    else global.Impressao.semana(refSemana);
   }
   function aba(id, rotulo) {
     return C.el('button', {
@@ -195,48 +213,44 @@
     ]);
   }
 
-  function novaOcupacao() {
+  /* `inicial` chega do clique na grade ou na pista do dia: { data, inicio }
+     e, quando a pista identifica a clínica, também { agrupamentoId, escopo }.
+     Sem ele é o botão "Nova ocupação" de sempre, com o formulário em branco. */
+  function novaOcupacao(inicial) {
     var slot = C.el('div');
+    var pre = null;
+    if (inicial && inicial.inicio) {
+      pre = {
+        data: inicial.data || null,
+        inicio: inicial.inicio,
+        fim: inicial.fim || terminoPadrao(inicial.inicio),
+        agrupamentoId: inicial.agrupamentoId || null,
+        escopo: inicial.escopo || null
+      };
+    }
     U.modal({
       titulo: 'Nova ocupação',
-      subtitulo: 'Semestre ' + S.estado.periodoLetivo,
+      /* O subtítulo repete o que o clique capturou. Sem isso, um clique de
+         um pixel ao lado do pretendido só apareceria lá embaixo, no campo
+         de data — e o formulário passaria a impressão de ter inventado o
+         horário sozinho. */
+      subtitulo: pre && pre.data
+        ? C.nomeDia(C.weekday(pre.data), true) + ', ' + C.fmtDiaAno(pre.data) +
+          ' · ' + pre.inicio + '–' + pre.fim +
+          (pre.agrupamentoId ? ' · ' + S.rotuloEscopo(pre.agrupamentoId, pre.escopo) : '')
+        : 'Semestre ' + S.estado.periodoLetivo,
       largura: '840px',
       conteudo: slot
     });
     global.Registro.montar(slot, {
       compacto: true,
+      inicial: pre,
+      /* Clique num dia e numa hora concretos descreve uma atividade única —
+         é assim que se lê o gesto. Trocar para recorrente continua a um
+         clique, e leva junto o horário e o dia da semana apontados. */
+      modo: pre && pre.data ? 'pontual' : null,
       aoRegistrar: function () { U.fecharModal(); global.App.recarregar(); }
     });
-  }
-
-  /* ── Régua de horas ───────────────────────────────────────────────────
-     A janela era 07h–22h cravada. Uma clínica pode abrir às 06:00 e fechar
-     às 23:30 (é o que a tela de Estrutura permite gravar), e o gantt do dia
-     descartava em silêncio o bloco que caísse fora: com fim = 22:00, uma
-     ocupação das 22:00 às 23:00 dava b <= a e simplesmente não era
-     desenhada. A janela agora sai dos horários das clínicas, dos parâmetros
-     do polo e do que existe nas datas mostradas — a mesma derivação que a
-     tela de Ocupação agora já faz. Devolve [primeiraHora, ultimaHora],
-     ambas inclusivas. */
-  function janelaHoras(datas) {
-    var e = S.estado, p = e.parametros || {};
-    var ini = Math.min(H0_MIN * 60, C.toMin(p.aberturaPadrao || '07:00'));
-    var fim = Math.max((H1_MIN + 1) * 60, C.toMin(p.fechamentoPadrao || '22:00'));
-    e.clinicas.forEach(function (c) {
-      if (c.abertura) ini = Math.min(ini, C.toMin(c.abertura));
-      if (c.fechamento) fim = Math.max(fim, C.toMin(c.fechamento));
-    });
-    datas.forEach(function (d) {
-      S.ocorrenciasDoDia(d).forEach(function (o) {
-        ini = Math.min(ini, C.toMin(o.inicio));
-        fim = Math.max(fim, C.toMin(o.fim));
-      });
-    });
-    var h0 = Math.floor(ini / 60);
-    var h1 = Math.ceil(fim / 60) - 1;
-    if (h1 < h0) h1 = h0;
-    if (h1 > 23) h1 = 23;
-    return [h0, h1];
   }
 
   /* ── Leituras de escopo compartilhadas ────────────────────────────── */
@@ -256,13 +270,13 @@
     var dias = [], datas = [], total = 0, i, h;
 
     for (i = 0; i < 6; i++) datas.push(C.addDays(refSemana, i));
-    var janela = janelaHoras(datas);
+    var janela = S.janelaHoras(datas);
     var H0 = janela[0], H1 = janela[1];
 
     for (i = 0; i < 6; i++) {
       var itens = S.ocorrenciasDoDia(datas[i]);
       total += itens.length;
-      dias.push({ data: datas[i], baldes: porHora(itens, H0, H1) });
+      dias.push({ data: datas[i], baldes: S.baldesPorHora(itens, H0, H1) });
     }
 
     var topoFixo = 'position:sticky;top:0;z-index:2;background:var(--color-bg);';
@@ -287,14 +301,7 @@
           'border-top:1px solid var(--line-soft);font-variant-numeric:tabular-nums',
         text: C.pad(h) + ':00'
       }));
-      for (i = 0; i < dias.length; i++) {
-        var cel = C.el('div', {
-          style: 'display:flex;flex-direction:column;gap:4px;min-height:42px;' +
-            'padding:6px 0;border-top:1px solid var(--line-soft)'
-        });
-        (dias[i].baldes[h] || []).forEach(function (o) { cel.appendChild(evento(o)); });
-        grade.appendChild(cel);
-      }
+      for (i = 0; i < dias.length; i++) grade.appendChild(celulaDaGrade(dias[i], h));
     }
 
     return C.el('div', {}, [
@@ -305,19 +312,52 @@
     ]);
   }
 
-  /* Distribui as ocorrências do dia na linha da hora em que começam.
-     O que começa antes da abertura entra na primeira linha e o que começa
-     depois da última entra na última — nada some da tela. */
-  function porHora(itens, H0, H1) {
-    var mapa = {};
-    itens.forEach(function (o) {
-      var h = Math.floor(C.toMin(o.inicio) / 60);
-      if (h < H0) h = H0;
-      if (h > H1) h = H1;
-      if (!mapa[h]) mapa[h] = [];
-      mapa[h].push(o);
+  /* Célula da grade — e, para quem pode lançar, o alvo do clique que abre o
+     formulário já preenchido com o dia e a hora, como numa agenda de
+     calendário. O clique só vale no VAZIO da célula: sobre o bloco de uma
+     ocupação quem responde é o detalhe dela. */
+  function celulaDaGrade(dia, hora) {
+    var livre = podeCriarEm(dia.data);
+    var itens = dia.baldes[hora] || [];
+    var cel = C.el('div', {
+      class: 'wk-cel' + (livre ? ' livre' : '') + (itens.length ? '' : ' vazia')
     });
-    return mapa;
+    itens.forEach(function (o) { cel.appendChild(evento(o)); });
+    if (livre) {
+      cel.setAttribute('title', 'Lançar ocupação · ' + C.nomeDia(C.weekday(dia.data)) + ' ' +
+        C.fmtDia(dia.data) + ' às ' + C.pad(hora) + ':00');
+      cel.addEventListener('click', function (ev) {
+        if (ev.target !== cel) return;
+        novaOcupacao({ data: dia.data, inicio: C.pad(hora) + ':00' });
+      });
+    }
+    return cel;
+  }
+
+  /* ── Lançamento pelo clique na grade ──────────────────────────────────
+     A faixa em que o clique vira formulário é a mesma que o formulário
+     aceita: de hoje (ou da abertura do semestre, quando ela ainda não
+     chegou) até o fim do semestre. Fora dela a célula não ganha affordance
+     nenhuma — abrir um formulário que já nasce recusado ensina o contrário
+     do que a regra diz. */
+  function podeCriarEm(data) {
+    if (!S.pode('agenda.criarRecorrente') && !S.pode('agenda.criarPontual')) return false;
+    var s = S.estado.semestre || {};
+    var hoje = C.hojeISO();
+    var ini = (C.dataValida(s.inicio) && s.inicio > hoje) ? s.inicio : hoje;
+    if (data < ini) return false;
+    if (C.dataValida(s.fim) && data > s.fim) return false;
+    return true;
+  }
+
+  /* Duração de partida do bloco criado pelo clique: a faixa mínima do polo,
+     que é o menor lançamento que a validação aceita. O turno continua a um
+     clique de distância no formulário — ele é atalho, não regra, e por isso
+     não é aplicado por conta própria em cima do horário que a pessoa
+     acabou de apontar. */
+  function terminoPadrao(inicio) {
+    var min = Math.max(60, Number((S.estado.parametros || {}).faixaMinimaMin) || 120);
+    return C.fromMin(Math.min(23 * 60 + 55, C.toMin(inicio) + min));
   }
 
   function evento(o) {
@@ -350,7 +390,7 @@
      Uma pista por AGRUPAMENTO, com duas faixas — uma por clínica. A
      ocupação de escopo duplo toma as duas faixas de uma vez. */
   function gantt() {
-    var janela = janelaHoras([diaSel]);
+    var janela = S.janelaHoras([diaSel]);
     var H0 = janela[0], H1 = janela[1];
     var ini = H0 * 60, fim = (H1 + 1) * 60, span = fim - ini;
     var agrupamentos = S.estado.agrupamentos || [];
@@ -390,14 +430,41 @@
     var clinicas = S.clinicasDoAgrupamento(g.id);
     var faixas = Math.max(1, clinicas.length);
     var altura = ALTURA_FAIXA * faixas;
-    var trilha = C.el('div', { class: 'tl-track', style: 'height:' + altura + 'px;padding:0' });
+    var livre = podeCriarEm(diaSel);
+    var trilha = C.el('div', {
+      class: 'tl-track' + (livre ? ' livre' : ''),
+      style: 'height:' + altura + 'px;padding:0'
+    });
 
-    /* Guias horizontais: uma acima, uma entre as clínicas e uma abaixo. */
+    /* Guias horizontais: uma acima, uma entre as clínicas e uma abaixo.
+       `pointer-events:none` porque elas cobrem a pista inteira: sem isso um
+       clique que calhasse na linha de 1px não chegaria à trilha. */
     for (var k = 0; k <= faixas; k++) {
       trilha.appendChild(C.el('div', {
-        style: 'position:absolute;left:0;right:0;top:' + (k * ALTURA_FAIXA) +
+        style: 'position:absolute;left:0;right:0;pointer-events:none;top:' + (k * ALTURA_FAIXA) +
           'px;height:1px;background:var(--line-soft)'
       }));
+    }
+
+    /* Clique na pista = lançar aqui. O eixo X vira horário (encaixado em
+       meia hora, que é a menor marcação que a régua deixa apontar com
+       precisão) e o eixo Y diz qual das duas clínicas do agrupamento foi
+       apontada — a faixa de cima é a primeira, a de baixo é a segunda. */
+    if (livre) {
+      trilha.setAttribute('title', 'Clique para lançar ocupação em ' + g.nome);
+      trilha.addEventListener('click', function (ev) {
+        if (ev.target !== trilha) return;
+        var r = trilha.getBoundingClientRect();
+        if (!r.width) return;
+        var frac = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+        var min = Math.floor((ini + frac * span) / 30) * 30;
+        min = Math.max(ini, Math.min(min, fim - 30));
+        var faixa = Math.floor(Math.max(0, ev.clientY - r.top) / ALTURA_FAIXA);
+        novaOcupacao({
+          data: diaSel, inicio: C.fromMin(min), agrupamentoId: g.id,
+          escopo: (clinicas.length > 1 && faixa >= 1) ? 'b' : 'a'
+        });
+      });
     }
 
     var lista = S.ocorrenciasDoDia(diaSel, { agrupamentoId: g.id });
@@ -493,14 +560,17 @@
     ]);
     var corpo = C.el('tbody');
     regras.forEach(function (r) {
-      var t = S.turma(r.turmaId), d = S.disciplinaDaTurma(t);
+      var t = S.turma(r.turmaId);
       var fimEfetivo = fimEfetivoDaRegra(r);
       var encerrada = regraEncerrada(r, hoje);
       var restantes = encerrada ? 0 : encontrosRestantes(r, hoje);
       corpo.appendChild(C.el('tr', { style: encerrada ? 'opacity:.55' : '' }, [
+        /* Rótulos do Store: a especialização da pós se chama pelo nome, e
+           nenhum dos dois estoura quando a disciplina sumiu do banco. */
         C.el('td', {}, [
-          C.el('b', { text: d.codigo + ' ' + t.codigo }),
-          C.el('div', { class: 'muted', style: 'font-size:12px', text: d.nome + ' · ' + S.nomePessoa(t.professorCoordenadorId) })
+          C.el('b', { text: S.rotuloTurma(t) }),
+          C.el('div', { class: 'muted', style: 'font-size:12px',
+            text: S.subtituloTurma(t) + ' · ' + S.nomePessoa(t ? t.professorCoordenadorId : null) })
         ]),
         C.el('td', { text: S.rotuloEscopo(r.agrupamentoId, r.escopo) }),
         C.el('td', { text: C.listaDias(r.dias) }),

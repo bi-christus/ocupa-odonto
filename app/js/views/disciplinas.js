@@ -43,8 +43,12 @@
     var e = S.estado;
     var u = S.usuario();
     /* Sem fallback: professor sem turma sob coordenação não enxerga (nem
-       edita o vínculo de alunos de) as turmas dos colegas. */
-    var lista = u.perfil === 'professor' ? S.turmasDoProfessor(u.id) : e.turmas;
+       edita o vínculo de alunos de) as turmas dos colegas.
+       A turma que o sistema mantém por trás de uma especialização da pós não
+       entra aqui: ela não tem código para exibir, não recebe aluno e não é
+       editável como turma — quem responde por ela é a aba Pós-graduação. */
+    var lista = (u.perfil === 'professor' ? S.turmasDoProfessor(u.id) : e.turmas)
+      .filter(function (t) { return !S.ehEspecializacao(S.disciplinaDaTurma(t)); });
     if (!turmaSel || !naLista(lista, turmaSel)) turmaSel = lista.length ? lista[0].id : null;
 
     var vistos = {}, alunosVinculados = 0;
@@ -61,16 +65,19 @@
           text: vista === 'turmas'
             ? C.plural(lista.length, 'turma', 'turmas') + ' · ' +
               C.plural(alunosVinculados, 'aluno vinculado', 'alunos vinculados')
-            : C.plural(e.disciplinas.length, 'disciplina cadastrada', 'disciplinas cadastradas') })
+            : vista === 'pos'
+              ? C.plural(S.especializacoes().length, 'especialização cadastrada', 'especializações cadastradas')
+              : C.plural(S.disciplinasDeGraduacao().length, 'disciplina cadastrada', 'disciplinas cadastradas') })
       ]),
       C.el('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap;align-items:center' }, [
-        C.el('div', { class: 'seg' }, [aba('turmas', 'Turmas'), aba('disciplinas', 'Disciplinas')]),
-        S.pode('disciplinas.editar') ? C.el('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap' }, [
-          C.el('button', { class: 'btn btn-primary', text: 'Nova disciplina', onclick: function () { editarDisciplina(null); } }),
-          C.el('button', { class: 'btn-ghost', text: 'Nova turma', onclick: function () { editarTurma(null); } })
-        ]) : null
+        C.el('div', { class: 'seg' }, [
+          aba('turmas', 'Turmas'), aba('disciplinas', 'Disciplinas'), aba('pos', 'Pós-graduação')
+        ]),
+        S.pode('disciplinas.editar') ? acoesDoCabecalho() : null
       ])
     ]));
+
+    if (vista === 'pos') { alvo.appendChild(especializacoesLista()); return; }
 
     /* Aba de controle do cadastro: existe para editar ou excluir uma
        disciplina sem precisar ter (ou selecionar) uma turma dela — antes
@@ -98,10 +105,162 @@
     ]));
   }
 
+  /* O botão de criar é o da aba aberta: "Nova disciplina" na aba da pós
+     ofereceria justamente o cadastro que a pós não tem. */
+  function acoesDoCabecalho() {
+    if (vista === 'pos') {
+      return C.el('button', {
+        class: 'btn btn-primary', text: 'Nova especialização',
+        onclick: function () { editarEspecializacao(null); }
+      });
+    }
+    return C.el('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap' }, [
+      C.el('button', { class: 'btn btn-primary', text: 'Nova disciplina', onclick: function () { editarDisciplina(null); } }),
+      C.el('button', { class: 'btn-ghost', text: 'Nova turma', onclick: function () { editarTurma(null); } })
+    ]);
+  }
+
   function aba(id, rotulo) {
     return C.el('button', {
       type: 'button', class: vista === id ? 'on' : '', text: rotulo,
       onclick: function () { vista = id; global.App.recarregar(); }
+    });
+  }
+
+  /* ── Pós-graduação ────────────────────────────────────────────────────
+     A pós não trabalha com código de disciplina nem com identificador de
+     turma: uma especialização é o nome dela e quem responde por ela. É só
+     isso que este cadastro pede. A turma que o sistema cria por trás — para
+     a reserva recorrente ter a quem apontar — não aparece em lugar nenhum
+     desta tela, nem precisa. */
+  function especializacoesLista() {
+    var podeEditar = S.pode('disciplinas.editar');
+    var lista = S.especializacoes();
+
+    var nota = C.el('div', { class: 'alert', style: 'margin-bottom:18px', text:
+      'Cada especialização é cadastrada pelo nome e pelo professor responsável — ' +
+      'sem código, sem turma e sem vínculo de alunos. A partir do cadastro ela já pode ' +
+      'ocupar clínica pela aba Agenda, e o responsável é quem pode cancelar as reservas dela.' });
+
+    if (!lista.length) {
+      return C.el('div', {}, [nota, U.vazio('Nenhuma especialização cadastrada.' +
+        (podeEditar ? ' Comece por "Nova especialização".' : ''))]);
+    }
+
+    var tabela = C.el('table', { class: 'table' }, [
+      C.el('thead', {}, C.el('tr', {}, [
+        C.el('th', { text: 'Especialização' }), C.el('th', { text: 'Professor responsável' }),
+        C.el('th', { text: 'Na agenda' }), C.el('th', { class: 'right', text: '' })
+      ]))
+    ]);
+    var corpo = C.el('tbody');
+    lista.forEach(function (d) {
+      var t = S.turmaDaEspecializacao(d.id);
+      corpo.appendChild(C.el('tr', {}, [
+        C.el('td', {}, C.el('b', { text: d.nome })),
+        C.el('td', { text: t ? S.nomePessoa(t.professorCoordenadorId) : '—' }),
+        C.el('td', { style: 'font-size:12.5px' }, agendaDaEspecializacao(t)),
+        C.el('td', { class: 'right', style: 'white-space:nowrap' }, podeEditar ? [
+          C.el('button', { class: 'btn-ghost', text: 'Editar', onclick: function () { editarEspecializacao(d.id); } }),
+          C.el('button', {
+            class: 'btn-danger', style: 'margin-left:12px', text: 'Excluir',
+            onclick: function () { confirmarExclusaoEspecializacao(d); }
+          })
+        ] : null)
+      ]));
+    });
+    tabela.appendChild(corpo);
+    return C.el('div', {}, [nota, C.el('div', { class: 'rolagem-x' }, tabela)]);
+  }
+
+  /* Carga semanal da especialização: encontros por semana e horas, somando
+     as recorrências ativas. É o número que diz se a especialização está de
+     fato usando a clínica ou só cadastrada. */
+  function agendaDaEspecializacao(t) {
+    if (!t) return C.el('span', { class: 'muted', text: 'sem turma — salve de novo' });
+    var encontros = 0, horas = 0;
+    S.recorrenciasAtivas().forEach(function (r) {
+      if (r.turmaId !== t.id) return;
+      encontros += r.dias.length;
+      horas += C.duracaoH(r.inicio, r.fim) * r.dias.length;
+    });
+    if (!encontros) return C.el('span', { class: 'muted', text: 'sem reserva recorrente' });
+    return C.el('span', { text: C.plural(encontros, 'encontro', 'encontros') +
+      '/semana · ' + C.fmtHoras(horas) });
+  }
+
+  function editarEspecializacao(id) {
+    var e = S.estado;
+    var d = id ? S.disciplina(id) : null;
+    if (id && !S.ehEspecializacao(d)) { C.toast('Especialização não encontrada.'); return; }
+    var professores = e.usuarios.filter(function (x) {
+      return x.ativo && (x.perfil === 'professor' || x.perfil === 'coordenador');
+    });
+    if (!professores.length) {
+      C.toast('Nenhum professor ou coordenador ativo para responder pela especialização.');
+      return;
+    }
+    var f = {
+      nome: d ? d.nome : '',
+      professorResponsavelId: (id && S.professorDaEspecializacao(id)) || professores[0].id
+    };
+    U.modal({
+      titulo: id ? 'Editar especialização' : 'Nova especialização',
+      subtitulo: 'Pós-graduação · semestre ' + e.periodoLetivo,
+      largura: '620px',
+      conteudo: C.el('div', { class: 'stack', style: 'gap:16px' }, [
+        U.campo('Nome da especialização', C.el('input', {
+          class: 'input', value: f.nome, placeholder: 'Ex.: Implantodontia',
+          oninput: function (ev) { f.nome = ev.target.value; }
+        }), 'é este nome que aparece na agenda das clínicas'),
+        U.campo('Professor responsável', U.selecao(professores.map(function (p) {
+          return { valor: p.id, rotulo: p.nome + ' · ' + global.Acesso.nomePerfil(p.perfil) };
+        }), f.professorResponsavelId, function (v) { f.professorResponsavelId = v; }),
+          'responde pelas reservas da especialização e pode cancelá-las')
+      ]),
+      acoes: [
+        id ? C.el('button', {
+          class: 'btn-danger', style: 'margin-right:auto', text: 'Excluir especialização',
+          onclick: function () { U.fecharModal(); confirmarExclusaoEspecializacao(d); }
+        }) : null,
+        C.el('button', { class: 'btn btn-outline', text: 'Cancelar', onclick: U.fecharModal }),
+        C.el('button', {
+          class: 'btn btn-primary', text: 'Salvar',
+          onclick: function () {
+            if (!f.nome.trim()) { C.toast('Informe o nome da especialização.'); return; }
+            if (!S.pode('disciplinas.editar')) { C.toast('Seu perfil não cadastra especializações.'); return; }
+            var salva = S.salvarEspecializacao(id, {
+              nome: f.nome, professorResponsavelId: f.professorResponsavelId
+            });
+            if (!salva) { C.toast('Não foi possível salvar a especialização.'); return; }
+            U.fecharModal(); C.toast('Especialização salva.'); global.App.recarregar();
+          }
+        })
+      ]
+    });
+  }
+
+  /* Diferente da disciplina da graduação, aqui a exclusão é em cascata — a
+     especialização não tem turmas que alguém possa reatribuir antes. Por
+     isso o aviso precisa dizer, com todas as letras, que a agenda dela vai
+     junto. */
+  function confirmarExclusaoEspecializacao(d) {
+    var t = S.turmaDaEspecializacao(d.id);
+    var regras = t ? S.recorrenciasAtivas().filter(function (r) { return r.turmaId === t.id; }).length : 0;
+    U.confirmar({
+      titulo: 'Excluir especialização', rotulo: 'Excluir', perigo: true,
+      conteudo: C.el('div', {}, [
+        C.el('span', {}, ['A especialização ', C.el('b', { text: d.nome }), ' sai do cadastro.']),
+        regras ? C.el('p', { style: 'margin:10px 0 0', text:
+          C.plural(regras, 'reserva recorrente sai', 'reservas recorrentes saem') +
+          ' da agenda junto, liberando os horários. Não há como desfazer.' })
+          : C.el('p', { class: 'muted', style: 'margin:10px 0 0', text: 'Não há como desfazer.' })
+      ])
+    }, function () {
+      if (!S.pode('disciplinas.editar')) { C.toast('Seu perfil não exclui especializações.'); return; }
+      S.excluirEspecializacao(d.id);
+      C.toast('Especialização excluída.');
+      global.App.recarregar();
     });
   }
 
@@ -113,7 +272,8 @@
   function disciplinasLista() {
     var e = S.estado;
     var podeEditar = S.pode('disciplinas.editar');
-    if (!e.disciplinas.length) {
+    var disciplinas = S.disciplinasDeGraduacao();
+    if (!disciplinas.length) {
       return U.vazio('Nenhuma disciplina cadastrada.' +
         (podeEditar ? ' Comece por "Nova disciplina".' : ''));
     }
@@ -129,7 +289,7 @@
       ]))
     ]);
     var corpo = C.el('tbody');
-    e.disciplinas.slice().sort(function (a, b) {
+    disciplinas.slice().sort(function (a, b) {
       return String(a.codigo).localeCompare(String(b.codigo), 'pt-BR');
     }).forEach(function (d) {
       var vinculadas = turmasPorDisciplina[d.id] || 0;
@@ -446,13 +606,17 @@
     var t = id ? S.turma(id) : null;
     if (id && !t) { C.toast('Turma não encontrada.'); return; }
     /* Sem disciplina ou sem professor ativo não há turma possível — dizer
-       isso vale mais do que estourar em disciplinas[0] / professores[0]. */
-    if (!e.disciplinas.length) { C.toast('Cadastre uma disciplina antes de criar a turma.'); return; }
+       isso vale mais do que estourar em disciplinas[0] / professores[0].
+       Só disciplina da graduação: especialização da pós tem a turma que o
+       sistema mantém, e criar uma segunda por aqui quebraria a premissa de
+       turma única em que o cadastro da pós se apoia. */
+    var disciplinas = S.disciplinasDeGraduacao();
+    if (!disciplinas.length) { C.toast('Cadastre uma disciplina antes de criar a turma.'); return; }
     var professores = e.usuarios.filter(function (x) {
       return x.ativo && (x.perfil === 'professor' || x.perfil === 'coordenador');
     });
     if (!professores.length) { C.toast('Nenhum professor ou coordenador ativo para coordenar a turma.'); return; }
-    if (!t) t = { disciplinaId: e.disciplinas[0].id, codigo: 'T1', professorCoordenadorId: null };
+    if (!t) t = { disciplinaId: disciplinas[0].id, codigo: 'T1', professorCoordenadorId: null };
     var f = {
       disciplinaId: t.disciplinaId, codigo: t.codigo,
       professorCoordenadorId: t.professorCoordenadorId || professores[0].id
@@ -461,7 +625,7 @@
       titulo: id ? 'Editar turma' : 'Nova turma',
       largura: '620px',
       conteudo: C.el('div', { class: 'grid-fields' }, [
-        U.campo('Disciplina', U.selecao(e.disciplinas.map(function (d) {
+        U.campo('Disciplina', U.selecao(disciplinas.map(function (d) {
           return { valor: d.id, rotulo: d.codigo + ' · ' + d.nome };
         }), f.disciplinaId, function (v) { f.disciplinaId = v; })),
         U.campo('Turma', C.el('input', { class: 'input', value: f.codigo, placeholder: 'T1',
