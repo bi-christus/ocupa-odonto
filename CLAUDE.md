@@ -156,6 +156,32 @@ o formulário nunca mostra. Duas razões:
   toda gravação. Mudança que só funciona depois de alguém mexer no console
   não pode ir para `main`.
 
+### O vínculo da atividade PONTUAL
+
+O campo de vínculo do formulário pontual segue o campo **Tipo**, e só existe
+assim no modo pontual:
+
+| Tipo | Rótulo do campo | O que lista |
+|---|---|---|
+| Graduação | "Turma vinculada" | turmas da graduação + **Outros** |
+| Pós-graduação | "Especialização" | especializações + **Outros** |
+
+- Trocar o Tipo chama `desenhar()`, não `atualizar()`: é o tipo que decide a
+  lista e o rótulo. `ajustarVinculo()` reencaixa a escolha anterior — turma da
+  graduação selecionada não pode sobreviver à troca para pós, senão o select
+  exibe um valor que a lista não contém, que é o campo em branco que se quer
+  evitar.
+- **O vínculo é obrigatório e "Outros" é resposta válida.** `SEM_VINCULO` vale
+  `'outros'` e **nunca chega ao Firestore**: `vinculoGravavel()` o traduz para
+  `null`. O padrão é a primeira opção do tipo, ou "Outros" quando não há
+  nenhuma — o campo nunca nasce vazio.
+- A dica do campo Tipo troca "turma" por "especialização" junto com o resto.
+- **O modo recorrente não se divide**: a lista lá continua única, com
+  graduação e pós juntas, porque a reserva recorrente da pós aponta para a
+  turma que o sistema mantém. Separar ali deixaria a pós sem como ocupar
+  clínica toda semana, e não existe "Outros" na recorrente — sem turma não há
+  de quem herdar o professor coordenador que responde pela reserva.
+
 Consequências para quem mexer aqui:
 
 - **Use os seletores.** `S.especializacoes()`, `S.disciplinasDeGraduacao()` e
@@ -263,6 +289,22 @@ Distinção que o vocabulário precisa manter:
 
 ---
 
+## A grade da semana é proporcional
+
+O bloco de cada ocupação é **posicionado pelo horário de início e dimensionado
+pela duração** — `ALTURA_HORA` (46px) é a escala, e o bloco é absoluto dentro
+da coluna do dia. Antes ele caía no balde da hora em que começava, todos do
+mesmo tamanho: uma reserva de 07:40 às 11:20 parecia durar o mesmo que uma de
+duas horas, e a coluna não dizia nada sobre ocupação real da clínica.
+
+- Ocupações que se cruzam no tempo **dividem a largura** entre si
+  (`disporEmColunas`), por cacho de sobreposição — um bloco solto no fim do
+  dia não fica espremido por causa de dois que se cruzaram de manhã.
+- `S.baldesPorHora` **não serve mais à tela**, só à folha impressa, que é uma
+  tabela de linhas de hora. `S.janelaHoras` continua servindo às duas: a tela
+  e o papel precisam abrir e fechar o dia na mesma hora.
+- A vista **Dia** (gantt) já era proporcional, no eixo X. Não mudou.
+
 ## Lançar pelo clique na grade
 
 A Agenda cria ocupação como um calendário: clicar no vazio abre o formulário
@@ -271,17 +313,39 @@ aceita `{ data, inicio, fim, agrupamentoId, escopo }` e **confere tudo** antes
 de entrar no formulário, porque clique devolve coordenada de tela, não
 garantia de que o agrupamento existe ou de que a data cabe no semestre.
 
-- **Semana:** a célula da hora dá dia e hora. O clique só vale no VAZIO da
-  célula (`ev.target === cel`); sobre o bloco de uma ocupação quem responde é
-  o detalhe dela.
+- **Semana:** o eixo Y da coluna do dia vira horário, encaixado em meia hora.
+  Um **fantasma** segue o cursor mostrando onde o bloco vai cair e que tamanho
+  vai ter — é ele o convite para clicar, e ele some sobre um bloco existente,
+  porque ali o clique pertence ao detalhe da ocupação.
+- **A faixa de 15px à direita de cada coluna é reservada e nenhum bloco a
+  ocupa.** Não é margem: é o que garante alvo de clique em QUALQUER horário,
+  por mais cheia que a coluna esteja. Sem ela, duas ocupações lado a lado
+  tomam a largura inteira e lançar uma terceira turma naquele horário fica
+  impossível — foi exatamente o que a coordenação relatou em 18/09/2026
+  ("não consegui clicar na agenda e marcar").
+- **O clique na semana não sabe de clínica, então o formulário escolhe a
+  primeira LIVRE naquele horário** (`primeiroEscopoLivre`, registro.js). Cair
+  sempre na Clínica 1 fazia o formulário abrir já bloqueado por choque sempre
+  que ela estivesse ocupada, com as outras sete vazias ao lado — e na tela
+  isso se lê como "a agenda não deixa lançar", não como "troque de clínica".
+  Quando todas estão ocupadas, abre na primeira mesmo e o aviso de choque é a
+  resposta certa.
 - **Dia:** a pista do agrupamento dá mais: o eixo X vira horário (encaixado em
   meia hora) e o eixo Y diz qual das duas clínicas foi apontada — faixa de
   cima é escopo `a`, a de baixo é `b`. As guias horizontais levam
   `pointer-events:none`, senão o clique na linha de 1px não chega à trilha.
 - **Onde não dá para criar não há affordance nenhuma.** `podeCriarEm(data)`
   cobre a mesma faixa que o formulário aceita — de hoje (ou da abertura do
-  semestre) ao fim do semestre. Abrir formulário que já nasce recusado ensina
-  o contrário do que a regra diz.
+  semestre) ao fim do semestre. **Hoje aceita lançamento**; o que não existe é
+  cadastro retroativo, e isso é regra antiga da validação do formulário, não
+  da tela.
+- **Dia passado se anuncia sozinho, sem texto.** Classe `.passado` nas células
+  da semana, na pista do dia e no chip do seletor: hachura diagonal de baixo
+  contraste (`repeating-linear-gradient` sobre `--line-soft`, funciona nos dois
+  temas) mais o cabeçalho da coluna apagado. A hachura fica ATRÁS dos blocos,
+  que são opacos e seguem legíveis. Pedido explícito da coordenação: indicar
+  "de forma simples e intuitiva, sem descrições" — então nada de legenda, nada
+  de tooltip explicando a regra.
 - O modo padrão do clique é **pontual**: dia e hora concretos descrevem uma
   atividade única. Trocar para recorrente preserva horário, dia da semana
   (vira o único dia marcado) e começo da vigência.
@@ -316,6 +380,28 @@ a pessoa entender por que nada aconteceu.
 - A limpeza é do evento `afterprint`; o prazo de 120 s é só rede de segurança
   para o navegador que não dispara o evento, senão o título da página ficaria
   trocado para sempre.
+
+### "Criar pulando as datas em conflito" — o que estava quebrado
+
+Até 18/09/2026 esse botão **nunca funcionou, e ainda derrubava o sistema**. Ele
+criava a recorrência e só então chamava `cancelarOcorrencia` para cada data
+pulada. Duas consequências, as duas graves:
+
+- o resumo que vai para o índice é congelado dentro de `gravarOcupacaoNaNuvem`
+  com as exceções que a regra tiver **naquele instante** — lista vazia. A
+  transação revalidava contra as mesmas datas em choque que motivaram o botão
+  e **sempre recusava**;
+- o `cancelarOcorrencia` disparado em seguida grava
+  `set({excecoes}, {merge:true})` no mesmo documento, correndo com a transação.
+  Chegando primeiro, criava em `ocupacoes` um documento **só com `excecoes`** —
+  sem `dias`, sem horário. Esse órfão voltava pelo onSnapshot e estourava
+  TypeError em `r.dias.indexOf`, derrubando Agenda, Agora, Painel e Relatórios
+  de todo mundo.
+
+Agora as datas puladas entram **na criação**, por `dados.pular`, antes da
+transação. E `ocupacaoUtil()` põe em quarentena, na entrada do estado, todo
+documento de ocupação que a agenda não consegue montar — os órfãos que já
+estiverem gravados somem da tela em vez de levar o resto junto.
 
 ## Sobreposição — a transação
 

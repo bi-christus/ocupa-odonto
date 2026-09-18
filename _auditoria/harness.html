@@ -135,9 +135,27 @@
       log('gravarOcupacao ' + agId + '/' + id + ' · índice com ' + global.__indices[agId].length);
       return ok(id);
     },
-    removerOcupacao: function (agId, id) { log('removerOcupacao ' + agId + '/' + id); return ok(true); },
-    desindexarOcupacao: function (agId, id) { log('desindexar ' + agId + '/' + id); return ok(id); },
-    atualizarIndice: function (agId, id) { log('atualizarIndice ' + agId + '/' + id); return ok(true); }
+    /* Estas três mexem no índice DE VERDADE. Enquanto eram no-op, o dublê
+       escondia toda divergência entre o que a tela mostra e o que a transação
+       valida — que é justamente a classe de defeito que o índice existe para
+       criar. */
+    removerOcupacao: function (agId, id) {
+      global.__indices[agId] = (global.__indices[agId] || []).filter(function (i) { return i.id !== id; });
+      log('removerOcupacao ' + agId + '/' + id + ' · índice com ' + global.__indices[agId].length);
+      return ok(true);
+    },
+    desindexarOcupacao: function (agId, id) {
+      global.__indices[agId] = (global.__indices[agId] || []).filter(function (i) { return i.id !== id; });
+      log('desindexar ' + agId + '/' + id + ' · índice com ' + global.__indices[agId].length);
+      return ok(id);
+    },
+    atualizarIndice: function (agId, id, resumo) {
+      var itens = (global.__indices[agId] || []).filter(function (i) { return i.id !== id; });
+      if (resumo) itens.push(resumo);
+      global.__indices[agId] = itens;
+      log('atualizarIndice ' + agId + '/' + id + ' · índice com ' + itens.length);
+      return ok(true);
+    }
   };
 
   /* A impressão real abriria o diálogo do sistema e travaria a verificação:

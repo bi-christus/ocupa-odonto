@@ -31,6 +31,22 @@
     };
   }
 
+  /* Documento de ocupação que a agenda consegue montar. Quarentena de
+     entrada, e não zelo: o antigo "criar pulando as datas em conflito" podia
+     gravar em `ocupacoes` um documento só com `excecoes` — sem `dias`, sem
+     horário —, e a primeira expansão da agenda estourava TypeError em
+     `r.dias.indexOf`, derrubando Agenda, Agora, Painel e Relatórios de todo
+     mundo. O caminho que criava esses órfãos foi fechado em 18/09/2026, mas
+     os que já estiverem gravados continuam chegando pelo onSnapshot.
+     Ignorá-los aqui é o que impede um documento quebrado de derrubar o
+     sistema inteiro — eles somem da tela, que é o que já acontecia na
+     prática, só que sem levar o resto junto. */
+  function ocupacaoUtil(o) {
+    if (!o || !o.inicio || !o.fim) return false;
+    if (o.tipo === 'pontual') return !!o.data;
+    return !!(o.dias && o.dias.length) && !!o.vigenciaInicio && !!o.vigenciaFim;
+  }
+
   /* Traduz o formato do Firestore para o formato que as telas já conhecem.
      Três traduções valem nota:
        autorizados  -> usuarios   (o campo `nivel` vira `perfil`)
@@ -78,6 +94,7 @@
     });
 
     (bruto.ocupacoes || []).forEach(function (o) {
+      if (!ocupacaoUtil(o)) return;
       if (!o.excecoes) o.excecoes = [];
       if (o.tipo === 'pontual') e.pontuais.push(o); else e.recorrencias.push(o);
     });
@@ -105,6 +122,7 @@
       estado.recorrencias = [];
       estado.pontuais = [];
       documentos.forEach(function (o) {
+        if (!ocupacaoUtil(o)) return;
         if (!o.excecoes) o.excecoes = [];
         if (o.tipo === 'pontual') estado.pontuais.push(o); else estado.recorrencias.push(o);
       });
@@ -577,11 +595,11 @@
   }
 
   /* ── Régua de horas da grade ──────────────────────────────────────────
-     Mora aqui, e não na Agenda, porque a versão impressa precisa produzir
-     EXATAMENTE a mesma grade da tela — é o que a impressão promete. Duas
+     Mora aqui, e não na Agenda, porque a tela e a folha impressa precisam
+     abrir e fechar o dia na MESMA hora — é o que a impressão promete. Duas
      cópias da derivação divergiriam na primeira clínica que mudasse de
-     horário, e a folha impressa passaria a mostrar uma semana que não é a
-     que está na tela.
+     horário, e a folha passaria a mostrar uma semana que não é a que está na
+     tela.
 
      A janela nunca é menor que 07h–21h, e cresce com o que existir: os
      horários gravados em cada clínica, os parâmetros do polo e as próprias
@@ -610,9 +628,11 @@
     return [h0, h1];
   }
 
-  /* Distribui ocorrências na linha da hora em que COMEÇAM. O que começa
-     antes da abertura entra na primeira linha e o que começa depois da
-     última entra na última — nada some da grade. */
+  /* Distribui ocorrências na linha da hora em que COMEÇAM. Serve a FOLHA
+     IMPRESSA, que é uma tabela de linhas de hora — na tela a grade passou a
+     posicionar cada bloco pelo horário e a dimensioná-lo pela duração, e não
+     usa mais baldes. O que começa antes da abertura entra na primeira linha e
+     o que começa depois da última entra na última: nada some do papel. */
   function baldesPorHora(itens, h0, h1) {
     var mapa = {};
     itens.forEach(function (o) {
@@ -781,8 +801,23 @@
     }, resumo);
   }
 
-  /* ── Mutações: agenda ─────────────────────────────────────────────── */
+  /* ── Mutações: agenda ─────────────────────────────────────────────────
+     `dados.pular` são as datas que já nascem como exceção — o caminho do
+     botão "Criar pulando as datas em conflito". Elas precisam entrar AQUI,
+     antes da transação, e não por `cancelarOcorrencia` logo depois:
+
+       · o resumo que vai para o índice é congelado em `gravarOcupacaoNaNuvem`
+         com as exceções que a regra tiver NESTE instante. Com a lista vazia,
+         a transação revalida contra as mesmas datas em choque que motivaram o
+         botão e recusa a gravação — o recurso nunca funcionou;
+       · pior, o `cancelarOcorrencia` disparado em seguida grava
+         `set({excecoes}, {merge:true})` no mesmo documento e corre com a
+         transação. Chegando primeiro, cria em `ocupacoes` um documento só com
+         `excecoes` — sem `dias`, sem horário. Esse órfão volta pelo onSnapshot
+         e estoura TypeError em `r.dias.indexOf` dentro de `ocorrenciasDoDia`,
+         derrubando Agenda, Agora, Painel e Relatórios de todo mundo. */
   function criarRecorrencia(dados) {
+    var agora = C.carimbo();
     var r = {
       id: N.novoId('ocupacoes'), tipo: 'recorrente',
       agrupamentoId: dados.agrupamentoId, escopo: dados.escopo || 'a',
@@ -795,8 +830,14 @@
       vigenciaInicio: maiorISO(dados.vigenciaInicio, estado.semestre.inicio),
       vigenciaFim: menorISO(dados.vigenciaFim, estado.semestre.fim),
       periodoLetivo: estado.periodoLetivo,
-      excecoes: [], encerradaEm: null,
-      criadoPor: euId(), criadoEm: C.carimbo(),
+      excecoes: (dados.pular || []).map(function (d) {
+        return {
+          data: d, motivo: dados.motivoPular || 'Data em conflito no lançamento da recorrência',
+          registradoPor: euId(), registradoEm: agora
+        };
+      }),
+      encerradaEm: null,
+      criadoPor: euId(), criadoEm: agora,
       observacao: dados.observacao || ''
     };
     estado.recorrencias.push(r);

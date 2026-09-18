@@ -13,6 +13,12 @@
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI, D = global.Dados;
 
+  /* Valor do "Outros" no campo de vínculo da atividade pontual. Mora fora de
+     montar() porque é usado na primeira linha da montagem do formulário, antes
+     de o corpo da função chegar às declarações locais — como `var`, ele ainda
+     valeria `undefined` ali dentro. */
+  var SEM_VINCULO = 'outros';
+
   /* `inteiroDe` saiu junto com o campo de quantidade de cadeiras: não há mais
      número digitado para sanear. A reserva é sempre o escopo inteiro. */
 
@@ -81,6 +87,9 @@
     };
     aplicarInicial(opcoes.inicial);
     encaixarNaJanela();
+    /* O vínculo nasce preenchido: a primeira opção do tipo, ou "Outros"
+       quando não há nenhuma. Nunca em branco. */
+    ajustarVinculo();
 
     var raiz = C.clear(alvo);
     var corpo = C.el('div');
@@ -130,6 +139,7 @@
          modo, onde ele ficaria invisível até a hora de gravar. */
       form.observacao = '';
       form.descricao = '';
+      ajustarVinculo();
       desenhar();
     }
 
@@ -178,6 +188,14 @@
       var fim = Math.min(Math.max(C.toMin(form.fim), ab), fe);
       if (fim <= ini) fim = Math.min(fe, ini + duracaoMinima());
       if (fim <= ini) ini = Math.max(ab, fim - duracaoMinima());
+      /* Puxa o início para trás quando a faixa mínima não cabe daqui até o
+         fechamento. Clicar na última linha da grade — 21:00, com a clínica
+         fechando às 22:00 — abria um formulário de 60 minutos que a validação
+         recusava por faixa mínima: um beco sem saída, e sem pista do motivo. */
+      if (fim - ini < duracaoMinima() && fe - ab >= duracaoMinima()) {
+        fim = Math.min(fe, ini + duracaoMinima());
+        ini = fim - duracaoMinima();
+      }
       form.inicio = C.fromMin(ini);
       form.fim = C.fromMin(fim);
     }
@@ -210,6 +228,39 @@
         form.dias = [C.weekday(ini.data)];
         if (ini.data >= lim.inicio && ini.data <= lim.fim) form.vigenciaInicio = ini.data;
       }
+      encaixarNaJanela();
+      /* Sem clínica apontada — o clique na grade da semana é por dia e hora,
+         não por clínica — a escolhida é a primeira LIVRE naquele horário, e
+         não a primeira da lista. Cair sempre na Clínica 1 fazia o formulário
+         abrir já bloqueado por choque sempre que ela estivesse ocupada, com
+         as outras sete vazias ao lado; na tela isso se lê como "a agenda não
+         deixa lançar", e não como "troque de clínica". */
+      if (!achou && C.dataValida(form.data)) {
+        var vago = primeiroEscopoLivre(form.data, form.inicio, form.fim);
+        if (vago) {
+          form.agrupamentoId = vago.agrupamentoId;
+          form.escopo = vago.escopo;
+        }
+      }
+    }
+
+    /* Primeira clínica sem choque no horário, varrendo os agrupamentos na
+       ordem em que aparecem no seletor. Devolve null quando todas estão
+       ocupadas — aí o formulário abre na primeira mesmo, e o aviso de choque
+       é a resposta correta: não há para onde mandar. */
+    function primeiroEscopoLivre(data, inicio, fim) {
+      var achado = null;
+      agrupamentosValidos.forEach(function (g) {
+        if (achado) return;
+        var cls = S.clinicasDoAgrupamento(g.id);
+        ['a', 'b'].forEach(function (esc, i) {
+          if (achado || i >= cls.length) return;
+          if (!S.conflitos(g.id, esc, [data], inicio, fim).length) {
+            achado = { agrupamentoId: g.id, escopo: esc };
+          }
+        });
+      });
+      return achado;
     }
 
     function valorEscopo(agrupamentoId, escopo) { return agrupamentoId + '|' + escopo; }
@@ -353,15 +404,55 @@
     }
 
     /* ── Campos ───────────────────────────────────────────────────── */
-    function opcoesTurma(lista, comVazio) {
-      var arr = comVazio ? [{ valor: '', rotulo: '— sem turma vinculada —' }] : [];
-      if (!comVazio && !lista.length) arr.push({ valor: '', rotulo: '— nenhuma turma disponível —' });
-      /* Pelo rótulo longo do Store: na graduação dá o mesmo texto de sempre
-         ("ODO-101 T1 · Clínica Integrada") e na pós dá "Pós-graduação ·
-         Implantodontia", em vez do código interno da especialização. */
+    /* Lista do modo RECORRENTE, onde a turma é obrigatória e não existe
+       "Outros": sem turma não há de quem herdar o professor coordenador que
+       responde pela reserva. Pelo rótulo longo do Store — na graduação dá o
+       texto de sempre ("ODO-101 T1 · Clínica Integrada") e na pós dá
+       "Pós-graduação · Implantodontia", em vez do código interno. */
+    function opcoesTurma(lista) {
+      var arr = lista.length ? [] : [{ valor: '', rotulo: '— nenhuma turma disponível —' }];
       return arr.concat(lista.map(function (t) {
         return { valor: t.id, rotulo: S.rotuloTurmaLongo(t) };
       }));
+    }
+
+    /* ── Vínculo da atividade pontual ─────────────────────────────────
+       O vínculo segue o TIPO: "Graduação" lista turmas da graduação,
+       "Pós-graduação" lista especializações. Uma lista só com as duas coisas
+       dentro era o que fazia o campo continuar oferecendo turma depois de a
+       pessoa escolher pós.
+
+       Isto vale SÓ no modo pontual. No recorrente a lista continua única e
+       misturada, porque a reserva recorrente da pós também aponta para a
+       turma que o sistema mantém por trás da especialização — separar ali
+       deixaria a pós sem como ocupar clínica toda semana. */
+    function vinculosDoTipo(tipo) {
+      return turmasVisiveis.filter(function (t) {
+        var pos = S.ehEspecializacao(S.disciplinaDaTurma(t));
+        return tipo === 'pos' ? pos : !pos;
+      });
+    }
+    /* "Outros" é opção de verdade, com valor próprio — e não a linha em branco
+       que existia aqui antes. O campo é obrigatório e nunca aparece vazio; o
+       valor não chega ao Firestore, `vinculoGravavel` o traduz para null. */
+    function opcoesVinculo(lista) {
+      return lista.map(function (t) {
+        return { valor: t.id, rotulo: S.rotuloTurmaLongo(t) };
+      }).concat([{ valor: SEM_VINCULO, rotulo: 'Outros' }]);
+    }
+    function vinculoGravavel() {
+      return form.turmaVinculada && form.turmaVinculada !== SEM_VINCULO
+        ? form.turmaVinculada : null;
+    }
+    /* Trocar o tipo troca a lista inteira, e a escolha anterior pode não
+       existir mais nela — turma da graduação selecionada, tipo vira pós.
+       Sem este reencaixe o select ficaria mostrando um valor que a lista não
+       contém, que é justamente o campo em branco que se quer evitar. */
+    function ajustarVinculo() {
+      var lista = vinculosDoTipo(form.tipoAtividade);
+      var valido = form.turmaVinculada === SEM_VINCULO;
+      lista.forEach(function (t) { if (t.id === form.turmaVinculada) valido = true; });
+      if (!valido) form.turmaVinculada = lista.length ? lista[0].id : SEM_VINCULO;
     }
     function opcoesResponsavel() {
       return e.usuarios.filter(function (x) {
@@ -427,12 +518,17 @@
         }
 
         /* Não existe mais campo de título: o nome da atividade é derivado do
-           tipo e da turma (ou de quem pediu, quando não há turma). */
+           tipo e da turma (ou de quem pediu, quando não há turma).
+           Trocar o tipo REDESENHA, e não só atualiza: é o tipo que define
+           qual lista o campo de vínculo mostra e como ele se chama. */
+        var ehPos = form.tipoAtividade === 'pos';
+        var nomeVinculo = ehPos ? 'especialização' : 'turma';
         corpo.appendChild(C.el('div', { class: 'grid-fields' }, [
           U.campo('Tipo', U.selecao(D.TIPOS_ATIVIDADE.map(function (t) {
             return { valor: t.id, rotulo: t.rotulo };
-          }), form.tipoAtividade, function (v) { form.tipoAtividade = v; atualizar(); }),
-            'o nome da atividade vem do tipo e da turma')
+          }), form.tipoAtividade, function (v) {
+            form.tipoAtividade = v; ajustarVinculo(); desenhar();
+          }), 'o nome da atividade vem do tipo e da ' + nomeVinculo)
         ]));
 
         corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
@@ -452,9 +548,10 @@
         corpo.appendChild(avisoDaReserva());
 
         corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
-          U.campo('Turma vinculada', U.selecao(opcoesTurma(turmasVisiveis, true), form.turmaVinculada, function (v) {
-            form.turmaVinculada = v; atualizar();
-          }), 'opcional'),
+          U.campo(ehPos ? 'Especialização' : 'Turma vinculada',
+            U.selecao(opcoesVinculo(vinculosDoTipo(form.tipoAtividade)), form.turmaVinculada,
+              function (v) { form.turmaVinculada = v; atualizar(); }),
+            'obrigatório — escolha "Outros" se não houver ' + nomeVinculo),
           U.campo('Professor coordenador', U.selecao(opcoesResponsavel(), form.responsavelId, function (v) {
             form.responsavelId = v; atualizar();
           }, u.perfil === 'professor' ? { disabled: true } : null))
@@ -542,6 +639,13 @@
           erros.push('A data precisa ficar entre ' + C.fmtDiaAno(minPontual) + ' e ' + C.fmtDiaAno(l.fim) + '.');
         }
         if (!form.responsavelId || !S.pessoa(form.responsavelId)) erros.push('Informe o professor coordenador.');
+        /* O vínculo deixou de ser opcional. "Outros" é resposta válida — o que
+           não é válido é o campo vazio, que era o estado inicial antigo. */
+        if (!form.turmaVinculada) {
+          erros.push(form.tipoAtividade === 'pos'
+            ? 'Selecione a especialização, ou escolha "Outros".'
+            : 'Selecione a turma vinculada, ou escolha "Outros".');
+        }
       }
       return erros;
     }
@@ -659,23 +763,21 @@
       /* Reconferência: turma vazia estoura na expansão da regra e derruba
          todas as telas que leem a agenda, não só esta. */
       if (!S.pode('agenda.criarRecorrente') || !form.turmaId || !S.turma(form.turmaId)) return null;
+      /* As datas puladas vão JUNTO na criação. Gravá-las depois, por
+         `cancelarOcorrencia`, era uma segunda escrita correndo com a
+         transação da primeira — e o resumo que a transação leva para o índice
+         sairia sem elas, fazendo a própria gravação ser recusada pelo choque
+         que o botão existe para contornar. */
       var r = S.criarRecorrencia({
         agrupamentoId: form.agrupamentoId, escopo: form.escopo,
         turmaId: form.turmaId, dias: form.dias,
         inicio: form.inicio, fim: form.fim,
         vigenciaInicio: form.vigenciaInicio, vigenciaFim: form.vigenciaFim,
-        observacao: form.observacao
+        observacao: form.observacao,
+        pular: pular || []
       });
       var total = datasAlvo().length;
-      if (r && pular && pular.length) {
-        pular.forEach(function (d) {
-          S.cancelarOcorrencia({
-            origem: 'recorrente', origemId: r.id, data: d,
-            chave: 'r:' + r.id + ':' + d
-          }, 'Data em conflito no lançamento da recorrência');
-        });
-        total = Math.max(0, total - pular.length);
-      }
+      if (r && pular && pular.length) total = Math.max(0, total - pular.length);
       C.toast('Recorrência criada · ' + C.plural(total, 'encontro', 'encontros') +
         ' até ' + C.fmtDiaAno(form.vigenciaFim));
       return r;
@@ -694,7 +796,9 @@
           data: form.data, inicio: form.inicio, fim: form.fim,
           tipoAtividade: form.tipoAtividade,
           descricao: form.descricao,
-          turmaId: form.turmaVinculada || null, responsavelId: form.responsavelId
+          /* `vinculoGravavel` traduz "Outros" para null: o valor é do
+             formulário e não do modelo, e o Firestore não pode recebê-lo. */
+          turmaId: vinculoGravavel(), responsavelId: form.responsavelId
         });
         C.toast(res && res.situacao === 'pendente'
           ? 'Pedido enviado para a coordenação — vale só depois de aprovado.'

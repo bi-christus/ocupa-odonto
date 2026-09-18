@@ -262,76 +262,166 @@
   }
 
   /* ── Semana ───────────────────────────────────────────────────────────
-     Calendário com eixo de horas: 58px de rótulo mais seis colunas de dia.
-     Sem o eixo a tela virava uma lista por coluna, sem nenhuma referência
-     de horário. Cada bloco cai na linha da hora em que começa. */
+     Calendário de verdade: 58px de régua de horas mais seis colunas de dia,
+     e o bloco de cada ocupação POSICIONADO E DIMENSIONADO pelo horário — o
+     topo sai do início, a altura sai da duração. Antes o bloco era jogado no
+     balde da hora em que começava, todos do mesmo tamanho: uma reserva de
+     07:40 às 11:20 parecia durar o mesmo que uma de duas horas, e a coluna
+     não dizia nada sobre ocupação real da clínica.
+
+     Ocupações que se cruzam no tempo dividem a largura entre si, como em
+     qualquer agenda. A faixa da direita (LARGURA_GUTTER) fica reservada e
+     nenhum bloco a ocupa: é o que garante um alvo de clique em QUALQUER
+     horário, por mais cheia que a coluna esteja — sem ela, dois blocos lado
+     a lado tomam a coluna inteira e lançar uma terceira turma no mesmo
+     horário vira impossível, que foi o defeito relatado. */
+  var ALTURA_HORA = 46;
+  var LARGURA_GUTTER = 15;
+
   function gradeSemana() {
     var hoje = C.hojeISO();
-    var dias = [], datas = [], total = 0, i, h;
+    var datas = [], total = 0, i;
 
     for (i = 0; i < 6; i++) datas.push(C.addDays(refSemana, i));
     var janela = S.janelaHoras(datas);
     var H0 = janela[0], H1 = janela[1];
+    var altura = (H1 - H0 + 1) * ALTURA_HORA;
 
-    for (i = 0; i < 6; i++) {
-      var itens = S.ocorrenciasDoDia(datas[i]);
-      total += itens.length;
-      dias.push({ data: datas[i], baldes: S.baldesPorHora(itens, H0, H1) });
-    }
-
-    var topoFixo = 'position:sticky;top:0;z-index:2;background:var(--color-bg);';
+    var topoFixo = 'position:sticky;top:0;z-index:3;background:var(--color-bg);';
     var grade = C.el('div', {
       style: 'display:grid;grid-template-columns:58px repeat(6,minmax(104px,1fr));gap:0 8px'
     });
     grade.appendChild(C.el('div', { style: topoFixo + 'height:30px' }));
-    dias.forEach(function (d) {
+    /* O cabeçalho do dia carrega o mesmo sinal da coluna: hoje em destaque,
+       dia passado apagado. Sem legenda e sem texto explicativo — é a coluna
+       inteira que muda de tom, e isso basta para a pessoa parar de tentar. */
+    datas.forEach(function (d) {
       grade.appendChild(C.el('div', {
         style: topoFixo + 'padding-bottom:8px;font:600 13px var(--font-heading);' +
           'letter-spacing:.05em;white-space:nowrap;color:' +
-          (d.data === hoje ? 'var(--accent-ink)' : 'var(--color-text)')
+          (d === hoje ? 'var(--accent-ink)'
+            : d < hoje ? 'var(--muted-2)' : 'var(--color-text)')
       }, [
-        C.nomeDia(C.weekday(d.data)) + ' ',
-        C.el('span', { style: 'color:var(--muted);font-weight:400', text: C.fmtDia(d.data) })
+        C.nomeDia(C.weekday(d)) + ' ',
+        C.el('span', { style: 'color:var(--muted);font-weight:400', text: C.fmtDia(d) })
       ]));
     });
 
-    for (h = H0; h <= H1; h++) {
-      grade.appendChild(C.el('div', {
-        style: 'font-size:11.5px;color:var(--muted-2);padding:9px 0;' +
-          'border-top:1px solid var(--line-soft);font-variant-numeric:tabular-nums',
-        text: C.pad(h) + ':00'
+    var regua = C.el('div', { class: 'wk-regua', style: 'height:' + altura + 'px' });
+    for (i = H0; i <= H1; i++) {
+      regua.appendChild(C.el('div', {
+        class: 'wk-hora', style: 'top:' + ((i - H0) * ALTURA_HORA) + 'px',
+        text: C.pad(i) + ':00'
       }));
-      for (i = 0; i < dias.length; i++) grade.appendChild(celulaDaGrade(dias[i], h));
     }
+    grade.appendChild(regua);
+
+    datas.forEach(function (d) {
+      var itens = S.ocorrenciasDoDia(d);
+      total += itens.length;
+      grade.appendChild(colunaDoDia(d, itens, H0, H1, altura));
+    });
 
     return C.el('div', {}, [
-      C.el('div', { style: 'max-height:600px;overflow:auto' }, grade),
+      C.el('div', { style: 'max-height:640px;overflow:auto' }, grade),
       total ? null : C.el('div', { class: 'muted', style: 'padding:14px 0;font-size:12.5px',
         text: 'Nenhuma ocupação registrada nesta semana.' }),
       legendaSemana()
     ]);
   }
 
-  /* Célula da grade — e, para quem pode lançar, o alvo do clique que abre o
-     formulário já preenchido com o dia e a hora, como numa agenda de
-     calendário. O clique só vale no VAZIO da célula: sobre o bloco de uma
-     ocupação quem responde é o detalhe dela. */
-  function celulaDaGrade(dia, hora) {
-    var livre = podeCriarEm(dia.data);
-    var itens = dia.baldes[hora] || [];
-    var cel = C.el('div', {
-      class: 'wk-cel' + (livre ? ' livre' : '') + (itens.length ? '' : ' vazia')
+  /* Reparte as ocorrências de um dia em colunas lado a lado: quem se cruza no
+     tempo divide a largura, quem não se cruza reaproveita a mesma coluna. O
+     agrupamento é por CACHO de sobreposição — um bloco solto no fim do dia
+     não fica espremido por causa de dois que se cruzaram de manhã. */
+  function disporEmColunas(itens) {
+    var ordenados = itens.slice().sort(function (a, b) {
+      return C.toMin(a.inicio) - C.toMin(b.inicio) || C.toMin(b.fim) - C.toMin(a.fim);
     });
-    itens.forEach(function (o) { cel.appendChild(evento(o)); });
-    if (livre) {
-      cel.setAttribute('title', 'Lançar ocupação · ' + C.nomeDia(C.weekday(dia.data)) + ' ' +
-        C.fmtDia(dia.data) + ' às ' + C.pad(hora) + ':00');
-      cel.addEventListener('click', function (ev) {
-        if (ev.target !== cel) return;
-        novaOcupacao({ data: dia.data, inicio: C.pad(hora) + ':00' });
+    var saida = [], cacho = [], fimDoCacho = -1;
+
+    function fechar() {
+      if (!cacho.length) return;
+      var colunas = [];
+      cacho.forEach(function (d) {
+        var c = 0;
+        while (c < colunas.length && colunas[c] > C.toMin(d.o.inicio)) c++;
+        colunas[c] = C.toMin(d.o.fim);
+        d.coluna = c;
       });
+      cacho.forEach(function (d) { d.total = colunas.length; saida.push(d); });
+      cacho = [];
+      fimDoCacho = -1;
     }
-    return cel;
+
+    ordenados.forEach(function (o) {
+      if (cacho.length && C.toMin(o.inicio) >= fimDoCacho) fechar();
+      cacho.push({ o: o, coluna: 0, total: 1 });
+      fimDoCacho = Math.max(fimDoCacho, C.toMin(o.fim));
+    });
+    fechar();
+    return saida;
+  }
+
+  function colunaDoDia(data, itens, H0, H1, altura) {
+    var livre = podeCriarEm(data);
+    var ini = H0 * 60, fim = (H1 + 1) * 60;
+    /* A hachura diz "passado", e não "sem permissão": vale para os três
+       perfis, inclusive para quem não lança nada. Dia passado nunca é
+       `livre`, então as duas classes não se encontram. */
+    var col = C.el('div', {
+      class: 'wk-col' + (livre ? ' livre' : '') + (data < C.hojeISO() ? ' passado' : ''),
+      style: 'height:' + altura + 'px'
+    });
+    for (var h = H0; h <= H1; h++) {
+      col.appendChild(C.el('div', {
+        class: 'wk-linha', style: 'top:' + ((h - H0) * ALTURA_HORA) + 'px'
+      }));
+    }
+
+    disporEmColunas(itens).forEach(function (d) {
+      var a = Math.max(ini, C.toMin(d.o.inicio)), b = Math.min(fim, C.toMin(d.o.fim));
+      if (b <= a) return;
+      var largura = 'calc((100% - ' + LARGURA_GUTTER + 'px) / ' + d.total + ')';
+      col.appendChild(evento(d.o,
+        'top:' + ((a - ini) / 60 * ALTURA_HORA) + 'px;' +
+        'height:' + Math.max(20, (b - a) / 60 * ALTURA_HORA - 2) + 'px;' +
+        'left:calc((100% - ' + LARGURA_GUTTER + 'px) * ' + (d.coluna / d.total) + ');' +
+        'width:' + largura));
+    });
+
+    if (livre) ligarLancamento(col, data, ini, fim);
+    return col;
+  }
+
+  /* O clique na coluna vira horário pelo eixo Y, encaixado em meia hora. O
+     fantasma segue o cursor mostrando exatamente onde o bloco vai cair e que
+     tamanho vai ter: é o convite para clicar, no lugar de um "+" escondido
+     num canto. */
+  function ligarLancamento(col, data, ini, fim) {
+    var minimo = Math.max(60, Number((S.estado.parametros || {}).faixaMinimaMin) || 120);
+    var fantasma = C.el('div', { class: 'wk-fantasma' }, C.el('span', { text: '+ lançar' }));
+    col.appendChild(fantasma);
+
+    function minutoDe(ev) {
+      var r = col.getBoundingClientRect();
+      var m = ini + ((ev.clientY - r.top) / ALTURA_HORA) * 60;
+      m = Math.floor(m / 30) * 30;
+      return Math.max(ini, Math.min(m, fim - 30));
+    }
+    col.addEventListener('mousemove', function (ev) {
+      /* Sobre um bloco não há convite: ali o clique abre o detalhe dele. */
+      if (ev.target !== col) { fantasma.className = 'wk-fantasma'; return; }
+      var m = minutoDe(ev);
+      fantasma.style.top = ((m - ini) / 60 * ALTURA_HORA) + 'px';
+      fantasma.style.height = (Math.min(minimo, fim - m) / 60 * ALTURA_HORA) + 'px';
+      fantasma.className = 'wk-fantasma on';
+    });
+    col.addEventListener('mouseleave', function () { fantasma.className = 'wk-fantasma'; });
+    col.addEventListener('click', function (ev) {
+      if (ev.target !== col) return;
+      novaOcupacao({ data: data, inicio: C.fromMin(minutoDe(ev)) });
+    });
   }
 
   /* ── Lançamento pelo clique na grade ──────────────────────────────────
@@ -360,12 +450,15 @@
     return C.fromMin(Math.min(23 * 60 + 55, C.toMin(inicio) + min));
   }
 
-  function evento(o) {
+  /* `estilo` traz posição e tamanho calculados pela coluna do dia: o bloco é
+     absoluto dentro dela, com a altura proporcional à duração. */
+  function evento(o, estilo) {
     var rot = S.rotuloEscopo(o.agrupamentoId, o.escopo);
     return C.el('button', {
       class: classeEvento(o, 'ev'),
-      style: 'margin:0;width:100%',
-      title: rot + ' · ' + o.inicio + '–' + o.fim + ' · ' + o.titulo,
+      style: estilo,
+      title: rot + ' · ' + o.inicio + '–' + o.fim + ' · ' + o.titulo +
+        ' · ' + C.fmtHoras(C.duracaoH(o.inicio, o.fim)),
       onclick: function () { detalhe(o); }
     }, [
       C.el('b', { text: rot }),
@@ -400,8 +493,10 @@
       (function (i) {
         var d = C.addDays(refSemana, i);
         var on = diaSel === d;
+        /* Dia passado continua consultável — só não aceita lançamento. O chip
+           fica apagado pelo mesmo motivo do cabeçalho da semana. */
         seletor.appendChild(C.el('button', {
-          class: 'chip-btn',
+          class: 'chip-btn' + (!on && d < C.hojeISO() ? ' passado' : ''),
           style: on ? 'background:var(--fill-strong);color:var(--on-strong);border-color:var(--fill-strong)' : '',
           'aria-pressed': on ? 'true' : 'false',
           text: C.nomeDia(C.weekday(d)) + ' ' + C.fmtDia(d),
@@ -432,7 +527,8 @@
     var altura = ALTURA_FAIXA * faixas;
     var livre = podeCriarEm(diaSel);
     var trilha = C.el('div', {
-      class: 'tl-track' + (livre ? ' livre' : ''),
+      class: 'tl-track' + (livre ? ' livre' : '') +
+        (diaSel < C.hojeISO() ? ' passado' : ''),
       style: 'height:' + altura + 'px;padding:0'
     });
 

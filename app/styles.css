@@ -215,21 +215,45 @@ select.input{appearance:none;padding-right:26px;
 .wk-hd{padding:10px 12px;border-bottom:1px solid var(--color-divider);font:600 13px var(--font-heading);letter-spacing:.05em}
 .wk-hd small{color:var(--muted);font-weight:400;margin-left:5px}
 .wk-hd.hoje{color:var(--accent-ink)}
-/* Célula da grade da semana. `.livre` é onde o clique lança ocupação, à
-   maneira de uma agenda de calendário; `.vazia` é a célula sem nenhum bloco,
-   a única que ganha o rótulo de convite no hover — com bloco dentro, o
-   rótulo empurraria a ocupação para baixo a cada passada do mouse. */
-.wk-cel{display:flex;flex-direction:column;gap:4px;min-height:42px;padding:6px 0;
-  border-top:1px solid var(--line-soft)}
-.wk-cel.livre{cursor:pointer}
-.wk-cel.livre:hover{background:color-mix(in srgb,var(--accent-ink) 7%,transparent);
-  box-shadow:inset 0 0 0 1px var(--fill-strong)}
-.wk-cel.livre.vazia:hover::after{content:'+ lançar';font:600 11px var(--font-heading);
-  letter-spacing:.05em;color:var(--accent-ink);padding:0 6px;pointer-events:none}
+/* Coluna de um dia na grade da semana. Os blocos são ABSOLUTOS dentro dela:
+   o topo sai do horário de início e a altura sai da duração, como em qualquer
+   agenda de calendário. A régua da esquerda usa as mesmas coordenadas. */
+.wk-regua{position:relative}
+.wk-hora{position:absolute;right:9px;margin-top:-6px;font-size:11.5px;color:var(--muted-2);
+  line-height:1;font-variant-numeric:tabular-nums}
+.wk-col{position:relative;border-bottom:1px solid var(--line-soft);overflow:hidden}
+.wk-linha{position:absolute;left:0;right:0;height:1px;background:var(--line-soft);
+  pointer-events:none}
+.wk-col.livre{cursor:pointer}
+
+/* O fantasma segue o cursor e mostra onde o bloco vai cair e que tamanho vai
+   ter. É ele o convite para clicar — some sobre um bloco já existente, porque
+   ali o clique pertence ao detalhe da ocupação. */
+.wk-fantasma{position:absolute;left:0;right:0;display:none;pointer-events:none;
+  border:1px dashed var(--fill-strong);
+  background:color-mix(in srgb,var(--accent-ink) 9%,transparent)}
+.wk-fantasma.on{display:block}
+.wk-fantasma span{display:block;padding:3px 6px;font:600 11px var(--font-heading);
+  letter-spacing:.05em;color:var(--accent-ink)}
 .tl-track.livre{cursor:pointer}
 .tl-track.livre:hover{background:color-mix(in srgb,var(--accent-ink) 5%,transparent)}
-.ev{margin:7px 9px 0;padding:7px 9px;background:var(--fill-soft);color:var(--on-soft);border:0;border-left:3px solid var(--fill-strong);
-  font-size:12px;line-height:1.4;text-align:left;width:calc(100% - 18px);display:block}
+
+/* Dia passado: não aceita lançamento, e diz isso sem uma palavra. Hachura
+   diagonal de baixo contraste, que se lê como "área fora de uso" e não se
+   confunde com bloco de ocupação — os blocos são opacos e continuam legíveis
+   por cima dela. Vale nas duas vistas e nos dois temas, porque a cor vem de
+   --line-soft. */
+.wk-col.passado,.tl-track.passado{
+  background-image:repeating-linear-gradient(135deg,
+    transparent 0 5px,var(--line-soft) 5px 6px);
+  cursor:not-allowed}
+.chip-btn.passado{color:var(--muted-2);border-color:var(--line-soft)}
+/* Bloco de ocupação na grade da semana. Absoluto: quem manda em topo, altura,
+   esquerda e largura é a coluna do dia, pelo horário. O anel de 1px separa
+   blocos vizinhos sem comer largura deles. */
+.ev{position:absolute;padding:5px 7px;background:var(--fill-soft);color:var(--on-soft);border:0;
+  border-left:3px solid var(--fill-strong);box-shadow:0 0 0 1px var(--color-bg);
+  font-size:12px;line-height:1.35;text-align:left;display:block;overflow:hidden}
 .ev:hover{filter:brightness(.96)}
 .ev b{display:block;font:600 12px var(--font-heading);letter-spacing:.03em}
 .ev.pontual{border-left-style:dashed}
