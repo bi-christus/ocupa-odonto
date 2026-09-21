@@ -394,13 +394,24 @@
     return col;
   }
 
-  /* O clique na coluna vira horário pelo eixo Y, encaixado em meia hora. O
-     fantasma segue o cursor mostrando exatamente onde o bloco vai cair e que
-     tamanho vai ter: é o convite para clicar, no lugar de um "+" escondido
-     num canto. */
+  /* Arraste para escolher o horário, à maneira de uma agenda de calendário:
+     o botão desce numa hora, arrasta e solta noutra, e o formulário abre com
+     a faixa inteira já escolhida. O eixo Y da coluna vira horário, encaixado
+     em meia hora.
+
+     NÃO EXISTE MAIS `click` AQUI, e é de propósito: clicar sem arrastar é o
+     arraste de comprimento zero, que a mesma conta resolve. Manter os dois
+     abriria o formulário duas vezes no mesmo gesto.
+
+     O arraste é um por vez e mora fora da função — as outras cinco colunas
+     precisam se calar enquanto ele existe, senão o fantasma delas pisca ao
+     passar o cursor por cima durante o gesto. */
+  var arrastando = null;
+
   function ligarLancamento(col, data, ini, fim) {
     var minimo = Math.max(60, Number((S.estado.parametros || {}).faixaMinimaMin) || 120);
-    var fantasma = C.el('div', { class: 'wk-fantasma' }, C.el('span', { text: '+ lançar' }));
+    var rotulo = C.el('span');
+    var fantasma = C.el('div', { class: 'wk-fantasma' }, rotulo);
     col.appendChild(fantasma);
 
     function minutoDe(ev) {
@@ -409,18 +420,68 @@
       m = Math.floor(m / 30) * 30;
       return Math.max(ini, Math.min(m, fim - 30));
     }
-    col.addEventListener('mousemove', function (ev) {
-      /* Sobre um bloco não há convite: ali o clique abre o detalhe dele. */
-      if (ev.target !== col) { fantasma.className = 'wk-fantasma'; return; }
-      var m = minutoDe(ev);
-      fantasma.style.top = ((m - ini) / 60 * ALTURA_HORA) + 'px';
-      fantasma.style.height = (Math.min(minimo, fim - m) / 60 * ALTURA_HORA) + 'px';
+
+    /* A faixa vai do slot onde o botão desceu até o slot sob o cursor,
+       inclusive — daí o +30. Nunca menor que a faixa mínima, que é o que a
+       validação aceita: arrastar 30 minutos e receber um formulário recusado
+       seria ensinar a regra pelo erro. Arrastar para CIMA vale igual, o topo
+       é só o menor dos dois. */
+    function faixa(a, b) {
+      var topo = Math.min(a, b);
+      var base = Math.max(a, b) + 30;
+      if (base - topo < minimo) base = topo + minimo;
+      if (base > fim) { base = fim; topo = Math.min(topo, fim - minimo); }
+      if (topo < ini) topo = ini;
+      return { topo: topo, base: base };
+    }
+    function mostrar(f) {
+      fantasma.style.top = ((f.topo - ini) / 60 * ALTURA_HORA) + 'px';
+      fantasma.style.height = ((f.base - f.topo) / 60 * ALTURA_HORA) + 'px';
+      /* O rótulo diz a faixa, e não "lançar": durante o arraste é essa
+         informação que a pessoa está procurando na tela. */
+      rotulo.textContent = C.fromMin(f.topo) + '–' + C.fromMin(f.base);
       fantasma.className = 'wk-fantasma on';
+    }
+    function esconder() { fantasma.className = 'wk-fantasma'; }
+
+    col.addEventListener('mousemove', function (ev) {
+      if (arrastando) return;
+      /* Sobre um bloco não há convite: ali o clique abre o detalhe dele. */
+      if (ev.target !== col) { esconder(); return; }
+      mostrar(faixa(minutoDe(ev), minutoDe(ev)));
     });
-    col.addEventListener('mouseleave', function () { fantasma.className = 'wk-fantasma'; });
-    col.addEventListener('click', function (ev) {
-      if (ev.target !== col) return;
-      novaOcupacao({ data: data, inicio: C.fromMin(minutoDe(ev)) });
+    col.addEventListener('mouseleave', function () { if (!arrastando) esconder(); });
+
+    col.addEventListener('mousedown', function (ev) {
+      if (ev.button !== 0 || ev.target !== col) return;
+      /* Sem isto o navegador entende o gesto como seleção de texto e pinta a
+         coluna de azul enquanto se arrasta. */
+      ev.preventDefault();
+      var origem = minutoDe(ev);
+      arrastando = { origem: origem, atual: origem };
+      mostrar(faixa(origem, origem));
+      document.documentElement.className += ' arrastando-agenda';
+
+      /* Os ouvintes vão no documento, não na coluna: o cursor sai dela o
+         tempo todo durante um arraste, e soltar o botão lá fora não pode
+         deixar o gesto pela metade. */
+      function mover(e) {
+        if (!arrastando) return;
+        arrastando.atual = minutoDe(e);
+        mostrar(faixa(arrastando.origem, arrastando.atual));
+      }
+      function soltar() {
+        document.removeEventListener('mousemove', mover);
+        document.removeEventListener('mouseup', soltar);
+        document.documentElement.className =
+          document.documentElement.className.replace(/\s*arrastando-agenda/, '');
+        var f = faixa(arrastando.origem, arrastando.atual);
+        arrastando = null;
+        esconder();
+        novaOcupacao({ data: data, inicio: C.fromMin(f.topo), fim: C.fromMin(f.base) });
+      }
+      document.addEventListener('mousemove', mover);
+      document.addEventListener('mouseup', soltar);
     });
   }
 

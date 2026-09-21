@@ -312,10 +312,28 @@ aceita `{ data, inicio, fim, agrupamentoId, escopo }` e **confere tudo** antes
 de entrar no formulário, porque clique devolve coordenada de tela, não
 garantia de que o agrupamento existe ou de que a data cabe no semestre.
 
-- **Semana:** o eixo Y da coluna do dia vira horário, encaixado em meia hora.
-  Um **fantasma** segue o cursor mostrando onde o bloco vai cair e que tamanho
-  vai ter — é ele o convite para clicar, e ele some sobre um bloco existente,
-  porque ali o clique pertence ao detalhe da ocupação.
+- **Semana: pressiona, arrasta e solta**, como numa agenda de calendário. O
+  eixo Y da coluna vira horário, encaixado em meia hora, e o **fantasma**
+  mostra a faixa escolhida com os horários escritos dentro. Ele some sobre um
+  bloco existente, porque ali o gesto pertence ao detalhe da ocupação.
+- **Não existe mais ouvinte de `click` na coluna, e isso é de propósito.**
+  Clicar sem arrastar é o arraste de comprimento zero, que a mesma conta
+  resolve (vira a faixa mínima). Manter os dois abria o formulário duas vezes
+  no mesmo gesto.
+- A faixa arrastada é **inclusiva** do slot sob o cursor (daí o `+30`), nunca
+  menor que a faixa mínima, e arrastar **para cima** vale igual — o topo é o
+  menor dos dois pontos. Passar do fechamento encosta no fim e puxa o começo
+  para trás, em vez de gerar uma faixa que a validação recusaria.
+- Os ouvintes de `mousemove`/`mouseup` do arraste vão no **documento**, não na
+  coluna: o cursor sai dela o tempo todo durante o gesto, e soltar o botão lá
+  fora não pode deixar o arraste pela metade. `arrastando` é um só, de módulo,
+  para as outras cinco colunas se calarem enquanto ele existe.
+- `mousedown` chama `preventDefault()` e `<html>` ganha `.arrastando-agenda`
+  (que desliga `user-select`): sem isso o navegador entende o gesto como
+  seleção de texto e pinta meia tela de azul.
+- O que **não** existe: rolagem automática quando o arraste passa do fim da
+  área visível da grade. A faixa fica presa no limite, e a pessoa rola e
+  ajusta o horário no formulário.
 - **A faixa de 15px à direita de cada coluna é reservada e nenhum bloco a
   ocupa.** Não é margem: é o que garante alvo de clique em QUALQUER horário,
   por mais cheia que a coluna esteja. Sem ela, duas ocupações lado a lado
@@ -348,9 +366,10 @@ garantia de que o agrupamento existe ou de que a data cabe no semestre.
 - O modo padrão do clique é **pontual**: dia e hora concretos descrevem uma
   atividade única. Trocar para recorrente preserva horário, dia da semana
   (vira o único dia marcado) e começo da vigência.
-- A duração de partida é a **faixa mínima**, não o turno. Turno é atalho do
-  formulário, e aplicá-lo por conta própria sobrescreveria o horário que a
-  pessoa acabou de apontar.
+- A duração de partida do clique simples é a **faixa mínima**, não o turno.
+  Turno é atalho do formulário, e aplicá-lo por conta própria sobrescreveria o
+  horário que a pessoa acabou de apontar — mais ainda agora, que ela pode
+  arrastar a duração exata que quer.
 
 ## Impressão e PDF
 

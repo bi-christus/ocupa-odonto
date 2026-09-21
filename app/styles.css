@@ -226,15 +226,21 @@ select.input{appearance:none;padding-right:26px;
   pointer-events:none}
 .wk-col.livre{cursor:pointer}
 
-/* O fantasma segue o cursor e mostra onde o bloco vai cair e que tamanho vai
-   ter. É ele o convite para clicar — some sobre um bloco já existente, porque
-   ali o clique pertence ao detalhe da ocupação. */
+/* O fantasma segue o cursor e mostra a faixa que será lançada — no hover, a
+   faixa mínima sob o cursor; durante o arraste, o que está sendo escolhido.
+   Some sobre um bloco já existente, porque ali o clique pertence ao detalhe
+   da ocupação. */
 .wk-fantasma{position:absolute;left:0;right:0;display:none;pointer-events:none;
   border:1px dashed var(--fill-strong);
   background:color-mix(in srgb,var(--accent-ink) 9%,transparent)}
 .wk-fantasma.on{display:block}
 .wk-fantasma span{display:block;padding:3px 6px;font:600 11px var(--font-heading);
-  letter-spacing:.05em;color:var(--accent-ink)}
+  letter-spacing:.05em;color:var(--accent-ink);font-variant-numeric:tabular-nums}
+
+/* Durante o arraste o cursor vira o de redimensionar e nada na página fica
+   selecionável — sem isso o navegador pinta meia tela de azul no gesto. */
+html.arrastando-agenda,html.arrastando-agenda *{
+  -webkit-user-select:none;user-select:none;cursor:ns-resize !important}
 .tl-track.livre{cursor:pointer}
 .tl-track.livre:hover{background:color-mix(in srgb,var(--accent-ink) 5%,transparent)}
 
