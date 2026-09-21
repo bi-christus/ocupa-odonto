@@ -274,9 +274,21 @@
      nenhum bloco a ocupa: é o que garante um alvo de clique em QUALQUER
      horário, por mais cheia que a coluna esteja — sem ela, dois blocos lado
      a lado tomam a coluna inteira e lançar uma terceira turma no mesmo
-     horário vira impossível, que foi o defeito relatado. */
+     horário vira impossível, que foi o defeito relatado.
+
+     E a COLUNA SE ADAPTA AOS CARTÕES: a largura de cada dia sai do pico de
+     sobreposição dele, não de uma fatia igual para todos. Com seis colunas
+     de mesma largura, cinco ocupações cruzadas numa segunda deixavam cada
+     cartão com ~35px — o texto virava uma coluna de letras — enquanto os
+     outros cinco dias ficavam vazios ocupando o mesmo espaço. Agora o dia
+     cheio pede o espaço dos cartões que tem (piso em px) e ainda leva a
+     maior parte da sobra (peso em fr); o dia vazio se contenta com o piso. */
   var ALTURA_HORA = 46;
   var LARGURA_GUTTER = 15;
+  /* Piso de um cartão. Abaixo disso "Clínicas 7 e 8" e "13:40–17:20 · …" não
+     cabem mais em linha e o bloco deixa de ser legível — é a medida que
+     decide quando a grade prefere rolar na horizontal a continuar espremendo. */
+  var LARGURA_MIN_CARTAO = 104;
 
   function gradeSemana() {
     var hoje = C.hojeISO();
@@ -287,11 +299,37 @@
     var H0 = janela[0], H1 = janela[1];
     var altura = (H1 - H0 + 1) * ALTURA_HORA;
 
+    /* A disposição dos seis dias é resolvida ANTES de montar o grid: é o pico
+       de sobreposição de cada dia que dimensiona a coluna dele, e a conta não
+       pode ser feita lá dentro, depois que as trilhas já estão escritas. De
+       quebra, colunaDoDia deixa de repetir a repartição. */
+    var dias = datas.map(function (d) {
+      var itens = disporEmColunas(S.ocorrenciasDoDia(d));
+      var pico = 1;
+      itens.forEach(function (x) { if (x.total > pico) pico = x.total; });
+      total += itens.length;
+      return { data: d, itens: itens, pico: pico };
+    });
+
+    /* Cada coluna pede o que os cartões dela precisam. O piso em px reserva
+       LARGURA_MIN_CARTAO para cada bloco sobreposto mais o gutter de clique;
+       o peso em fr reparte a sobra na mesma proporção, para o dia cheio ficar
+       largo quando há espaço. Quando nem os pisos cabem, a grade rola na
+       horizontal — voltar a espremer o cartão seria desfazer o conserto. */
+    var trilhas = dias.map(function (x) {
+      return 'minmax(' + (LARGURA_GUTTER + x.pico * LARGURA_MIN_CARTAO) +
+        'px,' + x.pico + 'fr)';
+    }).join(' ');
+
     var topoFixo = 'position:sticky;top:0;z-index:3;background:var(--color-bg);';
     var grade = C.el('div', {
-      style: 'display:grid;grid-template-columns:58px repeat(6,minmax(104px,1fr));gap:0 8px'
+      style: 'display:grid;grid-template-columns:58px ' + trilhas + ';gap:0 8px'
     });
-    grade.appendChild(C.el('div', { style: topoFixo + 'height:30px' }));
+    /* O canto fica preso nos dois eixos: é ele que tapa a régua quando a
+       semana cheia rola para o lado. */
+    grade.appendChild(C.el('div', {
+      style: topoFixo + 'left:0;z-index:5;height:30px'
+    }));
     /* O cabeçalho do dia carrega o mesmo sinal da coluna: hoje em destaque,
        dia passado apagado. Sem legenda e sem texto explicativo — é a coluna
        inteira que muda de tom, e isso basta para a pessoa parar de tentar. */
@@ -316,10 +354,8 @@
     }
     grade.appendChild(regua);
 
-    datas.forEach(function (d) {
-      var itens = S.ocorrenciasDoDia(d);
-      total += itens.length;
-      grade.appendChild(colunaDoDia(d, itens, H0, H1, altura));
+    dias.forEach(function (x) {
+      grade.appendChild(colunaDoDia(x.data, x.itens, H0, H1, altura));
     });
 
     return C.el('div', {}, [
@@ -363,6 +399,8 @@
     return saida;
   }
 
+  /* `itens` já chega repartido por gradeSemana — [{o, coluna, total}] —,
+     porque é da mesma repartição que sai a largura da coluna. */
   function colunaDoDia(data, itens, H0, H1, altura) {
     var livre = podeCriarEm(data);
     var ini = H0 * 60, fim = (H1 + 1) * 60;
@@ -379,7 +417,7 @@
       }));
     }
 
-    disporEmColunas(itens).forEach(function (d) {
+    itens.forEach(function (d) {
       var a = Math.max(ini, C.toMin(d.o.inicio)), b = Math.min(fim, C.toMin(d.o.fim));
       if (b <= a) return;
       var largura = 'calc((100% - ' + LARGURA_GUTTER + 'px) / ' + d.total + ')';

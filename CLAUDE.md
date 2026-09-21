@@ -300,6 +300,20 @@ duas horas, e a coluna não dizia nada sobre ocupação real da clínica.
 - Ocupações que se cruzam no tempo **dividem a largura** entre si
   (`disporEmColunas`), por cacho de sobreposição — um bloco solto no fim do
   dia não fica espremido por causa de dois que se cruzaram de manhã.
+- **A largura da coluna sai do dia, não de uma fatia igual para todos.**
+  `gradeSemana` resolve a disposição dos seis dias ANTES de montar o grid e
+  escreve uma trilha por dia: `minmax(15px + pico × 104px, pico fr)`. O piso
+  reserva `LARGURA_MIN_CARTAO` (104px) para cada bloco sobreposto mais o
+  gutter de clique; o peso em `fr` dá a maior parte da sobra ao dia mais
+  cheio. Com seis colunas iguais, cinco ocupações cruzadas numa segunda
+  deixavam cada cartão com ~35px — o texto virava uma coluna de letras —
+  enquanto os outros cinco dias ficavam vazios ocupando o mesmo espaço
+  (relatado em 21/09/2026, com captura de tela).
+- **Quando nem os pisos cabem, a grade rola na horizontal.** É por isso que
+  `.wk-regua` é `position:sticky;left:0` com fundo opaco: sem isso as horas
+  saem de cena junto e o bloco deixa de dizer a que horário pertence. O canto
+  do cabeçalho fica preso nos dois eixos (`z-index:5`) para tapar a régua.
+  Encolher o cartão para caber tudo na tela seria desfazer o conserto.
 - A vista **Dia** (gantt) já era proporcional, no eixo X. Não mudou.
 - A folha impressa da semana tem forma própria (gantt por dia) — ver
   "Impressão e PDF". Só a régua de horas é compartilhada.
@@ -547,6 +561,11 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
    "http://localhost:3000/_auditoria/harness.html?imprimir=semana"`.
    O botão "ver folha impressa" promove as regras `@media print` para screen,
    para inspecionar a folha na tela com o CSS de impressão de verdade.
+   `?tela=agenda&vista=semana` abre a vista pedida assim que o acervo carrega —
+   o Chrome headless só sabe carregar uma URL e fotografar, e sem isso toda
+   captura sai do Painel. `?denso=1` (botão "semana cheia") enche a segunda de
+   ocupações cruzadas: é o único jeito de ver a largura das colunas da semana
+   sob pressão, porque o acervo magro do dublê nunca faz duas disputarem espaço.
 4. Nunca reescreva um arquivo digitando conteúdo vindo de saída de ferramenta
    (pode estar truncada). Edite in place.
 5. Não semeie nem edite dados de produção pelo console do Firebase sem avisar.

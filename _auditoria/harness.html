@@ -19,6 +19,7 @@
   <a href="?perfil=coordenador">coordenador</a>
   <a href="?perfil=professor">professor</a>
   <a href="?perfil=tecnico">técnico</a>
+  <a href="?perfil=coordenador&denso=1">semana cheia</a>
   <button onclick="verFolha()">ver folha impressa</button>
   <span id="hns-log"></span>
 </div>
@@ -83,6 +84,32 @@
         turmaId: 't3', responsavelId: 'prof@teste.br', situacao: 'pendente', excecoes: [],
         criadoPor: 'prof@teste.br', criadoEm: C.carimbo() }
     ];
+
+    /* ?denso=1 — a segunda-feira cheia. A grade da semana só mostra o que
+       tem de errado (ou de certo) na largura das colunas quando um dia tem
+       várias ocupações se cruzando no mesmo horário; com o acervo magro
+       acima nenhuma coluna chega a disputar espaço, e o defeito relatado
+       pela coordenação — cartões espremidos a ~35px — não aparece. */
+    if (/[?&]denso=1/.test(location.search)) {
+      var densas = [
+        { ag: 'ag2', escopo: 'ambas', ini: '11:00', fim: '21:00', turma: 't3', tipo: 'pos' },
+        { ag: 'ag1', escopo: 'a', ini: '13:40', fim: '17:20', turma: 't1', tipo: 'graduacao' },
+        { ag: 'ag1', escopo: 'b', ini: '13:40', fim: '17:20', turma: 't2', tipo: 'graduacao' },
+        { ag: 'ag3', escopo: 'a', ini: '13:40', fim: '17:20', turma: 't1', tipo: 'graduacao' },
+        { ag: 'ag4', escopo: 'a', ini: '14:00', fim: '16:00', turma: 't2', tipo: 'graduacao' },
+        { ag: 'ag3', escopo: 'b', ini: '07:40', fim: '11:20', turma: 't1', tipo: 'graduacao' },
+        { ag: 'ag4', escopo: 'b', ini: '08:00', fim: '10:00', turma: 't2', tipo: 'graduacao' }
+      ];
+      densas.forEach(function (x, k) {
+        ocupacoes.push({
+          id: 'dn' + k, tipo: 'pontual', agrupamentoId: x.ag, escopo: x.escopo,
+          data: seg, inicio: x.ini, fim: x.fim, tipoAtividade: x.tipo,
+          descricao: 'Semana cheia de verificação.', turmaId: x.turma,
+          responsavelId: 'coord@teste.br', situacao: 'aprovada', excecoes: [],
+          criadoPor: 'coord@teste.br', criadoEm: C.carimbo()
+        });
+      });
+    }
     return {
       config: { versao: s.versao, periodoLetivo: s.periodoLetivo, semestre: s.semestre, parametros: s.parametros },
       agrupamentos: s.agrupamentos, clinicas: s.clinicas, autorizados: AUTORIZADOS,
@@ -217,6 +244,24 @@
     if (global.__autoImprimir === 'dia') global.Impressao.dia(global.Core.hojeISO());
     else if (global.__autoImprimir === 'recorrencias') global.Impressao.recorrencias();
     else global.Impressao.semana(seg);
+  }, 100);
+})(window);
+</script>
+<script>
+/* ?tela=agenda&vista=semana — abre a tela pedida assim que o acervo carrega.
+   Existe para o Chrome headless, que só sabe carregar uma URL e fotografar:
+   sem isto toda captura sai do Painel, e nenhuma vista além dele pode ser
+   conferida fora da mão. */
+(function (global) {
+  var tela = (/[?&]tela=([a-z]+)/.exec(location.search) || [])[1];
+  if (!tela) return;
+  var vista = (/[?&]vista=([a-z]+)/.exec(location.search) || [])[1] || null;
+  var tentativas = 0;
+  var relogio = setInterval(function () {
+    if (++tentativas > 60) { clearInterval(relogio); return; }
+    if (!global.Store || !global.Store.usuario() || !global.Store.estado.agrupamentos.length) return;
+    clearInterval(relogio);
+    global.App.ir(tela, vista ? { vista: vista } : null);
   }, 100);
 })(window);
 </script>
