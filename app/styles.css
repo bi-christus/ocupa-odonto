@@ -358,19 +358,36 @@ select.input{appearance:none;padding-right:26px;
   .imp-sub{font-size:8.5pt;color:#555}
   .imp-ft{margin-top:9pt;padding-top:4pt;border-top:.5pt solid #bbb;font-size:7.5pt;color:#666}
 
-  .imp-grade{width:100%;border-collapse:collapse;table-layout:fixed}
-  .imp-grade th{border:.5pt solid #999;padding:3pt 4pt;text-align:left;color:#111;
-    font:600 8.5pt var(--font-heading);letter-spacing:.04em}
-  .imp-grade th small{display:block;font:400 7.5pt var(--font-body);color:#555;letter-spacing:0}
-  .imp-grade td{border:.5pt solid #bbb;padding:2pt;vertical-align:top;height:19pt}
-  .imp-grade .h{width:32pt;text-align:right;font-variant-numeric:tabular-nums;color:#555;font-size:8pt}
-  .imp-grade td.h{padding-top:3pt}
+  /* ── Semana em gantt: uma linha por DIA ──
+     O eixo X é o horário; a linha do dia cresce só o quanto as faixas
+     empilhadas exigirem. `.g-linha` é indivisível na quebra de página — o
+     eixo aparece uma vez, no topo, e é por isso que o modelo só vale a pena
+     enquanto a semana cabe numa folha, que é justamente o objetivo dele. */
+  .imp-gantt{width:100%}
+  .g-eixo{display:flex;align-items:flex-end;border-bottom:.8pt solid #111;padding-bottom:2pt}
+  .g-lbl{width:86pt;flex:none;padding-right:6pt;font:600 8.5pt var(--font-heading);
+    letter-spacing:.02em;color:#111;line-height:1.2}
+  .g-lbl small{display:block;font:400 7pt var(--font-body);color:#666;letter-spacing:0}
+  .g-marcas{flex:1;display:flex;min-width:0}
+  .g-marcas i{flex:1;font:400 7pt var(--font-body);font-style:normal;color:#555;
+    border-left:.4pt solid #ccc;padding-left:1.5pt;font-variant-numeric:tabular-nums}
+  .g-linha{display:flex;align-items:stretch;border-bottom:.5pt solid #ccc;
+    padding:3pt 0;break-inside:avoid;page-break-inside:avoid}
+  .g-linha .g-lbl{padding-top:1pt}
+  .g-trilha{flex:1;position:relative;min-width:0}
+  .g-guia{position:absolute;top:0;bottom:0;width:.4pt;background:#ddd}
+  .g-vazio{position:absolute;left:2pt;top:3pt;font:400 7pt var(--font-body);
+    font-style:italic;color:#999}
 
-  .imp-ev{border-left:2.2pt solid #111;padding:1pt 0 1pt 3pt;margin-bottom:2pt}
-  .imp-ev.pontual{border-left-style:dashed}
-  .imp-ev b{display:block;font:600 7.5pt var(--font-heading);letter-spacing:.03em}
-  .imp-ev span{display:block;font-size:8pt}
-  .imp-ev small{display:block;font-size:7pt;color:#555}
+  /* A barra se apoia em borda, não em fundo: o navegador imprime sem cor de
+     fundo por padrão. Contínua é recorrente, tracejada é pontual — o mesmo
+     código da legenda. */
+  .g-barra{position:absolute;height:15pt;overflow:hidden;white-space:nowrap;
+    border:.5pt solid #666;border-left:2.2pt solid #111;padding:1.5pt 3pt;
+    font-size:7.5pt;line-height:1.35;color:#111;background:#fff}
+  .g-barra.pontual{border-left-style:dashed}
+  .g-barra b{font:600 7.5pt var(--font-heading);letter-spacing:.02em}
+  .g-barra span{font-size:7pt;color:#333}
 
   .imp-leg{margin-top:7pt;font-size:7.5pt;color:#555}
   .imp-leg span{margin-right:16pt}
@@ -393,5 +410,5 @@ select.input{appearance:none;padding-right:26px;
      regras, uma semana que passa de uma folha continua sem dizer que
      coluna é que dia. */
   thead{display:table-header-group}
-  tr,.imp-ev,.imp-sec{break-inside:avoid;page-break-inside:avoid}
+  tr,.imp-sec,.g-linha{break-inside:avoid;page-break-inside:avoid}
 }

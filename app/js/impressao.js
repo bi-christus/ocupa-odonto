@@ -11,9 +11,10 @@
    window.open, que o bloqueador de pop-up derruba sem avisar e sem deixar
    rastro para a pessoa entender por que nada aconteceu.
 
-   A grade da semana sai com a MESMA régua de horas da tela (S.janelaHoras e
-   S.baldesPorHora): a folha precisa ser reconhecível como a aba Agenda, não
-   como outro relatório. */
+   A régua de horas é a mesma da tela (S.janelaHoras), mas a FORMA não é: a
+   semana sai como gantt de uma linha por dia, porque a grade da tela reserva
+   a altura de todas as horas em todas as seis colunas e gastaria a folha
+   inteira em espaço vazio. Ver o comentário de `semana()`. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store;
@@ -93,20 +94,6 @@
     return 'Semestre ' + e.periodoLetivo + (extra ? ' · ' + extra : '');
   }
 
-  /* Bloco de uma ocupação na folha. Em papel não há cor garantida — o
-     navegador imprime sem fundo por padrão —, então o que distingue
-     recorrente de pontual é o traço da borda, e a ocupação das duas clínicas
-     se anuncia por escrito. */
-  function bloco(o) {
-    var dupla = S.idsDoEscopo(o.agrupamentoId, o.escopo).length > 1;
-    return C.el('div', { class: 'imp-ev' + (o.origem === 'pontual' ? ' pontual' : '') }, [
-      C.el('b', { text: S.rotuloEscopo(o.agrupamentoId, o.escopo) +
-        (dupla ? ' · 2 clínicas' : '') }),
-      C.el('span', { text: o.inicio + '–' + o.fim + ' · ' + o.titulo }),
-      C.el('small', { text: S.nomePessoa(o.responsavelId) })
-    ]);
-  }
-
   function legenda() {
     return C.el('div', { class: 'imp-leg' }, [
       C.el('span', {}, [C.el('i', { class: 'am-rec' }), 'Aula recorrente']),
@@ -115,45 +102,106 @@
     ]);
   }
 
-  /* ── Semana: a grade da aba Agenda ────────────────────────────────── */
+  /* ── Semana: gantt com uma linha por DIA ──────────────────────────────
+     A grade da tela não sobrevive ao papel. Ela reserva a altura de todas as
+     horas do dia em todas as seis colunas, então uma semana com três
+     ocupações gasta a folha inteira em espaço vazio e ainda estoura para a
+     página seguinte no meio de uma coluna.
+
+     Aqui o eixo X é o horário e cada LINHA é um dia — o contrário do gantt
+     diário, onde as linhas são os agrupamentos. A linha do dia cresce só o
+     quanto precisar: ocupações que se cruzam no tempo empilham em faixas, e
+     quem não se cruza reaproveita a mesma faixa. Dia sem ocupação ocupa uma
+     linha de 1 cm. É o que faz a semana inteira caber numa folha, que é a
+     razão de o modelo existir.
+
+     Cada linha de dia é indivisível na quebra de página (`break-inside`). */
+  var ALTURA_FAIXA = 17;   /* pt — altura de uma faixa de ocupação */
+  var ALTURA_MINIMA = 22;  /* pt — dia vazio ainda precisa ter corpo */
+
+  /* Empilha as ocorrências do dia em faixas: a primeira faixa livre é a que
+     já terminou antes desta começar. Sem cachos, ao contrário da tela — aqui
+     o que importa é gastar o mínimo de altura. */
+  function faixasDoDia(itens) {
+    var fins = [];
+    var postas = itens.slice().sort(function (a, b) {
+      return C.toMin(a.inicio) - C.toMin(b.inicio) || C.toMin(b.fim) - C.toMin(a.fim);
+    }).map(function (o) {
+      var f = 0;
+      while (f < fins.length && fins[f] > C.toMin(o.inicio)) f++;
+      fins[f] = C.toMin(o.fim);
+      return { o: o, faixa: f };
+    });
+    return { postas: postas, faixas: Math.max(1, fins.length) };
+  }
+
+  function barra(d, ini, span) {
+    var o = d.o;
+    var a = Math.max(ini, C.toMin(o.inicio)), b = Math.min(ini + span, C.toMin(o.fim));
+    if (b <= a) return null;
+    var dupla = S.idsDoEscopo(o.agrupamentoId, o.escopo).length > 1;
+    return C.el('div', {
+      class: 'g-barra' + (o.origem === 'pontual' ? ' pontual' : ''),
+      style: 'left:' + ((a - ini) / span * 100) + '%;width:' + ((b - a) / span * 100) + '%;' +
+        'top:' + (d.faixa * ALTURA_FAIXA) + 'pt'
+    }, [
+      C.el('b', { text: S.rotuloEscopo(o.agrupamentoId, o.escopo) + (dupla ? ' · 2 clínicas' : '') }),
+      C.el('span', { text: ' ' + o.inicio + '–' + o.fim + ' · ' + o.titulo +
+        ' · ' + C.primeiroNome(S.nomePessoa(o.responsavelId)) })
+    ]);
+  }
+
   function semana(seg) {
     var datas = [], i;
     for (i = 0; i < 6; i++) datas.push(C.addDays(seg, i));
     var janela = S.janelaHoras(datas);
     var h0 = janela[0], h1 = janela[1];
+    var ini = h0 * 60, span = (h1 + 1) * 60 - ini;
 
+    var eixo = C.el('div', { class: 'g-eixo' }, [C.el('div', { class: 'g-lbl' })]);
+    var marcas = C.el('div', { class: 'g-marcas' });
+    for (i = h0; i <= h1; i++) marcas.appendChild(C.el('i', { text: C.pad(i) }));
+    eixo.appendChild(marcas);
+
+    var corpo = C.el('div', { class: 'g-corpo' });
     var total = 0;
-    var dias = datas.map(function (d) {
+
+    datas.forEach(function (d) {
       var itens = S.ocorrenciasDoDia(d);
       total += itens.length;
-      return { data: d, baldes: S.baldesPorHora(itens, h0, h1) };
-    });
+      var arranjo = faixasDoDia(itens);
+      var altura = Math.max(ALTURA_MINIMA, arranjo.faixas * ALTURA_FAIXA + 3);
 
-    var cabecalho = C.el('tr', {}, [C.el('th', { class: 'h', text: 'Hora' })].concat(
-      dias.map(function (d) {
-        return C.el('th', {}, [
-          C.nomeDia(C.weekday(d.data), true),
-          C.el('small', { text: C.fmtDiaAno(d.data) })
-        ]);
-      })));
-
-    var corpo = C.el('tbody');
-    for (var h = h0; h <= h1; h++) {
-      var linha = C.el('tr', {}, C.el('td', { class: 'h', text: C.pad(h) + ':00' }));
-      for (i = 0; i < dias.length; i++) {
-        linha.appendChild(C.el('td', {}, (dias[i].baldes[h] || []).map(bloco)));
+      var trilha = C.el('div', { class: 'g-trilha', style: 'height:' + altura + 'pt' });
+      /* Guias de hora atrás das barras: sem elas não dá para ler o horário de
+         uma barra no meio da folha. */
+      for (var h = h0; h <= h1; h++) {
+        trilha.appendChild(C.el('div', {
+          class: 'g-guia', style: 'left:' + ((h * 60 - ini) / span * 100) + '%'
+        }));
       }
-      corpo.appendChild(linha);
-    }
+      arranjo.postas.forEach(function (p) {
+        var b = barra(p, ini, span);
+        if (b) trilha.appendChild(b);
+      });
+      if (!itens.length) {
+        trilha.appendChild(C.el('div', { class: 'g-vazio', text: 'sem ocupação' }));
+      }
 
-    var tabela = C.el('table', { class: 'imp-grade' }, [
-      C.el('thead', {}, cabecalho), corpo
-    ]);
+      corpo.appendChild(C.el('div', { class: 'g-linha' }, [
+        C.el('div', { class: 'g-lbl' }, [
+          C.nomeDia(C.weekday(d), true),
+          C.el('small', { text: C.fmtDiaAno(d) }),
+          C.el('small', { text: C.plural(itens.length, 'ocupação', 'ocupações') })
+        ]),
+        trilha
+      ]));
+    });
 
     return documento(
       'Ocupação das clínicas · semana de ' + C.fmtDiaAno(seg) + ' a ' + C.fmtDiaAno(datas[5]),
       subtituloPadrao(C.plural(total, 'ocupação', 'ocupações') + ' na semana'),
-      C.el('div', {}, [tabela, legenda()]));
+      C.el('div', { class: 'imp-gantt' }, [eixo, corpo, legenda()]));
   }
 
   function imprimirSemana(seg) {

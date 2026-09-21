@@ -163,6 +163,12 @@
      para ser inspecionado. */
   global.print = function () { log('window.print() chamado · documento montado no DOM'); };
 
+  /* ?imprimir=semana|dia|recorrencias monta a folha e a deixa no DOM, sem
+     abrir diálogo. Serve para gerar o PDF de verdade por fora:
+       chrome --headless --print-to-pdf=saida.pdf "…harness.html?imprimir=semana"
+     que é a única forma de conferir quebra de página e altura real da folha. */
+  global.__autoImprimir = (/[?&]imprimir=([a-z]+)/.exec(location.search) || [])[1] || null;
+
   /* Troca o @media print para screen, para conferir a folha na tela com as
      regras de impressão de verdade — e não com uma cópia delas. */
   global.verFolha = function () {
@@ -198,5 +204,21 @@
 <script src="../app/js/views/estrutura.js"></script>
 <script src="../app/js/views/acessos.js"></script>
 <script src="../app/js/app.js"></script>
+<script>
+/* Monta a folha pedida na URL assim que o acervo terminar de carregar. */
+(function (global) {
+  if (!global.__autoImprimir) return;
+  var tentativas = 0;
+  var relogio = setInterval(function () {
+    if (++tentativas > 60) { clearInterval(relogio); return; }
+    if (!global.Store || !global.Store.usuario() || !global.Store.estado.agrupamentos.length) return;
+    clearInterval(relogio);
+    var seg = global.Core.startOfWeek(global.Core.hojeISO());
+    if (global.__autoImprimir === 'dia') global.Impressao.dia(global.Core.hojeISO());
+    else if (global.__autoImprimir === 'recorrencias') global.Impressao.recorrencias();
+    else global.Impressao.semana(seg);
+  }, 100);
+})(window);
+</script>
 </body>
 </html>

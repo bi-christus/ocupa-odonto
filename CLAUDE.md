@@ -300,10 +300,9 @@ duas horas, e a coluna não dizia nada sobre ocupação real da clínica.
 - Ocupações que se cruzam no tempo **dividem a largura** entre si
   (`disporEmColunas`), por cacho de sobreposição — um bloco solto no fim do
   dia não fica espremido por causa de dois que se cruzaram de manhã.
-- `S.baldesPorHora` **não serve mais à tela**, só à folha impressa, que é uma
-  tabela de linhas de hora. `S.janelaHoras` continua servindo às duas: a tela
-  e o papel precisam abrir e fechar o dia na mesma hora.
 - A vista **Dia** (gantt) já era proporcional, no eixo X. Não mudou.
+- A folha impressa da semana tem forma própria (gantt por dia) — ver
+  "Impressão e PDF". Só a régua de horas é compartilhada.
 
 ## Lançar pelo clique na grade
 
@@ -365,13 +364,22 @@ Controle de clínicas…".
 Não use `window.open`: o bloqueador de pop-up derruba sem avisar e sem deixar
 a pessoa entender por que nada aconteceu.
 
-- Três folhas: semana (paisagem, a grade da aba Agenda), dia (retrato, uma
-  tabela por agrupamento) e recorrências (retrato). O botão da Agenda imprime
-  **a vista aberta**; Relatórios traz as duas primeiras como cartão.
-- A grade impressa usa `S.janelaHoras` e `S.baldesPorHora` — as mesmas da
-  tela. As duas moram no Store justamente por isso: cópia em cada lado
-  divergiria na primeira clínica que mudasse de horário, e a folha passaria a
-  mostrar uma semana que não é a que está na tela.
+- Três folhas: semana (paisagem, **gantt de uma linha por dia**), dia
+  (retrato, uma tabela por agrupamento) e recorrências (retrato). O botão da
+  Agenda imprime **a vista aberta**; Relatórios traz as duas primeiras como
+  cartão.
+- **A semana impressa NÃO é a grade da tela**, e isso é decisão, não
+  esquecimento. A grade reserva a altura de todas as horas do dia nas seis
+  colunas: uma semana com três ocupações gastaria a folha inteira em espaço
+  vazio e ainda quebraria a página no meio de uma coluna. No papel o eixo X é
+  o horário e cada **linha é um dia** — o contrário do gantt diário, onde as
+  linhas são os agrupamentos. A linha cresce só o quanto as faixas empilhadas
+  exigirem (`faixasDoDia`), dia vazio ocupa 22pt, e `.g-linha` é indivisível
+  na quebra de página. Uma semana cheia cabe numa folha; foi verificado
+  gerando o PDF de verdade com Chrome headless.
+- `S.janelaHoras` é a mesma da tela — o papel e a tela precisam abrir e fechar
+  o dia na mesma hora. `S.baldesPorHora` **deixou de existir** em 21/09/2026:
+  nem a tela nem o papel trabalham mais por hora cheia.
 - **A folha se apoia em BORDA, não em fundo.** O navegador imprime sem cor de
   fundo por padrão: traço contínuo é aula recorrente, tracejado é atividade
   pontual, e "2 clínicas" vai por escrito.
@@ -513,6 +521,13 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
    só o `nuvem.js` por um dublê com acervo de mentira, e `?perfil=` entra como
    coordenador, professor ou técnico sem login e sem tocar em produção. Fora
    de `app/`, então não é publicado.
+   Para conferir folha impressa, `?imprimir=semana|dia|recorrencias` monta o
+   documento e o deixa no DOM. Com ele dá para gerar o PDF de verdade e ver
+   quebra de página e altura real:
+   `chrome --headless --print-to-pdf=saida.pdf --no-pdf-header-footer
+   "http://localhost:3000/_auditoria/harness.html?imprimir=semana"`.
+   O botão "ver folha impressa" promove as regras `@media print` para screen,
+   para inspecionar a folha na tela com o CSS de impressão de verdade.
 4. Nunca reescreva um arquivo digitando conteúdo vindo de saída de ferramenta
    (pode estar truncada). Edite in place.
 5. Não semeie nem edite dados de produção pelo console do Firebase sem avisar.

@@ -628,22 +628,10 @@
     return [h0, h1];
   }
 
-  /* Distribui ocorrências na linha da hora em que COMEÇAM. Serve a FOLHA
-     IMPRESSA, que é uma tabela de linhas de hora — na tela a grade passou a
-     posicionar cada bloco pelo horário e a dimensioná-lo pela duração, e não
-     usa mais baldes. O que começa antes da abertura entra na primeira linha e
-     o que começa depois da última entra na última: nada some do papel. */
-  function baldesPorHora(itens, h0, h1) {
-    var mapa = {};
-    itens.forEach(function (o) {
-      var h = Math.floor(C.toMin(o.inicio) / 60);
-      if (h < h0) h = h0;
-      if (h > h1) h = h1;
-      if (!mapa[h]) mapa[h] = [];
-      mapa[h].push(o);
-    });
-    return mapa;
-  }
+  /* `baldesPorHora` — que jogava cada ocorrência no balde da hora em que
+     começava — saiu em 21/09/2026. A tela passou a posicionar o bloco pelo
+     horário e a dimensioná-lo pela duração, e a folha impressa virou gantt
+     de uma linha por dia: nenhuma das duas trabalha mais por hora cheia. */
 
   /* ── Conflitos ────────────────────────────────────────────────────── */
   /* Verifica sobreposição de horário entre ocupações que disputam ao menos
@@ -1585,7 +1573,7 @@
     cadeirasOperantes: cadeirasOperantes, historicoCadeira: historicoCadeira,
     ocorrenciasDoDia: ocorrenciasDoDia, ocorrenciasIntervalo: ocorrenciasIntervalo,
     datasDaRegra: datasDaRegra, statusOcorrencia: statusOcorrencia,
-    janelaHoras: janelaHoras, baldesPorHora: baldesPorHora,
+    janelaHoras: janelaHoras,
     conflitos: conflitos, nomeNaCadeira: nomeNaCadeira,
     criarRecorrencia: criarRecorrencia, criarPontual: criarPontual,
     atualizarRecorrencia: atualizarRecorrencia, atualizarPontual: atualizarPontual,
