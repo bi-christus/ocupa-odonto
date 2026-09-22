@@ -8,7 +8,8 @@
    escopo ('a', 'b' ou 'ambas'). Toda coluna que antes trazia a clínica
    passa a trazer o agrupamento e o escopo. Manutenção continua sendo de
    uma cadeira só — logo de uma clínica só — e o número da cadeira é
-   sempre o global, de 1 a 112. */
+   único dentro da clínica — contínuo de 1 a 112 nas de atendimento, do 1 em
+   cada pré-clínica —, então ele anda sempre junto do nome dela. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI, A = global.Acesso;
@@ -365,7 +366,9 @@
     });
     var totalGeral = totaisDia.reduce(function (a, b) { return a + b; }, 0);
     var capPolo = CAP * (S.estado.clinicas.length || 1);
-    var totais = ['Polo', '', '', S.totalCadeiras() ? '1–' + S.totalCadeiras() : ''];
+    /* Sem faixa na linha do polo: a numeração não é mais contínua de ponta a
+       ponta — cada pré-clínica recomeça no 1. A faixa vive na linha da clínica. */
+    var totais = ['Polo', '', '', ''];
     totaisDia.forEach(function (h) { totais.push(decimal(h)); });
     totais.push(decimal(totalGeral));
     totais.push(Math.round(totalGeral / capPolo * 100) + '%');
@@ -399,7 +402,7 @@
     });
     /* A soma de ocupações do polo conta a ocupação conjunta duas vezes —
        uma por clínica — porque a linha da clínica também conta. */
-    linhas.push(['Polo', '', '', S.totalCadeiras() ? '1–' + S.totalCadeiras() : '',
+    linhas.push(['Polo', '', '', '',
       somaCadeiras, somaOperantes, somaManut, '', decimal(somaHoras), somaOcup]);
 
     C.baixarCSV('ocupacao-por-clinica.csv', linhas);
@@ -494,22 +497,23 @@
 
   function csvManutencao() {
     if (barrado('relatorios.ver')) return;
-    var linhas = [['Protocolo', 'Agrupamento', 'Clínica', 'Especialidade', 'Cadeira (1–112)',
+    var linhas = [['Protocolo', 'Agrupamento', 'Clínica', 'Especialidade', 'Cadeira',
       'Posição na clínica', 'Local', 'Motivo', 'Criticidade', 'Descrição',
       'Aberto por', 'Abertura', 'Previsão de retorno', 'Situação', 'Encerrado por',
       'Encerramento', 'Tempo de interdição', 'Laudo', 'Ocupações afetadas',
       'Impacto apurado em']];
     S.estado.manutencoes.forEach(function (m) {
-      /* O número global já determina a clínica; m.clinicaId serve de
-         reserva para registros antigos gravados com a clínica errada. */
-      var c = S.clinicaDaCadeira(m.cadeira) || S.clinica(m.clinicaId);
+      /* A clínica gravada no chamado é quem manda: desde que as pré-clínicas
+         numeram as cadeiras do 1, o número sozinho não determina mais a
+         clínica. A faixa fica de reserva, para registro antigo sem clínica. */
+      var c = S.clinica(m.clinicaId) || S.clinicaDaCadeira(m.cadeira);
       linhas.push([
         m.protocolo,
         c ? S.nomeAgrupamento(c.agrupamentoId) : '',
         c ? c.nome : '', c ? c.especialidade : '',
         C.pad(m.cadeira),
         c ? m.cadeira - c.primeiraCadeira + 1 : '',
-        S.localCadeira(m.cadeira),
+        S.localCadeira(m.cadeira, c),
         S.rotuloCategoriaManutencao(m.categoria), m.criticidade, m.motivo,
         S.nomePessoa(m.abertoPor), C.fmtCarimbo(m.abertoEm),
         m.previsaoRetorno ? C.fmtDiaAno(m.previsaoRetorno) : '',

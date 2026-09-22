@@ -142,8 +142,26 @@ sabem da diferença.
 ### As pré-clínicas — individuais, e clínica não tem mais tamanho fixo
 
 Desde 22/09/2026 existem duas clínicas de laboratório: `cl9` **Pré-clínica
-maior** (70 cadeiras, 113–182) e `cl10` **Pré-clínica menor** (20 cadeiras,
-183–202). São 10 clínicas e 202 cadeiras, numeradas de 1 a 202 sem buraco.
+maior** (70 cadeiras) e `cl10` **Pré-clínica menor** (20 cadeiras). São 10
+clínicas e 202 cadeiras.
+
+**Cada pré-clínica numera as suas cadeiras do 1** — a maior de 1 a 70, a menor
+de 1 a 20, como estão marcadas no laboratório. Elas ficam FORA da numeração
+contínua do polo, que segue valendo entre as oito de atendimento (1 a 112),
+onde já há manutenção e atribuição gravadas com o número global.
+
+> ⚠️ **O número da cadeira não identifica mais a clínica.** A cadeira 5 existe
+> na Clínica 1, na Pré-clínica maior e na menor. Quem procura cadeira por
+> número passa a lista onde procurar — `S.clinicaDaCadeira(n, entre)` —, e quem
+> exibe local passa a clínica — `S.localCadeira(n, clinica)`. `ocuparCadeira`
+> resolve a clínica dentro do escopo da ocupação, e manutenção resolve por
+> `m.clinicaId`, não pela faixa (era o contrário até esta data). Dentro de uma
+> ocupação o número continua único, porque duas clínicas do mesmo agrupamento
+> nunca repetem faixa — e a pré-clínica é agrupamento de uma clínica só.
+
+A hidratação ordena as clínicas por agrupamento e depois por
+`primeiraCadeira`: só por `primeiraCadeira` três empatavam no 1 e a ordem
+passava a depender do que o Firestore devolvesse.
 
 **Cada uma é um agrupamento de UMA clínica só** — `ag5` "Pré-clínica maior" e
 `ag6` "Pré-clínica menor" —, e é isso que as faz funcionar individualmente,
@@ -165,6 +183,10 @@ lê `c.cadeiras`; da faixa, `S.faixaCadeiras`; da capacidade de um escopo,
 `S.capacidadeEscopo`. Nada pode voltar a multiplicar por 14 nem escrever 112 —
 todas as contas do sistema já eram derivadas, e foi só por isso que as duas
 entraram sem tocar em store, agenda, relatórios ou impressão.
+
+Também não existe mais UMA faixa do polo para exibir: o painel de Parâmetros
+diz "por clínica", a linha "Polo" dos CSV vai sem faixa, e a coluna do CSV de
+manutenção deixou de se chamar "Cadeira (1–112)".
 
 Os números da capa e da tela de provisionamento saem de `Dados.semente()`
 (`numerosDaEstrutura`, em `app.js`), e não de literais: eles ficaram presos em
@@ -583,7 +605,8 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
 - Bloqueio de sobreposição na mesma clínica
 - Ocupação das duas clínicas do mesmo agrupamento — **menos nas pré-clínicas**,
   que são agrupamentos de uma clínica só e por isso só se reservam sozinhas
-- Numeração contínua de cadeiras, 1 a 202
+- Numeração contínua de cadeiras nas clínicas de atendimento, 1 a 112; cada
+  pré-clínica numera as suas do 1 (1–70 e 1–20)
 - Cancelamento segue a matriz de `acesso.js`: professor cancela o que é dele
 - Manutenção exige motivo; o impacto na capacidade é calculado automaticamente
 - Com o banco vazio, o coordenador vê a tela de provisionamento; professor e

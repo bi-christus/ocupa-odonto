@@ -109,19 +109,27 @@
         });
       });
     });
-    /* A numeração das pré-clínicas continua de onde as clínicas de
-       atendimento pararam — derivada, não escrita à mão: cadeira 113 é a
-       primeira da pré-clínica maior porque as oito anteriores somam 112. */
-    var proxima = clinicas.reduce(function (s, c) { return s + c.cadeiras; }, 0) + 1;
+    /* CADA PRÉ-CLÍNICA NUMERA AS SUAS DO 1: a maior vai de 1 a 70 e a menor
+       de 1 a 20, como estão marcadas no laboratório. Elas não entram na
+       numeração contínua do polo, que segue valendo só entre as oito de
+       atendimento (1 a 112) — quem já tinha manutenção e atribuição gravadas
+       com número global.
+
+       A consequência é que o NÚMERO SOZINHO DEIXOU DE IDENTIFICAR A CLÍNICA:
+       a cadeira 5 existe na Clínica 1, na maior e na menor. Quem procura
+       cadeira por número passa a lista de clínicas em que procurar
+       (`S.clinicaDaCadeira(n, entre)`), e quem exibe local passa a clínica
+       (`S.localCadeira(n, clinica)`). Dentro de uma ocupação o número segue
+       único, porque duas clínicas do mesmo agrupamento nunca repetem faixa —
+       e as pré-clínicas são agrupamentos de uma clínica só. */
     [{ id: 'cl9', ag: 'ag5', nome: 'Pré-clínica maior', cadeiras: 70 },
      { id: 'cl10', ag: 'ag6', nome: 'Pré-clínica menor', cadeiras: 20 }].forEach(function (p) {
       clinicas.push({
         id: p.id, nome: p.nome, agrupamentoId: p.ag,
         especialidade: 'Pré-clínica',
-        cadeiras: p.cadeiras, primeiraCadeira: proxima,
+        cadeiras: p.cadeiras, primeiraCadeira: 1,
         abertura: '07:00', fechamento: '22:00'
       });
-      proxima += p.cadeiras;
     });
 
     return {

@@ -1,11 +1,13 @@
 /* views/agora.js — ocupação em tempo real: cadeiras e linha do dia.
-   A tela é do AGRUPAMENTO: as duas clínicas aparecem lado a lado, cada uma
-   com suas 14 cadeiras. Número de cadeira é sempre o global, de 1 a 112. */
+   A tela é do AGRUPAMENTO: as clínicas dele aparecem lado a lado, cada uma
+   com as suas cadeiras. O número da cadeira NÃO identifica a clínica: as de
+   atendimento seguem a numeração contínua do polo, mas cada pré-clínica
+   numera as suas do 1. Por isso a seleção guarda a clínica junto do número. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI, M = global.Manutencao;
 
-  var sel = { agrupamentoId: null, cadeira: null };
+  var sel = { agrupamentoId: null, clinicaId: null, cadeira: null };
 
   /* Altura, em pixels, da faixa de uma clínica na linha do dia. Uma
      ocupação das duas clínicas ocupa as duas faixas. */
@@ -28,23 +30,24 @@
       else if (params.clinicaId) {
         var g0 = S.agrupamentoDaClinica(params.clinicaId);
         if (g0) destino = g0.id;
-      } else if (params.cadeira) {
-        var c0 = S.clinicaDaCadeira(params.cadeira);
-        if (c0) destino = c0.agrupamentoId;
       }
       if (destino) {
         sel.agrupamentoId = destino;
-        sel.cadeira = params.cadeira || null;
+        /* Cadeira por navegação só entra acompanhada da clínica: sozinha, o
+           número não diz mais de qual clínica ela é. */
+        sel.clinicaId = params.clinicaId || null;
+        sel.cadeira = (params.clinicaId && params.cadeira) || null;
       }
     }
     if (!sel.agrupamentoId || !S.agrupamento(sel.agrupamentoId)) {
       sel.agrupamentoId = e.agrupamentos[0].id;
+      sel.clinicaId = null;
       sel.cadeira = null;
     }
     /* Cadeira herdada de outro agrupamento não pode continuar selecionada. */
     if (sel.cadeira) {
-      var cSel = S.clinicaDaCadeira(sel.cadeira);
-      if (!cSel || cSel.agrupamentoId !== sel.agrupamentoId) sel.cadeira = null;
+      var cSel = S.clinica(sel.clinicaId);
+      if (!cSel || cSel.agrupamentoId !== sel.agrupamentoId) { sel.cadeira = null; sel.clinicaId = null; }
     }
 
     alvo.appendChild(C.el('section', { class: 'split3' }, [
@@ -251,12 +254,15 @@
 
   function cadeiraBtn(c, n, occ) {
     var st = statusCadeira(c.id, n, occ);
-    var cls = 'chair' + (st === 'livre' ? '' : ' ' + st) + (sel.cadeira === n ? ' sel' : '');
+    /* A seleção é do par (clínica, número): duas clínicas podem ter a
+       cadeira 5, e sem a clínica a grade marcaria as duas. */
+    var cls = 'chair' + (st === 'livre' ? '' : ' ' + st) +
+      (sel.cadeira === n && sel.clinicaId === c.id ? ' sel' : '');
     return C.el('button', {
       class: cls, text: C.pad(n),
       title: (st === 'manut' ? 'Em manutenção' : st === 'ocupada' ? 'Em uso registrado'
-        : st === 'vaga' ? 'Reservada, sem registro de uso' : 'Livre') + ' · ' + S.localCadeira(n),
-      onclick: function () { sel.cadeira = n; global.App.recarregar(); }
+        : st === 'vaga' ? 'Reservada, sem registro de uso' : 'Livre') + ' · ' + S.localCadeira(n, c),
+      onclick: function () { sel.cadeira = n; sel.clinicaId = c.id; global.App.recarregar(); }
     });
   }
 
@@ -363,7 +369,7 @@
     }
 
     var n = sel.cadeira;
-    var c = S.clinicaDaCadeira(n);
+    var c = S.clinica(sel.clinicaId);
     var occ = ocupacaoVigente(c.id, hoje);
     var st = statusCadeira(c.id, n, occ);
     var manut = S.cadeiraEmManutencao(c.id, n);
@@ -376,7 +382,7 @@
       })
     ]));
     caixa.appendChild(C.el('div', { class: 'muted', style: 'font-size:12.5px;margin:3px 0 18px',
-      text: S.localCadeira(n) + (c.especialidade ? ' · ' + c.especialidade : '') }));
+      text: S.localCadeira(n, c) + (c.especialidade ? ' · ' + c.especialidade : '') }));
 
     if (manut) {
       caixa.appendChild(M.ficha(manut));

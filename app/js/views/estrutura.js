@@ -2,8 +2,10 @@
    registros de manutenção.
    A tela tem dois níveis, como o modelo: um cartão por AGRUPAMENTO
    ("Clínicas 3 e 4") e, dentro dele, as duas clínicas com a especialidade,
-   a faixa da numeração global e a grade das 14 cadeiras. Número de cadeira
-   é sempre global (1 a 112); a posição dentro da clínica é
+   a faixa de numeração e a grade de cadeiras. O número da cadeira é único
+   DENTRO da clínica: as de atendimento seguem a numeração contínua do polo
+   (1 a 112), cada pré-clínica numera as suas do 1. A posição dentro da
+   clínica é
    n - primeiraCadeira + 1. */
 (function (global) {
   'use strict';
@@ -118,10 +120,11 @@
     ]);
   }
 
-  /* "n" é o número GLOBAL da cadeira. */
+  /* "n" é o número da cadeira DENTRO de `c`: as clínicas de atendimento
+     seguem a numeração contínua do polo, cada pré-clínica numera do 1. */
   function botaoCadeira(c, n) {
     var m = S.cadeiraEmManutencao(c.id, n);
-    var local = S.localCadeira(n);
+    var local = S.localCadeira(n, c);
     return C.el('button', {
       class: 'chair' + (m ? ' manut' : ''),
       text: C.pad(n),
@@ -191,7 +194,7 @@
       C.clear(seletorCadeira).appendChild(
         U.campo('Cadeira', U.selecao(opcoesCadeira(), String(f.cadeira), function (v) {
           f.cadeira = Number(v); desenharResumo();
-        }), 'numeração do polo, de 1 a ' + S.totalCadeiras()));
+        }), c ? 'numeração da ' + c.nome + ', de ' + S.faixaCadeiras(c.id).join(' a ') : 'escolha a clínica'));
       desenharResumo();
     }
 
@@ -207,7 +210,7 @@
         return;
       }
       resumo.appendChild(C.el('div', {}, [
-        C.el('b', { text: 'Local · ' }), S.localCadeira(f.cadeira)
+        C.el('b', { text: 'Local · ' }), S.localCadeira(f.cadeira, S.clinica(f.clinicaId))
       ]));
       resumo.appendChild(C.el('div', { class: 'muted', style: 'margin-top:4px',
         text: m
@@ -274,9 +277,8 @@
             'entre ' + JANELA_FECHAMENTO.min + ' e ' + JANELA_FECHAMENTO.max)
         ]),
         C.el('div', { class: 'alert', style: 'margin-top:16px',
-          text: 'Esta clínica ocupa as cadeiras ' + faixa[0] + '–' + faixa[1] +
-            ' da numeração do polo (1–' + S.totalCadeiras() + '). A quantidade é fixa em ' +
-            C.plural(c.cadeiras, 'cadeira') + '.' })
+          text: 'As cadeiras desta clínica são numeradas de ' + faixa[0] + ' a ' + faixa[1] +
+            '. A quantidade é fixa em ' + C.plural(c.cadeiras, 'cadeira') + '.' })
       ]),
       acoes: [
         C.el('button', { class: 'btn btn-outline', text: 'Cancelar', onclick: U.fecharModal }),
@@ -333,7 +335,10 @@
       C.el('div', { class: 'stack', style: 'gap:0' }, [
         U.kv('Semestre', pill(e.periodoLetivo, 'soft')),
         U.kv('Período letivo', rotuloPeriodo(e)),
-        U.kv('Numeração das cadeiras', pill('1–' + S.totalCadeiras(), 'soft')),
+        /* Não existe mais uma faixa do polo: as de atendimento são contínuas
+           e cada pré-clínica recomeça no 1. A faixa de cada uma está no
+           cartão dela, logo acima. */
+        U.kv('Numeração das cadeiras', pill('por clínica', 'soft')),
         U.kv('Estrutura', C.plural(e.agrupamentos.length, 'agrupamento') + ' · ' +
           C.plural(e.clinicas.length, 'clínica', 'clínicas') + ' · ' +
           C.plural(S.totalCadeiras(), 'cadeira')),
@@ -470,7 +475,7 @@
     lista.forEach(function (m) {
       corpo.appendChild(C.el('tr', {}, [
         C.el('td', { class: 'num', style: 'font-weight:600;font-size:12.5px', text: m.protocolo }),
-        C.el('td', { style: 'font-size:12.5px', text: S.localCadeira(m.cadeira) }),
+        C.el('td', { style: 'font-size:12.5px', text: S.localCadeira(m.cadeira, S.clinica(m.clinicaId)) }),
         C.el('td', {}, [
           C.el('div', { text: S.rotuloCategoriaManutencao(m.categoria) }),
           C.el('div', { class: 'muted', style: 'font-size:12px;max-width:340px',
@@ -505,7 +510,7 @@
   function fichaManutencao(m) {
     U.modal({
       titulo: 'Manutenção · cadeira ' + C.pad(m.cadeira),
-      subtitulo: S.localCadeira(m.cadeira) + ' · ' + m.protocolo,
+      subtitulo: S.localCadeira(m.cadeira, S.clinica(m.clinicaId)) + ' · ' + m.protocolo,
       largura: '660px',
       conteudo: M.ficha(m),
       acoes: [

@@ -5,7 +5,9 @@
    O restante do registro (protocolo, criticidade, previsão de retorno,
    impacto na agenda e histórico da cadeira) é apurado pelo sistema no
    momento da abertura e mostrado antes de confirmar.
-   A cadeira é sempre o número global de 1 a 112; onde ela fica quem diz é
+   A cadeira é identificada pelo PAR clínica + número: as de atendimento
+   seguem a numeração contínua do polo, cada pré-clínica numera as suas do 1.
+   Onde ela fica quem diz é
    S.localCadeira(), que devolve agrupamento · clínica · cadeira. */
 (function (global) {
   'use strict';
@@ -92,11 +94,14 @@
   }
 
   /* ── Abertura ─────────────────────────────────────────────────────── */
-  /* "cadeira" é o número global. "clinicaId" continua na assinatura pelos
-     chamadores, mas quem manda é a faixa: a clínica sai do próprio número. */
+  /* Quem manda é `clinicaId`, não a faixa. Era o contrário até 22/09/2026,
+     quando o número da cadeira ainda era único no polo; com as pré-clínicas
+     numeradas do 1, deduzir a clínica do número manda a cadeira 5 da
+     pré-clínica para a Clínica 1. A faixa sobrou de reserva, para o registro
+     antigo que tenha vindo sem clínica. */
   function abrir(clinicaId, cadeira, aoConcluir) {
     if (!S.pode('manutencao.abrir')) { C.toast('Seu perfil não abre registros de manutenção.'); return; }
-    var cl = S.clinicaDaCadeira(cadeira) || S.clinica(clinicaId);
+    var cl = S.clinica(clinicaId) || S.clinicaDaCadeira(cadeira);
     if (!cl) { C.toast('Cadeira ' + C.pad(cadeira) + ' não pertence a nenhuma clínica.'); return; }
     var clId = cl.id;
 
@@ -150,7 +155,7 @@
 
     var m = U.modal({
       titulo: 'Registrar manutenção',
-      subtitulo: S.localCadeira(cadeira),
+      subtitulo: S.localCadeira(cadeira, cl),
       largura: '720px',
       conteudo: conteudo,
       acoes: [
@@ -184,7 +189,7 @@
 
       C.clear(auto);
       linha('Protocolo', proximoProtocoloPrevisto());
-      linha('Local', S.localCadeira(cadeira));
+      linha('Local', S.localCadeira(cadeira, cl));
       linha('Aberto por', u.nome + ' · ' + A.nomePerfil(u.perfil));
       linha('Abertura', C.fmtCarimbo(C.carimbo()));
       /* Prazo em dias corridos: C.addDays soma dias de calendário, então
@@ -269,7 +274,7 @@
          de sucesso nem fechar a modal com o texto perdido. */
       if (!reg) { C.toast('A manutenção não foi aberta.'); return; }
       U.fecharModal();
-      C.toast('Manutenção ' + reg.protocolo + ' aberta · ' + S.localCadeira(cadeira) + ' interditada.');
+      C.toast('Manutenção ' + reg.protocolo + ' aberta · ' + S.localCadeira(cadeira, cl) + ' interditada.');
       if (aoConcluir) aoConcluir(reg);
     }
 
@@ -289,7 +294,7 @@
     var conteudo = C.el('div', { class: 'stack' }, [
       C.el('div', { class: 'preview' }, [
         C.el('div', {}, [C.el('b', { text: registro.protocolo }), ' · ' + S.rotuloCategoriaManutencao(registro.categoria)]),
-        C.el('div', { class: 'muted', text: S.localCadeira(registro.cadeira) +
+        C.el('div', { class: 'muted', text: S.localCadeira(registro.cadeira, S.clinica(registro.clinicaId)) +
           ' · aberta há ' + C.decorrido(registro.abertoEm) + ' por ' + S.nomePessoa(registro.abertoPor) }),
         C.el('div', { class: 'muted', style: 'margin-top:6px', text: registro.motivo })
       ]),
@@ -324,7 +329,7 @@
       }
       S.encerrarManutencao(registro.id, laudo.trim());
       U.fecharModal();
-      C.toast(S.localCadeira(registro.cadeira) + ' liberada · ' + registro.protocolo + ' encerrado.');
+      C.toast(S.localCadeira(registro.cadeira, S.clinica(registro.clinicaId)) + ' liberada · ' + registro.protocolo + ' encerrado.');
       if (aoConcluir) aoConcluir();
     }
   }
@@ -340,8 +345,9 @@
         : C.el('span', { class: 'badge ok', text: 'encerrada' })),
       U.kv('Motivo', S.rotuloCategoriaManutencao(registro.categoria)),
       U.kv('Criticidade', registro.criticidade),
-      /* Agrupamento, clínica e número global vêm juntos daqui. */
-      U.kv('Local', S.localCadeira(registro.cadeira)),
+      /* Agrupamento, clínica e número vêm juntos daqui — a clínica sai do
+         próprio chamado, não do número. */
+      U.kv('Local', S.localCadeira(registro.cadeira, S.clinica(registro.clinicaId))),
       U.kv('Aberto por', S.nomePessoa(registro.abertoPor)),
       U.kv('Abertura', C.fmtCarimbo(registro.abertoEm)),
       U.kv('Previsão de retorno', registro.previsaoRetorno ? C.fmtDiaAno(registro.previsaoRetorno) : '—'),

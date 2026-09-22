@@ -1,6 +1,7 @@
 /* views/painel.js — visão geral do dia e registro de ocupações.
    O polo tem 4 agrupamentos de 2 clínicas: 8 clínicas e 112 cadeiras, com
-   numeração global de 1 a 112. Uma ocupação pertence a um agrupamento e
+   numeração própria por clínica — contínua de 1 a 112 nas de atendimento,
+   do 1 em cada pré-clínica. Uma ocupação pertence a um agrupamento e
    tem escopo 'a', 'b' ou 'ambas' — por isso a lista do dia rotula pelo
    escopo, e não pelo nome de uma clínica só. */
 (function (global) {
@@ -385,7 +386,9 @@
       abertas.length ? C.el('div', { class: 'stack', style: 'gap:0;margin-top:12px' }, abertas.map(function (m) {
         return C.el('div', { style: 'padding:11px 0;border-bottom:1px solid var(--color-divider)' }, [
           C.el('div', { class: 'row', style: 'gap:8px' }, [
-            /* A cadeira é sempre o número global de 1 a 112. */
+            /* O número da cadeira só diz algo ao lado da clínica: as
+               pré-clínicas numeram as suas do 1, e `m.clinicaId` é quem
+               resolve de qual cadeira 5 se trata. */
             C.el('b', { style: 'font-size:13px',
               text: S.nomeClinica(m.clinicaId) + ' · cadeira ' + C.pad(m.cadeira) }),
             U.badgeCriticidade(m.criticidade)

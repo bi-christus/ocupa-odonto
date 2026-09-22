@@ -65,8 +65,17 @@
     e.agrupamentos = (bruto.agrupamentos || []).slice().sort(function (a, b) {
       return String(a.id).localeCompare(String(b.id));
     });
+    /* Ordenar só por `primeiraCadeira` deixou de bastar em 22/09/2026: as duas
+       pré-clínicas também começam no 1, e três clínicas empatadas davam uma
+       ordem que dependia de como o Firestore tivesse devolvido a lista. O
+       agrupamento desempata, e a ordem passa a ser a das abas: atendimento
+       primeiro, pré-clínicas depois. */
+    var ordemAg = {};
+    e.agrupamentos.forEach(function (g, i) { ordemAg[g.id] = i; });
+    function posAg(id) { return ordemAg[id] === undefined ? 99 : ordemAg[id]; }
     e.clinicas = (bruto.clinicas || []).slice().sort(function (a, b) {
-      return (a.primeiraCadeira || 0) - (b.primeiraCadeira || 0);
+      return posAg(a.agrupamentoId) - posAg(b.agrupamentoId) ||
+        (a.primeiraCadeira || 0) - (b.primeiraCadeira || 0);
     });
 
     e.usuarios = (bruto.autorizados || []).map(function (a) {
@@ -269,7 +278,8 @@
      Um agrupamento reúne duas clínicas de 14 cadeiras. O escopo de uma
      ocupação diz o que ela toma: 'a' a primeira clínica, 'b' a segunda,
      'ambas' as duas (28 cadeiras). Número de cadeira é SEMPRE global,
-     de 1 a 112; a posição dentro da clínica é n - primeiraCadeira + 1. */
+     único DENTRO da clínica (contínuo de 1 a 112 nas de atendimento, do 1 em
+     cada pré-clínica); a posição dentro da clínica é n - primeiraCadeira + 1. */
   function agrupamento(id) { return porId(estado.agrupamentos, id); }
   function nomeAgrupamento(id) { var g = agrupamento(id); return g ? g.nome : '—'; }
   function clinicasDoAgrupamento(id) {
@@ -310,10 +320,20 @@
     if (!l.length) return [0, -1];
     return [faixaCadeiras(l[0].id)[0], faixaCadeiras(l[l.length - 1].id)[1]];
   }
-  function clinicaDaCadeira(n) {
-    for (var i = 0; i < estado.clinicas.length; i++) {
-      var f = faixaCadeiras(estado.clinicas[i].id);
-      if (n >= f[0] && n <= f[1]) return estado.clinicas[i];
+  /* O número da cadeira NÃO É MAIS ÚNICO NO POLO. As oito clínicas de
+     atendimento seguem numeradas de 1 a 112, mas cada pré-clínica numera as
+     suas do 1 — a 5 existe na Clínica 1, na Pré-clínica maior e na menor.
+     Por isso quem procura precisa dizer ENTRE QUAIS clínicas procurar; sem
+     `entre`, a busca varre o polo e devolve a primeira faixa que contém o
+     número, o que só é confiável na numeração contínua do atendimento.
+     Todo chamador que conhece a clínica (ou a ocupação) deve passar a lista
+     — é isso que impede a cadeira 5 da pré-clínica virar cadeira 5 da
+     Clínica 1 na hora de gravar. */
+  function clinicaDaCadeira(n, entre) {
+    var l = entre || estado.clinicas;
+    for (var i = 0; i < l.length; i++) {
+      var f = faixaCadeiras(l[i].id);
+      if (n >= f[0] && n <= f[1]) return l[i];
     }
     return null;
   }
@@ -324,11 +344,16 @@
     if (l.length === 1) return l[0].nome;
     return nomeAgrupamento(agrupamentoId) + ' (' + capacidadeEscopo(agrupamentoId, escopo) + ' cadeiras)';
   }
-  /* "Clínicas 3 e 4 · Clínica 4 · cadeira 51" */
-  function localCadeira(n) {
-    var c = clinicaDaCadeira(n);
+  /* "Clínicas 3 e 4 · Clínica 4 · cadeira 51". `clinica` vem de quem sabe —
+     com a numeração local das pré-clínicas, deduzi-la do número sozinho
+     apontaria para a clínica errada. */
+  function localCadeira(n, clinica) {
+    var c = clinica || clinicaDaCadeira(n);
     if (!c) return 'cadeira ' + C.pad(n);
-    return nomeAgrupamento(c.agrupamentoId) + ' · ' + c.nome + ' · cadeira ' + C.pad(n);
+    var ag = nomeAgrupamento(c.agrupamentoId);
+    /* Agrupamento de uma clínica só se chama como ela: "Pré-clínica maior ·
+       Pré-clínica maior · cadeira 05" diz a mesma coisa duas vezes. */
+    return (ag === c.nome ? '' : ag + ' · ') + c.nome + ' · cadeira ' + C.pad(n);
   }
   function capacidadeEscopo(agrupamentoId, escopo) {
     return clinicasDoEscopo(agrupamentoId, escopo).reduce(function (s, c) { return s + c.cadeiras; }, 0);
@@ -1112,12 +1137,15 @@
     persistir(N.apagarVarios('atribuicoes', alvo.map(function (a) { return a.id; })));
   }
 
-  /* `numero` é o número GLOBAL da cadeira. Guardar a clínica derivada dele
-     evita a colisão antiga, em que a cadeira 7 da Clínica 1 e a 7 da
-     Clínica 2 gravavam a mesma chave numa ocupação conjunta. */
+  /* A clínica sai do número DENTRO DO ESCOPO DA OCUPAÇÃO, nunca do polo
+     inteiro: a cadeira 5 de uma ocupação na Pré-clínica maior é a 5 dela, e
+     não a 5 da Clínica 1. Guardar a clínica junto continua evitando a colisão
+     antiga, em que a cadeira 7 da Clínica 1 e a 7 da Clínica 2 gravavam a
+     mesma chave numa ocupação conjunta — dentro de um escopo o número segue
+     único, porque duas clínicas do mesmo agrupamento nunca repetem faixa. */
   function ocuparCadeira(o, numero, alunoId, nome) {
     if (atribuicaoDaCadeira(o.chave, numero)) return false;
-    var c = clinicaDaCadeira(numero);
+    var c = clinicaDaCadeira(numero, clinicasDoEscopo(o.agrupamentoId, o.escopo));
     var registro = {
       id: N.novoId('atribuicoes'), chave: o.chave, clinicaId: c ? c.id : null,
       cadeira: numero,
