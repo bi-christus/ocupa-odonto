@@ -85,8 +85,8 @@ Decisão central, tomada para não reescrever as sete telas:
 Efeito colateral desejado: perder o acesso durante a sessão derruba a pessoa na
 hora, pelo snapshot de `autorizados`.
 
-**Não transforme as leituras em promessas.** O volume é minúsculo (8 clínicas,
-112 cadeiras, um semestre) e o custo do refactor seria o app inteiro.
+**Não transforme as leituras em promessas.** O volume é minúsculo (10 clínicas,
+202 cadeiras, um semestre) e o custo do refactor seria o app inteiro.
 
 ---
 
@@ -96,8 +96,8 @@ hora, pelo snapshot de `autorizados`.
 |---|---|---|
 | `config` | `sistema` (doc único) | `versao`, `periodoLetivo`, `semestre{inicio,fim}`, `parametros{faixaMinimaMin, capacidadeSemanalH, bloquearSobreposicao, exigirMotivoManutencao, exigirAprovacaoProfessor, aberturaPadrao, fechamentoPadrao}` |
 | `autorizados` | e-mail em minúsculas | `nome`, `nivel`, `ativo`, `ultimoAcesso` |
-| `agrupamentos` | `ag1`–`ag4` | `nome`, `clinicas[]` |
-| `clinicas` | `cl1`–`cl8` | `nome`, `agrupamentoId`, `especialidade`, `cadeiras`, `primeiraCadeira`, `abertura`, `fechamento` |
+| `agrupamentos` | `ag1`–`ag5` | `nome`, `clinicas[]` |
+| `clinicas` | `cl1`–`cl10` | `nome`, `agrupamentoId`, `especialidade`, `cadeiras`, `primeiraCadeira`, `abertura`, `fechamento` |
 | `disciplinas` | auto | `codigo`, `nome`, `nivel` (`graduacao` \| `pos`) |
 | `turmas` | auto | `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo` |
 | `alunos` | auto | `nome`, `matricula`, `periodo` |
@@ -105,17 +105,18 @@ hora, pelo snapshot de `autorizados`.
 | `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]`, `excluidaEm`, `excluidaPor`, `motivoExclusao` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` (mais `titulo` só nas gravadas antes de 17/09/2026) |
 | `manutencoes` | auto | `protocolo`, `clinicaId`, `cadeira`, `categoria`, `criticidade`, `motivo`, `abertoPor`, `abertoEm`, `previsaoRetorno`, `status`, `fechadoPor`, `fechadoEm`, `laudo`, `impacto{}` |
 | `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `nome`, `alunoId` (nulo nos registros novos), `data`, `registradoPor`, `registradoEm` |
-| `indices` | `ag1`–`ag4` | `agrupamentoId`, `itens[]` |
+| `indices` | `ag1`–`ag5` | `agrupamentoId`, `itens[]` |
 
 **Não existe coleção `cadeiras`.** Cadeira é derivada de `primeiraCadeira` +
 `cadeiras` da clínica. O estado de uma cadeira vive em `manutencoes` e
 `atribuicoes`.
 
 **Reserva é sempre integral, e `ocupacoes.cadeiras` não existe mais.** Reservar
-uma clínica reserva as 14 cadeiras dela; escopo duplo reserva as 28. O número
-é DERIVADO do escopo (`capacidadeEscopo`) na montagem da ocorrência, e o valor
-gravado nos documentos antigos é ignorado — ocupação que reservava 10 de 14
-passa a valer como clínica inteira. Não recrie o campo de quantidade no
+uma clínica reserva TODAS as cadeiras dela — 14 nas de atendimento, 70 na
+pré-clínica maior, 20 na menor —, e o escopo duplo reserva a soma das duas do
+agrupamento. O número é DERIVADO do escopo (`capacidadeEscopo`) na montagem da
+ocorrência, e o valor gravado nos documentos antigos é ignorado — ocupação que
+reservava 10 de 14 passa a valer como clínica inteira. Não recrie o campo de quantidade no
 formulário, e não leia `r.cadeiras`/`p.cadeiras` do documento cru: vem
 `undefined` nos registros novos.
 
@@ -129,13 +130,40 @@ em texto livre, opcional (`nome`), como quem abre um chamado de manutenção.
 `alunoId` continua no modelo por causa dos registros antigos e vem `null` nos
 novos — use `S.nomeNaCadeira(atrib)`, que resolve aluno cadastrado, nome livre
 ou "sem identificação". O CSV semanal tem as duas colunas separadas, e é
-"Cadeiras em uso" que significa algo: "Cadeiras reservadas" é sempre 14 ou 28.
+"Cadeiras em uso" que significa algo: "Cadeiras reservadas" é sempre a clínica
+inteira.
 Por isso `calcularImpacto` compara o uso registrado com o que resta operante —
 comparar com a reserva marcaria toda ocupação como afetada por qualquer
 interdição.
 
 O store traduz `autorizados.nivel` para `perfil` na hidratação; as views não
 sabem da diferença.
+
+### As pré-clínicas — clínica não tem mais tamanho fixo
+
+Desde 22/09/2026 existe um quinto agrupamento, `ag5` "Pré-clínicas", com as
+duas clínicas de laboratório: `cl9` **Pré-clínica maior** (70 cadeiras,
+113–182) e `cl10` **Pré-clínica menor** (20 cadeiras, 183–202). São 10 clínicas
+e 202 cadeiras, numeradas de 1 a 202 sem buraco.
+
+**14 cadeiras por clínica deixou de ser invariante.** Quem precisar do tamanho
+lê `c.cadeiras`; da faixa, `S.faixaCadeiras`; da capacidade de um escopo,
+`S.capacidadeEscopo`. Nada pode voltar a multiplicar por 14 nem escrever 112 —
+todas as contas do sistema já eram derivadas, e foi só por isso que as duas
+entraram sem tocar em store, agenda, relatórios ou impressão.
+
+Os números da capa e da tela de provisionamento saem de `Dados.semente()`
+(`numerosDaEstrutura`, em `app.js`), e não de literais: eles ficaram presos em
+"8 clínicas · 112 cadeiras" até esse dia.
+
+**`S.atualizarClinica` continua sem aceitar `cadeiras`**, e agora por outro
+motivo: a numeração é global e contínua, então mudar o tamanho de uma clínica
+deslocaria a primeira cadeira de todas as seguintes — e com ela cada
+`manutencoes.cadeira` e cada `atribuicoes.cadeira` já gravados, que guardam o
+número global. Trocar tamanho exige remapear esses registros; não é campo de
+formulário. Clínica nova entra pela semente (provisionamento) ou, num banco já
+provisionado, gravando `agrupamentos` e `clinicas` direto — foi assim que as
+duas pré-clínicas entraram em produção.
 
 ### Pós-graduação — especialização sem disciplina e sem turma
 
@@ -176,6 +204,12 @@ assim no modo pontual:
   `null`. O padrão é a primeira opção do tipo, ou "Outros" quando não há
   nenhuma — o campo nunca nasce vazio.
 - A dica do campo Tipo troca "turma" por "especialização" junto com o resto.
+- **E o campo Descrição vira "Descrição/Turma"** (22/09/2026). A especialização
+  cadastrada não tem identificador de turma — o sistema mantém uma só, interna,
+  que o formulário nunca mostra —, então é na descrição que a turma daquele
+  encontro é escrita. Na graduação o rótulo continua "Descrição": a turma já
+  veio no campo de vínculo logo acima, e repetir a palavra ali confundiria.
+  Vale só no modo pontual, que é onde o campo existe.
 - **O modo recorrente não se divide**: a lista lá continua única, com
   graduação e pós juntas, porque a reserva recorrente da pós aponta para a
   turma que o sistema mantém. Separar ali deixaria a pós sem como ocupar
@@ -534,7 +568,7 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
   está interditada, mas não abre registro
 - Bloqueio de sobreposição na mesma clínica
 - Ocupação das duas clínicas do mesmo agrupamento
-- Numeração contínua de cadeiras, 1 a 112
+- Numeração contínua de cadeiras, 1 a 202
 - Cancelamento segue a matriz de `acesso.js`: professor cancela o que é dele
 - Manutenção exige motivo; o impacto na capacidade é calculado automaticamente
 - Com o banco vazio, o coordenador vê a tela de provisionamento; professor e

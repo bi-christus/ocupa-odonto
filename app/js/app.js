@@ -158,8 +158,21 @@
     return caixa;
   }
 
+  /* Os números da estrutura saem da semente, nunca de literais na tela: eles
+     já mentiram uma vez — ficaram presos em "8 clínicas · 112 cadeiras"
+     quando as duas pré-clínicas entraram, em 22/09/2026. */
+  function numerosDaEstrutura() {
+    var b = global.Dados.semente();
+    return {
+      agrupamentos: b.agrupamentos.length,
+      clinicas: b.clinicas.length,
+      cadeiras: b.clinicas.reduce(function (s, c) { return s + c.cadeiras; }, 0)
+    };
+  }
+
   function login() {
     var cfg = global.Config || {};
+    var n = numerosDaEstrutura();
     return C.el('div', { class: 'login' }, [
       C.el('div', { class: 'login-l' }, [
         C.el('div', { class: 'row', style: 'gap:11px' }, [
@@ -174,11 +187,13 @@
           })
         ]),
         C.el('div', { class: 'row', style: 'gap:44px' }, [
-          ['4', 'agrupamentos'], ['8', 'clínicas'], ['112', 'cadeiras']
-        ].map(function (n) {
+          [String(n.agrupamentos), 'agrupamentos'],
+          [String(n.clinicas), 'clínicas'],
+          [String(n.cadeiras), 'cadeiras']
+        ].map(function (par) {
           return C.el('div', {}, [
-            C.el('div', { style: 'font:600 34px var(--font-heading);line-height:1', text: n[0] }),
-            C.el('div', { class: 'eyebrow', text: n[1] })
+            C.el('div', { style: 'font:600 34px var(--font-heading);line-height:1', text: par[0] }),
+            C.el('div', { class: 'eyebrow', text: par[1] })
           ]);
         })),
         C.el('div', { class: 'eyebrow', text: cfg.nomeInstituicao || 'Odontologia' })
@@ -191,13 +206,16 @@
      qualquer tela ter o que mostrar. Só o coordenador provisiona. */
   function provisionar() {
     var podeFazer = S.pode('estrutura.editar');
+    var n = numerosDaEstrutura();
     var caixa = C.el('div', { class: 'login-l', style: 'max-width:640px' }, [
       C.el('span', { class: 'brand', text: 'Ocupa' }),
       C.el('h2', { text: 'Estrutura ainda não cadastrada', style: 'margin-top:14px' }),
       C.el('p', {
         class: 'muted', style: 'font-size:14px;line-height:1.7;margin-top:14px',
         text: podeFazer
-          ? 'O banco está vazio. Vou gravar os 4 agrupamentos, as 8 clínicas e as 112 cadeiras, junto com a configuração inicial do semestre. Isso é feito uma única vez; nenhuma pessoa ou atividade é criada.'
+          ? 'O banco está vazio. Vou gravar os ' + n.agrupamentos + ' agrupamentos, as ' +
+            n.clinicas + ' clínicas e as ' + n.cadeiras + ' cadeiras, junto com a configuração ' +
+            'inicial do semestre. Isso é feito uma única vez; nenhuma pessoa ou atividade é criada.'
           : 'O sistema ainda não foi configurado pela coordenação. Assim que a estrutura das clínicas for cadastrada, esta tela dá lugar ao painel.'
       })
     ]);

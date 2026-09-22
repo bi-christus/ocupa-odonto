@@ -301,8 +301,9 @@
         'cadeiras ' + f[0] + '–' + f[1]);
     }
 
-    /* Não existe mais campo de quantidade: reservar uma clínica reserva as 14
-       cadeiras dela, e o escopo duplo reserva as 28. O que o professor
+    /* Não existe mais campo de quantidade: reservar uma clínica reserva TODAS
+       as cadeiras dela — 14 nas de atendimento, 70 ou 20 nas pré-clínicas —,
+       e o escopo duplo reserva a soma das duas. O que o professor
        registra depois, cadeira por cadeira, é quem está em uso — e é isso que
        mede a ocupação nos relatórios. A linha abaixo mostra o que a reserva
        compromete, sem pedir número. */
@@ -557,12 +558,19 @@
           }, u.perfil === 'professor' ? { disabled: true } : null))
         ]));
 
+        /* Na pós o campo é "Descrição/Turma": a especialização cadastrada não
+           tem identificador de turma — o sistema mantém uma só, interna, que
+           o formulário nunca mostra —, então é aqui que a turma daquele
+           encontro é escrita. Na graduação a turma já veio no campo de
+           vínculo acima, e repetir o rótulo só confundiria. */
         corpo.appendChild(C.el('div', { style: 'margin-top:16px' },
-          U.campo('Descrição', C.el('textarea', {
+          U.campo(ehPos ? 'Descrição/Turma' : 'Descrição', C.el('textarea', {
             class: 'input', rows: '2', value: form.descricao,
-            placeholder: 'O que acontece nesta ocupação? Fica visível para quem consulta a agenda.',
+            placeholder: ehPos
+              ? 'Qual turma e o que acontece nesta ocupação? Fica visível para quem consulta a agenda.'
+              : 'O que acontece nesta ocupação? Fica visível para quem consulta a agenda.',
             oninput: function (ev) { form.descricao = ev.target.value; }
-          }))));
+          }), ehPos ? 'a turma da especialização entra aqui' : null)));
 
         /* O botão não pode prometer "registrar" quando o que vai acontecer é
            um pedido esperando a coordenação. */

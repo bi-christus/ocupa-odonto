@@ -1407,8 +1407,13 @@
   function atualizarClinica(id, dados) {
     var c = clinica(id); if (!c) return;
     var antes = JSON.parse(JSON.stringify(c));
-    /* 'cadeiras' fica de fora de propósito: 14 por clínica é invariante do
-       modelo, e mexer nisso quebraria a numeração global de 1 a 112. */
+    /* 'cadeiras' fica de fora de propósito. Não é mais porque 14 seja
+       invariante — as pré-clínicas têm 70 e 20 —, e sim porque a numeração
+       das cadeiras é GLOBAL e contínua: mudar o tamanho de uma clínica
+       deslocaria a primeira cadeira de todas as seguintes, e com ela cada
+       manutenção e cada atribuição já gravada, que guardam o número global.
+       Trocar o tamanho exige remapear esses registros — não é um campo de
+       formulário. */
     ['nome', 'abertura', 'fechamento'].forEach(function (k) {
       if (dados[k] !== undefined) c[k] = dados[k];
     });

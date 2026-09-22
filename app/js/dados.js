@@ -71,18 +71,25 @@
     var periodoLetivo = ano + '.' + (C.parseISO(hoje).getMonth() < 6 ? '1' : '2');
 
     /* ── Agrupamentos e clínicas ──
-       Estrutura física real do curso: quatro agrupamentos de duas clínicas,
-       14 cadeiras cada — 8 clínicas e 112 cadeiras, numeradas globalmente de
-       1 a 112. O agrupamento é nomeado pelas clínicas que contém; a palavra
+       Estrutura física real do curso: quatro agrupamentos de duas clínicas de
+       atendimento, 14 cadeiras cada, mais o agrupamento das PRÉ-CLÍNICAS, que
+       são de laboratório e têm tamanhos próprios — 70 e 20 cadeiras. São 10
+       clínicas e 202 cadeiras, numeradas globalmente de 1 a 202, contínuas.
+
+       14 por clínica DEIXOU DE SER INVARIANTE em 22/09/2026, quando as
+       pré-clínicas entraram: quem precisar do tamanho leia `c.cadeiras`, e da
+       faixa, `S.faixaCadeiras` — nada no sistema pode voltar a multiplicar
+       por 14. O agrupamento é nomeado pelas clínicas que contém; a palavra
        "sala" não é usada em lugar nenhum do sistema. */
     var agrupamentos = [
       { id: 'ag1', nome: 'Clínicas 1 e 2', clinicas: ['cl1', 'cl2'] },
       { id: 'ag2', nome: 'Clínicas 3 e 4', clinicas: ['cl3', 'cl4'] },
       { id: 'ag3', nome: 'Clínicas 5 e 6', clinicas: ['cl5', 'cl6'] },
-      { id: 'ag4', nome: 'Clínicas 7 e 8', clinicas: ['cl7', 'cl8'] }
+      { id: 'ag4', nome: 'Clínicas 7 e 8', clinicas: ['cl7', 'cl8'] },
+      { id: 'ag5', nome: 'Pré-clínicas', clinicas: ['cl9', 'cl10'] }
     ];
     var clinicas = [];
-    agrupamentos.forEach(function (g, gi) {
+    agrupamentos.slice(0, 4).forEach(function (g, gi) {
       g.clinicas.forEach(function (id, j) {
         var k = gi * 2 + j;
         clinicas.push({
@@ -92,6 +99,20 @@
           abertura: '07:00', fechamento: '22:00'
         });
       });
+    });
+    /* A numeração das pré-clínicas continua de onde as clínicas de
+       atendimento pararam — derivada, não escrita à mão: cadeira 113 é a
+       primeira da pré-clínica maior porque as oito anteriores somam 112. */
+    var proxima = clinicas.reduce(function (s, c) { return s + c.cadeiras; }, 0) + 1;
+    [{ id: 'cl9', nome: 'Pré-clínica maior', cadeiras: 70 },
+     { id: 'cl10', nome: 'Pré-clínica menor', cadeiras: 20 }].forEach(function (p) {
+      clinicas.push({
+        id: p.id, nome: p.nome, agrupamentoId: 'ag5',
+        especialidade: 'Pré-clínica',
+        cadeiras: p.cadeiras, primeiraCadeira: proxima,
+        abertura: '07:00', fechamento: '22:00'
+      });
+      proxima += p.cadeiras;
     });
 
     return {

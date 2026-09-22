@@ -253,8 +253,10 @@
   /* ── Clínica ──────────────────────────────────────────────────────── */
   function editarClinica(c) {
     if (!S.pode('estrutura.editar')) { C.toast('Seu perfil não altera a estrutura.'); return; }
-    /* 'cadeiras' não entra: 14 por clínica é invariante do modelo e
-       S.atualizarClinica nem aceita mais o campo. */
+    /* 'cadeiras' não entra: o tamanho varia por clínica (14 nas de
+       atendimento, 70 e 20 nas pré-clínicas), mas mexer nele deslocaria a
+       numeração global das seguintes — S.atualizarClinica nem aceita o
+       campo, e o porquê está lá. */
     var f = { nome: c.nome, abertura: c.abertura, fechamento: c.fechamento };
     var faixa = S.faixaCadeiras(c.id);
 
