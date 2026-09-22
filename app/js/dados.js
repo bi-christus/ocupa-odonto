@@ -72,9 +72,17 @@
 
     /* ── Agrupamentos e clínicas ──
        Estrutura física real do curso: quatro agrupamentos de duas clínicas de
-       atendimento, 14 cadeiras cada, mais o agrupamento das PRÉ-CLÍNICAS, que
-       são de laboratório e têm tamanhos próprios — 70 e 20 cadeiras. São 10
-       clínicas e 202 cadeiras, numeradas globalmente de 1 a 202, contínuas.
+       atendimento, 14 cadeiras cada, mais as duas PRÉ-CLÍNICAS, que são de
+       laboratório, têm tamanhos próprios — 70 e 20 cadeiras — e funcionam
+       SOZINHAS. São 10 clínicas e 202 cadeiras, numeradas globalmente de 1 a
+       202, contínuas.
+
+       Cada pré-clínica é um agrupamento de UMA clínica só, e é isso que as
+       faz individuais: a opção "as duas" só existe onde o agrupamento tem
+       duas (`cls.length > 1`, em opcoesEscopo), então elas nunca aparecem
+       como reserva conjunta — nem entre si, nem com clínica de atendimento.
+       Cada uma também ganha o próprio `indices/{agrupamentoId}`, então uma
+       não disputa horário com a outra.
 
        14 por clínica DEIXOU DE SER INVARIANTE em 22/09/2026, quando as
        pré-clínicas entraram: quem precisar do tamanho leia `c.cadeiras`, e da
@@ -86,7 +94,8 @@
       { id: 'ag2', nome: 'Clínicas 3 e 4', clinicas: ['cl3', 'cl4'] },
       { id: 'ag3', nome: 'Clínicas 5 e 6', clinicas: ['cl5', 'cl6'] },
       { id: 'ag4', nome: 'Clínicas 7 e 8', clinicas: ['cl7', 'cl8'] },
-      { id: 'ag5', nome: 'Pré-clínicas', clinicas: ['cl9', 'cl10'] }
+      { id: 'ag5', nome: 'Pré-clínica maior', clinicas: ['cl9'] },
+      { id: 'ag6', nome: 'Pré-clínica menor', clinicas: ['cl10'] }
     ];
     var clinicas = [];
     agrupamentos.slice(0, 4).forEach(function (g, gi) {
@@ -104,10 +113,10 @@
        atendimento pararam — derivada, não escrita à mão: cadeira 113 é a
        primeira da pré-clínica maior porque as oito anteriores somam 112. */
     var proxima = clinicas.reduce(function (s, c) { return s + c.cadeiras; }, 0) + 1;
-    [{ id: 'cl9', nome: 'Pré-clínica maior', cadeiras: 70 },
-     { id: 'cl10', nome: 'Pré-clínica menor', cadeiras: 20 }].forEach(function (p) {
+    [{ id: 'cl9', ag: 'ag5', nome: 'Pré-clínica maior', cadeiras: 70 },
+     { id: 'cl10', ag: 'ag6', nome: 'Pré-clínica menor', cadeiras: 20 }].forEach(function (p) {
       clinicas.push({
-        id: p.id, nome: p.nome, agrupamentoId: 'ag5',
+        id: p.id, nome: p.nome, agrupamentoId: p.ag,
         especialidade: 'Pré-clínica',
         cadeiras: p.cadeiras, primeiraCadeira: proxima,
         abertura: '07:00', fechamento: '22:00'

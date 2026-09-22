@@ -369,6 +369,15 @@
     if (ehEspecializacao(d)) return 'Pós-graduação · ' + d.nome;
     return d.codigo + ' ' + t.codigo + ' · ' + d.nome;
   }
+  /* Linha de apoio da pista do agrupamento: as clínicas que ele reúne. Vem
+     vazia quando o agrupamento tem uma clínica só com o mesmo nome — é o caso
+     das pré-clínicas, que são individuais, e repetir o nome logo abaixo dele
+     não informa nada. */
+  function subtituloAgrupamento(agrupamentoId) {
+    var l = clinicasDoAgrupamento(agrupamentoId);
+    if (l.length === 1 && l[0].nome === nomeAgrupamento(agrupamentoId)) return '';
+    return l.map(function (c) { return c.nome; }).join(' · ');
+  }
   /* Linha de apoio do bloco na agenda: na graduação é o nome da disciplina,
      que o rótulo curto não traz; na pós o nome já está no rótulo, então
      sobra dizer de que nível é a atividade. */
@@ -1568,7 +1577,8 @@
     turma: turma, disciplina: disciplina,
     aluno: aluno, pessoa: pessoa, nomePessoa: nomePessoa,
     disciplinaDaTurma: disciplinaDaTurma, rotuloTurma: rotuloTurma, rotuloTurmaLongo: rotuloTurmaLongo,
-    subtituloTurma: subtituloTurma, turmasDoProfessor: turmasDoProfessor,
+    subtituloTurma: subtituloTurma, subtituloAgrupamento: subtituloAgrupamento,
+    turmasDoProfessor: turmasDoProfessor,
     ehEspecializacao: ehEspecializacao, especializacoes: especializacoes,
     disciplinasDeGraduacao: disciplinasDeGraduacao, turmasDeGraduacao: turmasDeGraduacao,
     turmaDaEspecializacao: turmaDaEspecializacao,

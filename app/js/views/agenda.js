@@ -692,7 +692,10 @@
     return C.el('div', { class: 'tl-row', style: 'min-height:' + (altura + 20) + 'px' }, [
       C.el('div', { class: 'tl-lbl' }, [
         g.nome,
-        C.el('small', { text: clinicas.map(function (c) { return c.nome; }).join(' · ') })
+        /* Nada de repetir o nome embaixo dele: a pré-clínica é um agrupamento
+           de uma clínica só, e as duas se chamam igual. */
+        S.subtituloAgrupamento(g.id)
+          ? C.el('small', { text: S.subtituloAgrupamento(g.id) }) : null
       ]),
       trilha
     ]);

@@ -329,9 +329,11 @@
       return C.el('div', { class: 'tl-row' }, [
         C.el('div', { class: 'tl-lbl' }, [
           g.nome,
-          C.el('small', {
-            text: clinicas.map(function (c) { return c.nome; }).join(' · ')
-          })
+          /* A linha de baixo lista as clínicas do agrupamento — mas a
+             pré-clínica é um agrupamento de uma clínica só, e o nome das
+             duas é o mesmo: repetido, vira ruído. */
+          S.subtituloAgrupamento(g.id)
+            ? C.el('small', { text: S.subtituloAgrupamento(g.id) }) : null
         ]),
         trilha
       ]);

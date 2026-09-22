@@ -96,7 +96,7 @@ hora, pelo snapshot de `autorizados`.
 |---|---|---|
 | `config` | `sistema` (doc único) | `versao`, `periodoLetivo`, `semestre{inicio,fim}`, `parametros{faixaMinimaMin, capacidadeSemanalH, bloquearSobreposicao, exigirMotivoManutencao, exigirAprovacaoProfessor, aberturaPadrao, fechamentoPadrao}` |
 | `autorizados` | e-mail em minúsculas | `nome`, `nivel`, `ativo`, `ultimoAcesso` |
-| `agrupamentos` | `ag1`–`ag5` | `nome`, `clinicas[]` |
+| `agrupamentos` | `ag1`–`ag6` | `nome`, `clinicas[]` |
 | `clinicas` | `cl1`–`cl10` | `nome`, `agrupamentoId`, `especialidade`, `cadeiras`, `primeiraCadeira`, `abertura`, `fechamento` |
 | `disciplinas` | auto | `codigo`, `nome`, `nivel` (`graduacao` \| `pos`) |
 | `turmas` | auto | `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo` |
@@ -105,7 +105,7 @@ hora, pelo snapshot de `autorizados`.
 | `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]`, `excluidaEm`, `excluidaPor`, `motivoExclusao` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` (mais `titulo` só nas gravadas antes de 17/09/2026) |
 | `manutencoes` | auto | `protocolo`, `clinicaId`, `cadeira`, `categoria`, `criticidade`, `motivo`, `abertoPor`, `abertoEm`, `previsaoRetorno`, `status`, `fechadoPor`, `fechadoEm`, `laudo`, `impacto{}` |
 | `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `nome`, `alunoId` (nulo nos registros novos), `data`, `registradoPor`, `registradoEm` |
-| `indices` | `ag1`–`ag5` | `agrupamentoId`, `itens[]` |
+| `indices` | `ag1`–`ag6` | `agrupamentoId`, `itens[]` |
 
 **Não existe coleção `cadeiras`.** Cadeira é derivada de `primeiraCadeira` +
 `cadeiras` da clínica. O estado de uma cadeira vive em `manutencoes` e
@@ -139,12 +139,26 @@ interdição.
 O store traduz `autorizados.nivel` para `perfil` na hidratação; as views não
 sabem da diferença.
 
-### As pré-clínicas — clínica não tem mais tamanho fixo
+### As pré-clínicas — individuais, e clínica não tem mais tamanho fixo
 
-Desde 22/09/2026 existe um quinto agrupamento, `ag5` "Pré-clínicas", com as
-duas clínicas de laboratório: `cl9` **Pré-clínica maior** (70 cadeiras,
-113–182) e `cl10` **Pré-clínica menor** (20 cadeiras, 183–202). São 10 clínicas
-e 202 cadeiras, numeradas de 1 a 202 sem buraco.
+Desde 22/09/2026 existem duas clínicas de laboratório: `cl9` **Pré-clínica
+maior** (70 cadeiras, 113–182) e `cl10` **Pré-clínica menor** (20 cadeiras,
+183–202). São 10 clínicas e 202 cadeiras, numeradas de 1 a 202 sem buraco.
+
+**Cada uma é um agrupamento de UMA clínica só** — `ag5` "Pré-clínica maior" e
+`ag6` "Pré-clínica menor" —, e é isso que as faz funcionar individualmente,
+diferente das oito de atendimento. A opção "as duas" só é montada onde o
+agrupamento tem duas (`cls.length > 1`, em `opcoesEscopo`), então elas nunca
+aparecem como reserva conjunta; `primeiroEscopoLivre` e o clique na pista do
+dia já eram guardados do mesmo jeito (`i >= cls.length`, `clinicas.length > 1`),
+então o formato de agrupamento com uma clínica só não exigiu código novo.
+Cada uma tem o próprio `indices/{agrupamentoId}`, então uma não disputa
+horário com a outra — conferido no harness: as duas aceitam ocupação no mesmo
+horário, e a segunda tentativa na MESMA pré-clínica é recusada por choque.
+
+Na pista do dia (Agenda e Ocupação agora) o agrupamento de uma clínica só não
+repete o nome na linha de baixo: `S.subtituloAgrupamento` devolve vazio quando
+o nome da única clínica é o do agrupamento.
 
 **14 cadeiras por clínica deixou de ser invariante.** Quem precisar do tamanho
 lê `c.cadeiras`; da faixa, `S.faixaCadeiras`; da capacidade de um escopo,
@@ -567,7 +581,8 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
   encerrar, idem. O professor mantém `estrutura.ver` para saber qual cadeira
   está interditada, mas não abre registro
 - Bloqueio de sobreposição na mesma clínica
-- Ocupação das duas clínicas do mesmo agrupamento
+- Ocupação das duas clínicas do mesmo agrupamento — **menos nas pré-clínicas**,
+  que são agrupamentos de uma clínica só e por isso só se reservam sozinhas
 - Numeração contínua de cadeiras, 1 a 202
 - Cancelamento segue a matriz de `acesso.js`: professor cancela o que é dele
 - Manutenção exige motivo; o impacto na capacidade é calculado automaticamente
