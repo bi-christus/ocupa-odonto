@@ -392,31 +392,42 @@ duas horas, e a coluna não dizia nada sobre ocupação real da clínica.
 
 O Industry não define movimento nenhum: é um desenho técnico — canto vivo,
 traço de 1px, marca de registro, e o botão primário como única peça sólida. A
-camada de animação (22/09/2026, no fim de `styles.css`) sai desse caráter, e
-não de um kit genérico: é **mecanismo, não bolha**.
+camada de animação (`styles.css`, no fim) sai desse caráter, e não de um kit
+genérico: **mecanismo, não bolha** — uma prancheta que recebe a folha, um
+plotter que traça, um painel que acende fileira por fileira.
 
-- **Eixo reto e pixel inteiro.** `translateY(1px)` no toque, `translateY(6px)`
-  na troca de tela, `translateY(-8px)` na modal. Nada de escala saindo do
-  centro, rotação, elástico ou salto: peça que se move assenta e para — é o
-  que `--mov-encaixe` (`cubic-bezier(.2,0,0,1)`) faz.
-- **Duração curta**: `--mov-toque` 90ms, `--mov-base` 140ms, `--mov-tela`
-  200ms. A coordenação lança ocupação em sequência; animação que se faz notar
-  duas vezes já é atraso.
+- **Eixo reto, e o que cresce cresce de uma BORDA.** `translateY` no toque e
+  na entrada; `scaleY` do topo no bloco da agenda, `scaleX` da esquerda na
+  barra do gantt e na de horas — traço saindo da caneta, nunca inflando do
+  meio. Nada de rotação, elástico ou salto: a peça assenta e para, que é o que
+  `--mov-encaixe` (`cubic-bezier(.2,0,0,1)`) faz.
+- **A troca de tela é ENCADEADA**, e é daí que vem a evidência sem lentidão:
+  uma varredura de 2px (o plotter) corre o topo do conteúdo em 420ms enquanto
+  as peças entram em degraus de `--mov-passo` (55ms) — da quarta em diante
+  todas juntas, porque encadear vinte cartões seria fila, não movimento.
+  Tokens: `--mov-toque` 90ms, `--mov-base` 140ms, `--mov-tela` 260ms,
+  `--mov-longo` 420ms.
+- **O painel de cadeiras acende em varredura.** A grade tem 7 colunas fixas,
+  então o degrau vai no resto da divisão por 7 (`:nth-child(7n+N)`) e o efeito
+  se repete fileira a fileira. As 70 cadeiras da pré-clínica maior saem de
+  graça: são 6 regras, não 70 atrasos.
 - **A propriedade é sempre NOMEADA.** `transition:all` aqui pegaria `top` e
   `height` dos blocos da agenda — que são horário de início e duração — e a
   grade inteira passaria a escorregar a cada redesenho.
-- **A troca de tela é da TROCA, não de cada redesenho.** `App.ir` levanta
-  `trocouDeTela` e `conteudo()` põe a classe `.troca-tela` no `<main>`;
-  `recarregar()` não. Sem essa distinção, cada gravação — que remonta o main
-  para mostrar o toast — reanimaria a tela inteira, e o app viraria um piscar
-  constante. Ir para a rota em que já se está também não anima.
+- **Só na TROCA, nunca em cada redesenho.** `App.ir` levanta `trocouDeTela` e
+  `desenhar()` põe a classe `.troca-tela` na CASCA (`.app`), que cobre o
+  cabeçalho e o `main`; `recarregar()` não. Sem isso, cada gravação — que
+  remonta tudo para mostrar o toast — reanimaria a tela, e o app viraria um
+  piscar constante. Ir para a rota em que já se está também não anima, e por
+  isso trocar de aba dentro da Agenda (Semana/Dia) não reanima a grade.
 - **O que de propósito não tem movimento**: o fantasma do arraste na agenda
   (tem de grudar no cursor; transição ali é atraso visível), a posição dos
   blocos na grade, e a folha de impressão.
 - **`prefers-reduced-motion: reduce` zera tudo** — 1ms em toda animação e
-  transição, e o `translateY` do toque desligado. É regra de acessibilidade,
-  não preferência: quem liga isso no sistema costuma ter motivo vestibular.
-  Conferido com `chrome --headless --force-prefers-reduced-motion`.
+  transição, atrasos zerados, o `translateY` do toque desligado e as duas
+  varreduras em `display:none`, porque são decorativas e não podem nem
+  piscar. É regra de acessibilidade, não preferência. Conferido com
+  `chrome --headless --force-prefers-reduced-motion`.
 
 ## Lançar pelo clique na grade
 

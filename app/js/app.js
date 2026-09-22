@@ -73,10 +73,13 @@
     if (!S.usuario()) { raiz.appendChild(login()); return; }
     if (S.estruturaPendente()) { raiz.appendChild(provisionar()); return; }
     rotaValida();
-    raiz.appendChild(C.el('div', { class: 'app' }, [
+    /* A classe vai na CASCA, não só no main: a aba que se acende no cabeçalho
+       faz parte da mesma troca, e as duas precisam da mesma bandeira. */
+    raiz.appendChild(C.el('div', { class: 'app' + (trocouDeTela ? ' troca-tela' : '') }, [
       cabecalho(),
       conteudo()
     ]));
+    trocouDeTela = false;
   }
 
   function rotaValida() {
@@ -304,8 +307,7 @@
 
   /* ── Conteúdo ─────────────────────────────────────────────────────── */
   function conteudo() {
-    var main = C.el('main', trocouDeTela ? { class: 'troca-tela' } : null);
-    trocouDeTela = false;
+    var main = C.el('main');
     var atual = null;
     ROTAS.forEach(function (r) { if (r.id === rota) atual = r; });
     var view = atual ? global[atual.view] : null;

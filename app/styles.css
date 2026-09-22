@@ -357,17 +357,18 @@ html.arrastando-agenda,html.arrastando-agenda *{
    O design system não traz camada de movimento nenhuma: ele é um desenho
    técnico — canto vivo, traço de 1px, marca de registro, e a única peça
    sólida é o botão primário. A animação daqui sai desse caráter, e não de
-   um kit genérico: é MECANISMO, não bolha.
+   um kit genérico: é MECANISMO, não bolha. Uma prancheta que recebe a
+   folha, um plotter que traça, um painel que acende fileira por fileira.
 
    As três regras que valem para tudo abaixo:
-   · eixo reto e pixel inteiro — translateY(1px), translateY(6px); nunca
-     escala saindo do centro, nunca rotação, nunca elástico ou salto. Peça
-     que se move ASSENTA e para, que é o que --mov-encaixe faz: arranca
-     rápido e freia até o fim;
-   · duração curta. 90ms é o toque, que precisa parecer instantâneo; 140ms
-     é mudança de estado; 200ms é a troca de tela. Nada acima disso — a
-     coordenação lança ocupação em sequência, e animação que se faz notar
-     duas vezes já é atraso;
+   · eixo reto e pixel inteiro — nunca escala saindo do centro, nunca
+     rotação, nunca elástico ou salto. Peça que se move ASSENTA e para, que
+     é o que --mov-encaixe faz: arranca rápido e freia até o fim. O que
+     cresce, cresce a partir de uma BORDA (scaleY do topo, scaleX da
+     esquerda), como traço saindo da caneta — nunca inflando do meio;
+   · o toque é instantâneo (90ms) e a troca de tela é ENCADEADA, não
+     simultânea: as peças entram em degraus de --mov-passo, que é o que faz
+     o movimento ser percebido sem precisar ser lento;
    · a propriedade é sempre NOMEADA. `transition:all` aqui pegaria `top` e
      `height` dos blocos da agenda, que são posição e duração da ocupação —
      a grade inteira passaria a escorregar a cada redesenho.
@@ -376,71 +377,140 @@ html.arrastando-agenda,html.arrastando-agenda *{
    (ele tem de grudar no cursor — transição ali vira atraso visível), a
    posição dos blocos na grade e a folha de impressão. */
 :root{
-  --mov-toque:90ms; --mov-base:140ms; --mov-tela:200ms;
+  --mov-toque:90ms; --mov-base:140ms; --mov-tela:260ms; --mov-longo:420ms;
+  --mov-passo:55ms;   /* degrau do encadeamento */
   --mov-encaixe:cubic-bezier(.2,0,0,1);
   --mov-saida:cubic-bezier(.4,0,1,1);
 }
 
-/* ── Toque: a peça assenta 1px e volta ──
-   O botão primário é o único objeto sólido do sistema; afundar 1px no
-   clique é o que dá a ele peso de tecla de painel. Os de contorno afundam
-   igual, mas quem muda neles é o traço. */
+/* ── Toque: a peça assenta e volta ──
+   O botão primário é o único objeto sólido do sistema; afundar 2px com uma
+   sombra interna é o que dá a ele peso de tecla de painel de máquina — a
+   tecla desce no curso dela e bate no fim. */
 .btn,.chip-btn,.nav button,.seg button,.days button,.turnos button,
 .chair,.list-btn,.who,.x{
   transition:background-color var(--mov-base) var(--mov-encaixe),
     border-color var(--mov-base) var(--mov-encaixe),
     color var(--mov-base) var(--mov-encaixe),
+    box-shadow var(--mov-toque) var(--mov-encaixe),
     transform var(--mov-toque) var(--mov-encaixe)}
-.btn:active,.chip-btn:active,.chair:active,.days button:active,
-.turnos button:active,.who:active{transform:translateY(1px)}
-.btn-ghost:active,.btn-danger:active,.x:active{transform:translateY(1px)}
-/* Disparar a ação com o teclado também afunda: quem navega por Tab recebe
-   a mesma confirmação de que a tecla desceu. */
-.btn:focus-visible:active{transform:translateY(1px)}
+.btn:active,.chip-btn:active,.seg button:active,.days button:active,
+.turnos button:active,.who:active,.list-btn:active{
+  transform:translateY(2px);
+  box-shadow:inset 0 2px 0 color-mix(in srgb,#000 20%,transparent)}
+.chair:active{transform:translateY(2px) scale(.94)}
+.btn-ghost:active,.btn-danger:active,.x:active{transform:translateY(2px)}
+.nav button:active{transform:translateY(2px)}
 
-/* O bloco da agenda e a barra do gantt não se movem — eles são posição e
-   duração. O que responde é o tom. */
+/* A aba que assume se ACENDE da esquerda para a direita, como contato que
+   fecha — e não aparece pronta. Só na troca de tela: a nav é remontada a
+   cada redesenho, e repetir isso a cada gravação seria pisca-pisca. */
+.nav button.on{background-image:linear-gradient(var(--fill-strong),var(--fill-strong));
+  background-repeat:no-repeat;background-size:100% 100%}
+.troca-tela .nav button.on{animation:mov-contato var(--mov-tela) var(--mov-encaixe) both}
+@keyframes mov-contato{from{background-size:0% 100%}}
+
+/* O bloco da agenda e a barra do gantt não se movem no hover — eles são
+   posição e duração. O que responde é o tom. */
 .ev,.tl-blk{transition:filter var(--mov-base) var(--mov-encaixe),
   outline-color var(--mov-base) var(--mov-encaixe)}
-.input{transition:border-color var(--mov-base) var(--mov-encaixe)}
+.ev:active{filter:brightness(.9)}
+.input{transition:border-color var(--mov-base) var(--mov-encaixe),
+  box-shadow var(--mov-base) var(--mov-encaixe)}
+.input:focus-visible{box-shadow:inset 0 -2px 0 var(--accent-ink)}
 .bar > i{transition:width var(--mov-tela) var(--mov-encaixe)}
 
-/* ── Troca de tela: a folha cai na prancheta ──
+/* ── Troca de tela: a folha cai e o plotter passa ──
    Só na TROCA (classe posta por App.ir), nunca em cada redesenho:
-   `recarregar` remonta o main a cada ação — salvar, aprovar, cancelar — e
-   reanimar a tela inteira junto com cada toast viraria um piscar constante.
-   6px de deslocamento e 200ms: o bastante para o olho registrar que a
-   prancheta trocou, pouco para não esperar por ela. */
-main.troca-tela{animation:mov-folha var(--mov-tela) var(--mov-encaixe) both}
-@keyframes mov-folha{from{opacity:0;transform:translateY(6px)}}
+   `recarregar` remonta a casca a cada ação — salvar, aprovar, cancelar — e
+   reanimar tudo junto com cada toast viraria um piscar constante.
 
-/* A barra de horas se enche ao chegar na tela, como ponteiro de manômetro
-   saindo do zero. Presa à troca de tela pelo mesmo motivo: refazer a
-   animação a cada gravação seria ruído. */
-.troca-tela .bar > i{animation:mov-barra var(--mov-tela) var(--mov-encaixe) both;
+   A varredura é uma linha de 2px que corre a largura do conteúdo e se
+   apaga: é a passada do plotter antes de o desenho aparecer. Vive num
+   ::before com `pointer-events:none`, então não entra no caminho de clique
+   de nada. */
+.troca-tela main{position:relative}
+.troca-tela main::before{content:'';position:absolute;left:0;right:0;top:0;height:2px;
+  background:var(--accent-ink);transform-origin:left center;pointer-events:none;z-index:1;
+  animation:mov-varredura var(--mov-longo) var(--mov-encaixe) both}
+@keyframes mov-varredura{
+  0%{transform:scaleX(0);opacity:1}
+  70%{transform:scaleX(1);opacity:1}
+  100%{transform:scaleX(1);opacity:0}}
+
+/* As peças da tela entram ENCADEADAS, de cima para baixo: o cabeçalho da
+   página primeiro, os blocos depois, em degraus de 55ms — o bastante para
+   o olho ler a ordem, pouco para não virar espera. Da quarta em diante
+   todas entram juntas: encadear vinte cartões seria fila, não movimento. */
+.troca-tela main > *{animation:mov-peca var(--mov-tela) var(--mov-encaixe) both}
+.troca-tela main > *:nth-child(2){animation-delay:var(--mov-passo)}
+.troca-tela main > *:nth-child(3){animation-delay:calc(var(--mov-passo) * 2)}
+.troca-tela main > *:nth-child(n+4){animation-delay:calc(var(--mov-passo) * 3)}
+@keyframes mov-peca{from{opacity:0;transform:translateY(10px)}}
+
+/* O painel de cadeiras acende em varredura, da esquerda para a direita de
+   cada fileira: são 7 colunas fixas, então o degrau vai no resto da
+   divisão por 7 e o efeito se repete fileira a fileira, como um painel de
+   contatos energizando. As 70 cadeiras da pré-clínica maior saem de graça:
+   são 6 regras, não 70 atrasos. */
+.troca-tela .chair{animation:mov-selo var(--mov-base) var(--mov-encaixe) both}
+.troca-tela .chairs .chair:nth-child(7n+2){animation-delay:30ms}
+.troca-tela .chairs .chair:nth-child(7n+3){animation-delay:60ms}
+.troca-tela .chairs .chair:nth-child(7n+4){animation-delay:90ms}
+.troca-tela .chairs .chair:nth-child(7n+5){animation-delay:120ms}
+.troca-tela .chairs .chair:nth-child(7n+6){animation-delay:150ms}
+.troca-tela .chairs .chair:nth-child(7n+7){animation-delay:180ms}
+@keyframes mov-selo{from{opacity:0;transform:translateY(5px) scale(.9)}}
+
+/* O bloco da agenda é TRAÇADO de cima para baixo e a barra do gantt da
+   esquerda para a direita: a origem é a borda em que o horário começa, o
+   que faz o desenho crescer no sentido em que o tempo corre. */
+.troca-tela .ev{transform-origin:top center;
+  animation:mov-traco var(--mov-longo) var(--mov-encaixe) both}
+@keyframes mov-traco{from{transform:scaleY(0);opacity:.35}}
+.troca-tela .tl-blk{transform-origin:left center;
+  animation:mov-traco-x var(--mov-longo) var(--mov-encaixe) both}
+@keyframes mov-traco-x{from{transform:scaleX(0);opacity:.35}}
+
+/* A barra de horas se enche como ponteiro de manômetro saindo do zero, e o
+   número do KPI é revelado por baixo de uma persiana — os dois presos à
+   troca de tela, senão refariam a animação a cada gravação. */
+.troca-tela .bar > i{animation:mov-barra var(--mov-longo) var(--mov-encaixe) both;
   transform-origin:left center}
 @keyframes mov-barra{from{transform:scaleX(0)}}
+.troca-tela .kpi b{animation:mov-persiana var(--mov-tela) var(--mov-encaixe) both;
+  animation-delay:var(--mov-passo)}
+@keyframes mov-persiana{from{clip-path:inset(0 0 100% 0);opacity:0}}
 
 /* ── Modal: a placa assenta vinda de cima ──
-   O véu escurece, e a caixa desce 8px até parar. Sem escala: a modal é uma
-   placa no topo da elevação, não uma bolha que cresce. */
+   O véu escurece e a caixa desce 14px até parar, com a mesma varredura de
+   plotter na borda de cima — a placa é posta na prancheta, não inflada.
+   Sem escala: modal é chapa, não bolha. */
 .scrim{animation:mov-veu var(--mov-base) var(--mov-encaixe) both}
 @keyframes mov-veu{from{opacity:0}}
-.modal{animation:mov-placa var(--mov-tela) var(--mov-encaixe) both}
-@keyframes mov-placa{from{opacity:0;transform:translateY(-8px)}}
+.modal{animation:mov-placa var(--mov-tela) var(--mov-encaixe) both;position:relative}
+@keyframes mov-placa{from{opacity:0;transform:translateY(-14px)}}
+.modal::before{content:'';position:absolute;left:0;right:0;top:0;height:2px;
+  background:var(--accent-ink);transform-origin:left center;pointer-events:none;
+  animation:mov-varredura var(--mov-longo) var(--mov-encaixe) both}
 
 /* ── Sem movimento para quem pediu sem movimento ──
    Regra de acessibilidade, não preferência: quem liga "reduzir movimento"
    no sistema costuma ter motivo vestibular. O estado final é o mesmo — o
-   que some é o caminho até ele. */
+   que some é o caminho até ele, inclusive a varredura do plotter, que é
+   decorativa e por isso não pode nem piscar. */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{
     animation-duration:1ms !important;animation-iteration-count:1 !important;
+    animation-delay:0ms !important;
     transition-duration:1ms !important;scroll-behavior:auto !important}
-  .btn:active,.chip-btn:active,.chair:active,.days button:active,
-  .turnos button:active,.who:active,.btn-ghost:active,.btn-danger:active,
-  .x:active{transform:none}
+  .troca-tela main::before,.modal::before{display:none}
+  .btn:active,.chip-btn:active,.seg button:active,.days button:active,
+  .turnos button:active,.who:active,.list-btn:active,.chair:active,
+  .btn-ghost:active,.btn-danger:active,.x:active,.nav button:active{
+    transform:none;box-shadow:none}
 }
+
 /* ═══ Impressão e PDF ═══
    O documento impresso é montado por js/impressao.js e anexado ao <body>
    fora de #raiz. Na tela ele não existe; no papel, é a única coisa que
