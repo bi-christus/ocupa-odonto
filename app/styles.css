@@ -154,8 +154,11 @@ select.input{appearance:none;padding-right:26px;
 /* ═══ Toast ═══ */
 #toasts{position:fixed;right:20px;bottom:20px;z-index:90;display:flex;flex-direction:column;gap:9px}
 .toast{background:var(--color-neutral-900);color:var(--color-neutral-100);padding:12px 16px;font-size:13px;max-width:360px;
-  border-left:3px solid var(--color-accent-400);animation:tin .2s ease-out}
-@keyframes tin{from{opacity:0;transform:translateY(6px)}}
+  border-left:3px solid var(--color-accent-400);
+  /* Entra pela borda em que ele mora — a direita —, com o mesmo encaixe do
+     resto: desliza e para, sem quicar. */
+  animation:tin var(--mov-base,140ms) var(--mov-encaixe,ease-out) both}
+@keyframes tin{from{opacity:0;transform:translateX(10px)}}
 
 /* ═══ Modal ═══ */
 .scrim{position:fixed;inset:0;background:color-mix(in srgb,#1d1f20 55%,transparent);z-index:60;
@@ -349,6 +352,95 @@ html.arrastando-agenda,html.arrastando-agenda *{
   .login-r{border-left:0;border-top:1px solid var(--color-divider)}
   .wk{grid-template-columns:1fr}}
 
+
+/* ═══ Movimento — a linguagem do Industry ═════════════════════════════
+   O design system não traz camada de movimento nenhuma: ele é um desenho
+   técnico — canto vivo, traço de 1px, marca de registro, e a única peça
+   sólida é o botão primário. A animação daqui sai desse caráter, e não de
+   um kit genérico: é MECANISMO, não bolha.
+
+   As três regras que valem para tudo abaixo:
+   · eixo reto e pixel inteiro — translateY(1px), translateY(6px); nunca
+     escala saindo do centro, nunca rotação, nunca elástico ou salto. Peça
+     que se move ASSENTA e para, que é o que --mov-encaixe faz: arranca
+     rápido e freia até o fim;
+   · duração curta. 90ms é o toque, que precisa parecer instantâneo; 140ms
+     é mudança de estado; 200ms é a troca de tela. Nada acima disso — a
+     coordenação lança ocupação em sequência, e animação que se faz notar
+     duas vezes já é atraso;
+   · a propriedade é sempre NOMEADA. `transition:all` aqui pegaria `top` e
+     `height` dos blocos da agenda, que são posição e duração da ocupação —
+     a grade inteira passaria a escorregar a cada redesenho.
+
+   O que de propósito NÃO tem movimento: o fantasma do arraste na agenda
+   (ele tem de grudar no cursor — transição ali vira atraso visível), a
+   posição dos blocos na grade e a folha de impressão. */
+:root{
+  --mov-toque:90ms; --mov-base:140ms; --mov-tela:200ms;
+  --mov-encaixe:cubic-bezier(.2,0,0,1);
+  --mov-saida:cubic-bezier(.4,0,1,1);
+}
+
+/* ── Toque: a peça assenta 1px e volta ──
+   O botão primário é o único objeto sólido do sistema; afundar 1px no
+   clique é o que dá a ele peso de tecla de painel. Os de contorno afundam
+   igual, mas quem muda neles é o traço. */
+.btn,.chip-btn,.nav button,.seg button,.days button,.turnos button,
+.chair,.list-btn,.who,.x{
+  transition:background-color var(--mov-base) var(--mov-encaixe),
+    border-color var(--mov-base) var(--mov-encaixe),
+    color var(--mov-base) var(--mov-encaixe),
+    transform var(--mov-toque) var(--mov-encaixe)}
+.btn:active,.chip-btn:active,.chair:active,.days button:active,
+.turnos button:active,.who:active{transform:translateY(1px)}
+.btn-ghost:active,.btn-danger:active,.x:active{transform:translateY(1px)}
+/* Disparar a ação com o teclado também afunda: quem navega por Tab recebe
+   a mesma confirmação de que a tecla desceu. */
+.btn:focus-visible:active{transform:translateY(1px)}
+
+/* O bloco da agenda e a barra do gantt não se movem — eles são posição e
+   duração. O que responde é o tom. */
+.ev,.tl-blk{transition:filter var(--mov-base) var(--mov-encaixe),
+  outline-color var(--mov-base) var(--mov-encaixe)}
+.input{transition:border-color var(--mov-base) var(--mov-encaixe)}
+.bar > i{transition:width var(--mov-tela) var(--mov-encaixe)}
+
+/* ── Troca de tela: a folha cai na prancheta ──
+   Só na TROCA (classe posta por App.ir), nunca em cada redesenho:
+   `recarregar` remonta o main a cada ação — salvar, aprovar, cancelar — e
+   reanimar a tela inteira junto com cada toast viraria um piscar constante.
+   6px de deslocamento e 200ms: o bastante para o olho registrar que a
+   prancheta trocou, pouco para não esperar por ela. */
+main.troca-tela{animation:mov-folha var(--mov-tela) var(--mov-encaixe) both}
+@keyframes mov-folha{from{opacity:0;transform:translateY(6px)}}
+
+/* A barra de horas se enche ao chegar na tela, como ponteiro de manômetro
+   saindo do zero. Presa à troca de tela pelo mesmo motivo: refazer a
+   animação a cada gravação seria ruído. */
+.troca-tela .bar > i{animation:mov-barra var(--mov-tela) var(--mov-encaixe) both;
+  transform-origin:left center}
+@keyframes mov-barra{from{transform:scaleX(0)}}
+
+/* ── Modal: a placa assenta vinda de cima ──
+   O véu escurece, e a caixa desce 8px até parar. Sem escala: a modal é uma
+   placa no topo da elevação, não uma bolha que cresce. */
+.scrim{animation:mov-veu var(--mov-base) var(--mov-encaixe) both}
+@keyframes mov-veu{from{opacity:0}}
+.modal{animation:mov-placa var(--mov-tela) var(--mov-encaixe) both}
+@keyframes mov-placa{from{opacity:0;transform:translateY(-8px)}}
+
+/* ── Sem movimento para quem pediu sem movimento ──
+   Regra de acessibilidade, não preferência: quem liga "reduzir movimento"
+   no sistema costuma ter motivo vestibular. O estado final é o mesmo — o
+   que some é o caminho até ele. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:1ms !important;animation-iteration-count:1 !important;
+    transition-duration:1ms !important;scroll-behavior:auto !important}
+  .btn:active,.chip-btn:active,.chair:active,.days button:active,
+  .turnos button:active,.who:active,.btn-ghost:active,.btn-danger:active,
+  .x:active{transform:none}
+}
 /* ═══ Impressão e PDF ═══
    O documento impresso é montado por js/impressao.js e anexado ao <body>
    fora de #raiz. Na tela ele não existe; no papel, é a única coisa que

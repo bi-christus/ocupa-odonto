@@ -5,6 +5,12 @@
 
   var raiz, rota = 'painel', paramsRota = null, tema = 'claro';
 
+  /* A transição de tela é da TROCA de tela, não de cada redesenho. `desenhar`
+     remonta o main a cada ação — salvar, aprovar, cancelar, registrar cadeira
+     —, e animar a tela inteira junto com cada toast viraria um piscar
+     constante. Só `ir()` levanta esta bandeira; `recarregar()` não. */
+  var trocouDeTela = false;
+
   var ROTAS = [
     { id: 'painel', rotulo: 'Painel', permissao: 'painel.ver', view: 'ViewPainel' },
     { id: 'agora', rotulo: 'Ocupação agora', permissao: 'agenda.ver', view: 'ViewAgora' },
@@ -298,7 +304,8 @@
 
   /* ── Conteúdo ─────────────────────────────────────────────────────── */
   function conteudo() {
-    var main = C.el('main');
+    var main = C.el('main', trocouDeTela ? { class: 'troca-tela' } : null);
+    trocouDeTela = false;
     var atual = null;
     ROTAS.forEach(function (r) { if (r.id === rota) atual = r; });
     var view = atual ? global[atual.view] : null;
@@ -319,6 +326,7 @@
 
   /* ── API de navegação ─────────────────────────────────────────────── */
   function ir(destino, params) {
+    trocouDeTela = destino !== rota;
     rota = destino; paramsRota = params || null;
     U.fecharModal();
     desenhar();

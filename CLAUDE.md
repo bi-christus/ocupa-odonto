@@ -388,6 +388,36 @@ duas horas, e a coluna não dizia nada sobre ocupação real da clínica.
 - A folha impressa da semana tem forma própria (gantt por dia) — ver
   "Impressão e PDF". Só a régua de horas é compartilhada.
 
+## Movimento — a camada que o design system não trazia
+
+O Industry não define movimento nenhum: é um desenho técnico — canto vivo,
+traço de 1px, marca de registro, e o botão primário como única peça sólida. A
+camada de animação (22/09/2026, no fim de `styles.css`) sai desse caráter, e
+não de um kit genérico: é **mecanismo, não bolha**.
+
+- **Eixo reto e pixel inteiro.** `translateY(1px)` no toque, `translateY(6px)`
+  na troca de tela, `translateY(-8px)` na modal. Nada de escala saindo do
+  centro, rotação, elástico ou salto: peça que se move assenta e para — é o
+  que `--mov-encaixe` (`cubic-bezier(.2,0,0,1)`) faz.
+- **Duração curta**: `--mov-toque` 90ms, `--mov-base` 140ms, `--mov-tela`
+  200ms. A coordenação lança ocupação em sequência; animação que se faz notar
+  duas vezes já é atraso.
+- **A propriedade é sempre NOMEADA.** `transition:all` aqui pegaria `top` e
+  `height` dos blocos da agenda — que são horário de início e duração — e a
+  grade inteira passaria a escorregar a cada redesenho.
+- **A troca de tela é da TROCA, não de cada redesenho.** `App.ir` levanta
+  `trocouDeTela` e `conteudo()` põe a classe `.troca-tela` no `<main>`;
+  `recarregar()` não. Sem essa distinção, cada gravação — que remonta o main
+  para mostrar o toast — reanimaria a tela inteira, e o app viraria um piscar
+  constante. Ir para a rota em que já se está também não anima.
+- **O que de propósito não tem movimento**: o fantasma do arraste na agenda
+  (tem de grudar no cursor; transição ali é atraso visível), a posição dos
+  blocos na grade, e a folha de impressão.
+- **`prefers-reduced-motion: reduce` zera tudo** — 1ms em toda animação e
+  transição, e o `translateY` do toque desligado. É regra de acessibilidade,
+  não preferência: quem liga isso no sistema costuma ter motivo vestibular.
+  Conferido com `chrome --headless --force-prefers-reduced-motion`.
+
 ## Lançar pelo clique na grade
 
 A Agenda cria ocupação como um calendário: clicar no vazio abre o formulário
