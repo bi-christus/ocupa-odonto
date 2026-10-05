@@ -192,10 +192,7 @@
 
     var corpo = C.el('tbody');
     matriz.forEach(function (m) {
-      var celulas = [C.el('td', {}, [
-        C.el('span', { text: m.clinica.nome }),
-        C.el('span', { class: 'muted', style: 'display:block;font-size:11.5px', text: m.clinica.especialidade })
-      ])];
+      var celulas = [C.el('td', { text: m.clinica.nome })];
       m.dias.forEach(function (h) {
         celulas.push(C.el('td', {
           class: 'num right' + (h ? '' : ' muted'),

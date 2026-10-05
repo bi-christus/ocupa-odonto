@@ -94,10 +94,7 @@
     return C.el('div', {}, [
       C.el('div', { style: 'display:flex;align-items:baseline;justify-content:space-between;gap:9px;flex-wrap:wrap' }, [
         C.el('div', { style: 'display:flex;align-items:baseline;gap:9px;flex-wrap:wrap' }, [
-          C.el('span', { style: 'font:600 14px var(--font-heading);letter-spacing:.03em', text: c.nome }),
-          c.especialidade ? C.el('span', {
-            style: 'font-size:11.5px;color:var(--accent-ink)', text: c.especialidade
-          }) : null
+          C.el('span', { style: 'font:600 14px var(--font-heading);letter-spacing:.03em', text: c.nome })
         ]),
         S.pode('estrutura.editar') ? C.el('button', {
           class: 'btn-ghost', text: 'Editar',
@@ -263,7 +260,7 @@
 
     U.modal({
       titulo: 'Editar ' + c.nome,
-      subtitulo: S.nomeAgrupamento(c.agrupamentoId) + (c.especialidade ? ' · ' + c.especialidade : ''),
+      subtitulo: S.nomeAgrupamento(c.agrupamentoId),
       largura: '620px',
       conteudo: C.el('div', {}, [
         C.el('div', { class: 'grid-fields' }, [

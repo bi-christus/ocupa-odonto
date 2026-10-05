@@ -224,11 +224,9 @@
         ? 'border-left:1px dashed var(--line);padding-left:30px;min-width:0'
         : 'padding-right:30px;min-width:0'
     }, [
+      /* Só o nome: a especialidade ao lado dele era lida como disciplina. */
       C.el('div', { class: 'row', style: 'gap:10px;min-width:0' }, [
-        C.el('span', { style: 'font:600 18px var(--font-heading);letter-spacing:.02em', text: c.nome }),
-        c.especialidade
-          ? C.el('span', { style: 'font-size:12px;color:var(--accent-ink)', text: c.especialidade })
-          : null
+        C.el('span', { style: 'font:600 18px var(--font-heading);letter-spacing:.02em', text: c.nome })
       ]),
       C.el('div', { style: 'margin:6px 0 16px' }, linhasEstado(c, ref)),
       grade
@@ -430,7 +428,7 @@
       })
     ]));
     caixa.appendChild(C.el('div', { class: 'muted', style: 'font-size:12.5px;margin:3px 0 18px',
-      text: S.localCadeira(n, c) + (c.especialidade ? ' · ' + c.especialidade : '') }));
+      text: S.localCadeira(n, c) }));
 
     if (manut) {
       caixa.appendChild(M.ficha(manut));
