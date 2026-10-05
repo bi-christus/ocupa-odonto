@@ -98,8 +98,19 @@
     return C.el('div', { class: 'imp-leg' }, [
       C.el('span', {}, [C.el('i', { class: 'am-rec' }), 'Aula recorrente']),
       C.el('span', {}, [C.el('i', { class: 'am-pont' }), 'Atividade pontual']),
-      C.el('span', { text: '"2 clínicas" = ocupação das duas clínicas do agrupamento' })
+      C.el('span', { text: '"2 clínicas" = ocupação das duas clínicas do agrupamento' }),
+      C.el('span', { text: '"N cad." = cadeiras que a reserva usa' })
     ]);
+  }
+
+  /* `filtro` vem da agenda quando a tela está filtrada: { aceita(o),
+     descricao }. A folha imprime só o que passa e diz no subtítulo que é
+     filtrada — papel filtrado que não avisa vira "a agenda". */
+  function aplicarFiltro(lista, filtro) {
+    return filtro && filtro.aceita ? lista.filter(filtro.aceita) : lista;
+  }
+  function comFiltro(texto, filtro) {
+    return filtro && filtro.descricao ? texto + ' · ' + filtro.descricao : texto;
   }
 
   /* ── Semana: gantt com uma linha por DIA ──────────────────────────────
@@ -145,13 +156,16 @@
       style: 'left:' + ((a - ini) / span * 100) + '%;width:' + ((b - a) / span * 100) + '%;' +
         'top:' + (d.faixa * ALTURA_FAIXA) + 'pt'
     }, [
-      C.el('b', { text: S.rotuloEscopo(o.agrupamentoId, o.escopo) + (dupla ? ' · 2 clínicas' : '') }),
+      C.el('b', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + (dupla ? ' · 2 clínicas' : '') +
+        ' · ' + o.cadeiras + ' cad.' }),
       C.el('span', { text: ' ' + o.inicio + '–' + o.fim + ' · ' + o.titulo +
-        ' · ' + C.primeiroNome(S.nomePessoa(o.responsavelId)) })
+        (o.nivel === 'pos' ? ' (pós)' : '') +
+        ' · ' + C.primeiroNome(S.nomePessoa(o.responsavelId)) +
+        (o.descricao ? ' · ' + o.descricao : '') })
     ]);
   }
 
-  function semana(seg) {
+  function semana(seg, filtro) {
     var datas = [], i;
     for (i = 0; i < 6; i++) datas.push(C.addDays(seg, i));
     var janela = S.janelaHoras(datas);
@@ -167,7 +181,7 @@
     var total = 0;
 
     datas.forEach(function (d) {
-      var itens = S.ocorrenciasDoDia(d);
+      var itens = aplicarFiltro(S.ocorrenciasDoDia(d), filtro);
       total += itens.length;
       var arranjo = faixasDoDia(itens);
       var altura = Math.max(ALTURA_MINIMA, arranjo.faixas * ALTURA_FAIXA + 3);
@@ -200,12 +214,12 @@
 
     return documento(
       'Ocupação das clínicas · semana de ' + C.fmtDiaAno(seg) + ' a ' + C.fmtDiaAno(datas[5]),
-      subtituloPadrao(C.plural(total, 'ocupação', 'ocupações') + ' na semana'),
+      subtituloPadrao(comFiltro(C.plural(total, 'ocupação', 'ocupações') + ' na semana', filtro)),
       C.el('div', { class: 'imp-gantt' }, [eixo, corpo, legenda()]));
   }
 
-  function imprimirSemana(seg) {
-    imprimir(semana(seg), {
+  function imprimirSemana(seg, filtro) {
+    imprimir(semana(seg, filtro), {
       arquivo: 'agenda-semana-' + seg,
       paisagem: true
     });
@@ -215,27 +229,32 @@
      A pista do gantt não sobrevive ao papel (é posicionamento absoluto sobre
      uma régua que depende da largura da tela), então o dia vira lista por
      agrupamento, na mesma ordem em que as pistas aparecem. */
-  function dia(data) {
+  function dia(data, filtro) {
     var caixa = C.el('div');
     var agrupamentos = S.estado.agrupamentos || [];
     var total = 0;
 
     agrupamentos.forEach(function (g) {
-      var lista = S.ocorrenciasDoDia(data, { agrupamentoId: g.id });
+      var lista = aplicarFiltro(S.ocorrenciasDoDia(data, { agrupamentoId: g.id }), filtro);
       total += lista.length;
       var corpo = C.el('tbody');
       if (!lista.length) {
         corpo.appendChild(C.el('tr', {}, C.el('td', {
-          colspan: '5', class: 'vazio', text: 'Sem ocupação registrada.'
+          colspan: '6', class: 'vazio', text: 'Sem ocupação registrada.'
         })));
       }
       lista.forEach(function (o) {
         corpo.appendChild(C.el('tr', {}, [
           C.el('td', { class: 'h', text: o.inicio + '–' + o.fim }),
-          C.el('td', { text: S.rotuloEscopo(o.agrupamentoId, o.escopo) }),
+          C.el('td', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) }),
+          /* Quais cadeiras: no papel pendurado na clínica é o número que
+             diz ao aluno onde sentar. */
+          C.el('td', { class: 'h', text: o.integral ? 'todas'
+            : o.cadeiras + ' · ' + S.textoCadeiras(o.cadeirasLista) }),
           C.el('td', {}, [
             C.el('b', { text: o.titulo }),
-            o.subtitulo ? C.el('small', { text: o.subtitulo }) : null
+            o.subtitulo ? C.el('small', { text: o.subtitulo }) : null,
+            o.descricao ? C.el('small', { text: o.descricao }) : null
           ]),
           C.el('td', { text: S.nomePessoa(o.responsavelId) }),
           C.el('td', { text: o.origem === 'pontual' ? 'Pontual' : 'Recorrente' })
@@ -247,6 +266,7 @@
         C.el('table', { class: 'imp-lista' }, [
           C.el('thead', {}, C.el('tr', {}, [
             C.el('th', { class: 'h', text: 'Horário' }), C.el('th', { text: 'Onde' }),
+            C.el('th', { class: 'h', text: 'Cadeiras' }),
             C.el('th', { text: 'Atividade' }), C.el('th', { text: 'Professor coordenador' }),
             C.el('th', { text: 'Tipo' })
           ])),
@@ -257,12 +277,12 @@
 
     return documento(
       'Ocupação das clínicas · ' + C.nomeDia(C.weekday(data), true) + ', ' + C.fmtDiaAno(data),
-      subtituloPadrao(C.plural(total, 'ocupação', 'ocupações') + ' no dia'),
+      subtituloPadrao(comFiltro(C.plural(total, 'ocupação', 'ocupações') + ' no dia', filtro)),
       caixa);
   }
 
-  function imprimirDia(data) {
-    imprimir(dia(data), { arquivo: 'agenda-dia-' + data, paisagem: false });
+  function imprimirDia(data, filtro) {
+    imprimir(dia(data, filtro), { arquivo: 'agenda-dia-' + data, paisagem: false });
   }
 
   /* ── Recorrências do semestre ─────────────────────────────────────── */
@@ -271,8 +291,10 @@
     return ultimo && ultimo < r.vigenciaFim ? ultimo : r.vigenciaFim;
   }
 
-  function recorrencias() {
-    var regras = S.recorrenciasAtivas().slice().sort(function (a, b) {
+  /* `filtro.aceita` aqui recebe o DOCUMENTO da recorrência — a agenda passa
+     a versão do filtro que sabe ler documento. */
+  function recorrencias(filtro) {
+    var regras = aplicarFiltro(S.recorrenciasAtivas(), filtro).slice().sort(function (a, b) {
       return (a.dias[0] - b.dias[0]) || C.toMin(a.inicio) - C.toMin(b.inicio);
     });
     var corpo = C.el('tbody');
@@ -282,26 +304,28 @@
       })));
     }
     regras.forEach(function (r) {
-      var t = S.turma(r.turmaId);
+      var d = S.disciplinaDe(r);
+      var desc = S.descricaoDe(r);
       corpo.appendChild(C.el('tr', {}, [
         C.el('td', {}, [
-          C.el('b', { text: S.rotuloTurma(t) }),
-          C.el('small', { text: S.nomePessoa(t ? t.professorCoordenadorId : null) })
+          C.el('b', { text: d ? S.rotuloDisciplina(d) : 'Sem disciplina' }),
+          C.el('small', { text: S.nomePessoa(S.responsavelDe(r)) + (desc ? ' · ' + desc : '') })
         ]),
-        C.el('td', { text: S.rotuloEscopo(r.agrupamentoId, r.escopo) }),
+        C.el('td', { text: S.rotuloEscopoCurto(r.agrupamentoId, r.escopo) }),
         C.el('td', { text: C.listaDias(r.dias) }),
         C.el('td', { class: 'h', text: r.inicio + '–' + r.fim }),
         C.el('td', { class: 'h', text: C.fmtDia(r.vigenciaInicio) + ' – ' + C.fmtDia(fimEfetivo(r)) }),
-        C.el('td', { class: 'h', text: String(S.capacidadeEscopo(r.agrupamentoId, r.escopo)) })
+        C.el('td', { class: 'h', text: S.ehIntegral(r)
+          ? 'todas' : S.quantidadeDe(r) + ' · ' + S.textoCadeiras(S.cadeirasDe(r)) })
       ]));
     });
 
     return documento(
       'Recorrências do semestre',
-      subtituloPadrao(C.plural(regras.length, 'recorrência ativa', 'recorrências ativas')),
+      subtituloPadrao(comFiltro(C.plural(regras.length, 'recorrência ativa', 'recorrências ativas'), filtro)),
       C.el('table', { class: 'imp-lista' }, [
         C.el('thead', {}, C.el('tr', {}, [
-          C.el('th', { text: 'Turma' }), C.el('th', { text: 'Onde' }),
+          C.el('th', { text: 'Disciplina' }), C.el('th', { text: 'Onde' }),
           C.el('th', { text: 'Dias' }), C.el('th', { class: 'h', text: 'Horário' }),
           C.el('th', { class: 'h', text: 'Vigência' }), C.el('th', { class: 'h', text: 'Cadeiras' })
         ])),
@@ -309,14 +333,75 @@
       ]));
   }
 
-  function imprimirRecorrencias() {
-    imprimir(recorrencias(), {
+  function imprimirRecorrencias(filtro) {
+    imprimir(recorrencias(filtro), {
       arquivo: 'recorrencias-' + S.estado.periodoLetivo, paisagem: false
+    });
+  }
+
+  /* ── Uma disciplina no semestre ───────────────────────────────────────
+     A folha da aba "Por disciplina": todas as ocupações da disciplina, em
+     ordem de data, agrupadas por mês. Lista, e não a grade de semanas da
+     tela: no papel o que se procura é "quando e onde", linha a linha. */
+  function disciplina(id) {
+    var d = S.disciplina(id);
+    var sem = S.estado.semestre || {};
+    var ini = C.dataValida(sem.inicio) ? sem.inicio : C.hojeISO();
+    var fim = C.dataValida(sem.fim) && sem.fim >= ini ? sem.fim : C.addDays(ini, 18 * 7);
+    var occs = d ? S.ocorrenciasIntervalo(ini, fim).filter(function (o) { return o.disciplinaId === d.id; }) : [];
+    var horas = 0;
+    occs.forEach(function (o) { horas += C.duracaoH(o.inicio, o.fim); });
+
+    var caixa = C.el('div');
+    var mesAtual = null, corpo = null;
+    function novoMes(data) {
+      var dt = C.parseISO(data);
+      corpo = C.el('tbody');
+      caixa.appendChild(C.el('div', { class: 'imp-sec' }, [
+        C.el('h2', { text: C.MESES[dt.getMonth()].charAt(0).toUpperCase() + C.MESES[dt.getMonth()].slice(1) + ' de ' + dt.getFullYear() }),
+        C.el('table', { class: 'imp-lista' }, [
+          C.el('thead', {}, C.el('tr', {}, [
+            C.el('th', { class: 'h', text: 'Data' }), C.el('th', { class: 'h', text: 'Horário' }),
+            C.el('th', { text: 'Onde' }), C.el('th', { class: 'h', text: 'Cadeiras' }),
+            C.el('th', { text: 'Descrição/Turma' }), C.el('th', { text: 'Tipo' })
+          ])),
+          corpo
+        ])
+      ]));
+    }
+    occs.forEach(function (o) {
+      var mes = o.data.slice(0, 7);
+      if (mes !== mesAtual) { mesAtual = mes; novoMes(o.data); }
+      corpo.appendChild(C.el('tr', {}, [
+        C.el('td', { class: 'h', text: C.nomeDia(C.weekday(o.data)) + ' ' + C.fmtDia(o.data) }),
+        C.el('td', { class: 'h', text: o.inicio + '–' + o.fim }),
+        C.el('td', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) }),
+        C.el('td', { class: 'h', text: o.integral ? 'todas' : o.cadeiras + ' · ' + S.textoCadeiras(o.cadeirasLista) }),
+        C.el('td', { text: o.descricao || '' }),
+        C.el('td', { text: o.origem === 'pontual' ? 'Pontual' : 'Recorrente' })
+      ]));
+    });
+    if (!occs.length) caixa.appendChild(C.el('p', { class: 'vazio', text: 'Nenhuma ocupação desta disciplina no semestre.' }));
+
+    var profs = d ? S.professoresDaDisciplina(d).map(S.nomePessoa) : [];
+    return documento(
+      d ? S.rotuloDisciplinaLongo(d) : 'Disciplina',
+      subtituloPadrao(C.plural(occs.length, 'encontro', 'encontros') + ' · ' + C.fmtHoras(horas) +
+        (profs.length ? ' · ' + profs.join(', ') : '')),
+      caixa);
+  }
+
+  function imprimirDisciplina(id) {
+    var d = S.disciplina(id);
+    imprimir(disciplina(id), {
+      arquivo: 'disciplina-' + (d ? String(d.codigo || d.nome).replace(/[^\w-]+/g, '-') : id) + '-' + S.estado.periodoLetivo,
+      paisagem: false
     });
   }
 
   global.Impressao = {
     imprimir: imprimir,
-    semana: imprimirSemana, dia: imprimirDia, recorrencias: imprimirRecorrencias
+    semana: imprimirSemana, dia: imprimirDia, recorrencias: imprimirRecorrencias,
+    disciplina: imprimirDisciplina
   };
 })(window);

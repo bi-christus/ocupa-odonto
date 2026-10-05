@@ -48,11 +48,13 @@
   }
 
   /* Traduz o formato do Firestore para o formato que as telas já conhecem.
-     Três traduções valem nota:
+     Duas traduções valem nota:
        autorizados  -> usuarios   (o campo `nivel` vira `perfil`)
        ocupacoes    -> recorrencias + pontuais, separadas por `tipo`
-       matriculas   -> turma.alunos, reconstruído como array
-     Assim nenhuma view precisou saber que os dados mudaram de lugar. */
+     Assim nenhuma view precisou saber que os dados mudaram de lugar.
+     `matriculas` -> turma.alunos saiu em 05/10/2026, junto com a turma: o
+     vínculo de alunos deixou de existir na tela. As turmas ainda são lidas,
+     cruas, só para as reservas antigas acharem a disciplina delas. */
   function hidratar(bruto) {
     var e = vazio();
     var cfg = bruto.config || {};
@@ -91,16 +93,7 @@
 
     e.alunos = (bruto.alunos || []).slice();
     e.disciplinas = (bruto.disciplinas || []).slice();
-    e.turmas = (bruto.turmas || []).map(function (t) {
-      var copia = {};
-      Object.keys(t).forEach(function (k) { copia[k] = t[k]; });
-      copia.alunos = [];
-      return copia;
-    });
-    (bruto.matriculas || []).forEach(function (m) {
-      var t = porId(e.turmas, m.turmaId);
-      if (t && t.alunos.indexOf(m.alunoId) === -1) t.alunos.push(m.alunoId);
-    });
+    e.turmas = (bruto.turmas || []).slice();
 
     (bruto.ocupacoes || []).forEach(function (o) {
       if (!ocupacaoUtil(o)) return;
@@ -150,12 +143,8 @@
         if (!eu || eu.ativo === false) { sair(); return; }
         usuarioAtual = eu;
       }
-    } else if (colecao === 'matriculas') {
-      estado.turmas.forEach(function (t) { t.alunos = []; });
-      documentos.forEach(function (m) {
-        var t = porId(estado.turmas, m.turmaId);
-        if (t && t.alunos.indexOf(m.alunoId) === -1) t.alunos.push(m.alunoId);
-      });
+    } else if (colecao === 'disciplinas') {
+      estado.disciplinas = documentos;
     } else if (colecao === 'manutencoes') {
       estado.manutencoes = documentos;
     } else if (colecao === 'atribuicoes') {
@@ -275,11 +264,13 @@
   function nomeClinica(id) { var c = clinica(id); return c ? c.nome : '—'; }
 
   /* ── Agrupamentos, escopos e cadeiras ───────────────────────────────
-     Um agrupamento reúne duas clínicas de 14 cadeiras. O escopo de uma
-     ocupação diz o que ela toma: 'a' a primeira clínica, 'b' a segunda,
-     'ambas' as duas (28 cadeiras). Número de cadeira é SEMPRE global,
-     único DENTRO da clínica (contínuo de 1 a 112 nas de atendimento, do 1 em
-     cada pré-clínica); a posição dentro da clínica é n - primeiraCadeira + 1. */
+     Um agrupamento reúne duas clínicas de 14 cadeiras (ou uma pré-clínica
+     sozinha). O escopo de uma ocupação diz ONDE ela está: 'a' a primeira
+     clínica, 'b' a segunda, 'ambas' as duas. QUANTAS cadeiras ela segura é
+     outra conversa desde 05/10/2026 — ver "Cadeiras da reserva", mais abaixo.
+     Número de cadeira é único DENTRO da clínica (contínuo de 1 a 112 nas de
+     atendimento, do 1 em cada pré-clínica) e, por consequência, único dentro
+     do agrupamento; a posição dentro da clínica é n - primeiraCadeira + 1. */
   function agrupamento(id) { return porId(estado.agrupamentos, id); }
   function nomeAgrupamento(id) { var g = agrupamento(id); return g ? g.nome : '—'; }
   function clinicasDoAgrupamento(id) {
@@ -319,6 +310,38 @@
     var l = clinicasDoEscopo(agrupamentoId, escopo);
     if (!l.length) return [0, -1];
     return [faixaCadeiras(l[0].id)[0], faixaCadeiras(l[l.length - 1].id)[1]];
+  }
+  /* Todas as cadeiras de um escopo, na ordem em que a alocação as oferece: a
+     primeira clínica do agrupamento antes da segunda, e dentro de cada uma da
+     menor para a maior. É o "seguindo da menor até a maior" pedido para a
+     ocupação automática. */
+  function poolDoEscopo(agrupamentoId, escopo) {
+    var saida = [];
+    clinicasDoEscopo(agrupamentoId, escopo).forEach(function (c) {
+      for (var i = 0; i < c.cadeiras; i++) saida.push(c.primeiraCadeira + i);
+    });
+    return saida;
+  }
+  /* Rótulo curto do LUGAR, para bloco de agenda: o nome da clínica, ou o do
+     agrupamento quando a ocupação toma as duas. O longo (rotuloEscopo) traz a
+     capacidade entre parênteses e não cabe num cartão de 104px. */
+  function rotuloEscopoCurto(agrupamentoId, escopo) {
+    var l = clinicasDoEscopo(agrupamentoId, escopo);
+    if (!l.length) return '—';
+    return l.length === 1 ? l[0].nome : nomeAgrupamento(agrupamentoId);
+  }
+  /* Tipo de AMBIENTE reservado — um dos dois eixos dos marcadores da agenda
+     (o outro é o tipo de reserva). Três valores: uma clínica de atendimento,
+     as duas clínicas do agrupamento, ou uma pré-clínica de laboratório. A
+     pré-clínica é reconhecida pela especialidade ou pelo nome, que é o que a
+     semente grava nelas. */
+  function ehPreClinica(c) {
+    return !!c && /pr[ée]-?\s*cl[íi]nica/i.test(String(c.especialidade || '') + ' ' + String(c.nome || ''));
+  }
+  function ambienteDe(agrupamentoId, escopo) {
+    var l = clinicasDoEscopo(agrupamentoId, escopo);
+    if (l.length > 1) return 'dupla';
+    return ehPreClinica(l[0]) ? 'pre' : 'clinica';
   }
   /* O número da cadeira NÃO É MAIS ÚNICO NO POLO. As oito clínicas de
      atendimento seguem numeradas de 1 a 112, mas cada pré-clínica numera as
@@ -369,31 +392,6 @@
   function pessoa(id) { return porId(estado.usuarios, id); }
   function nomePessoa(id) { var u = pessoa(id); return u ? u.nome : '—'; }
 
-  function disciplinaDaTurma(t) { return t ? disciplina(t.disciplinaId) : null; }
-  /* A guarda de `d` não é zelo: o título de toda atividade pontual passa por
-     aqui desde 17/09/2026, e um `d` nulo estourava TypeError dentro da
-     montagem das ocorrências — o que derruba Agenda, Painel e Agora de uma
-     vez, não só a linha da turma. A tela de disciplinas impede excluir
-     disciplina com turma vinculada, mas nada impede alguém apagar o
-     documento direto no console do Firebase. */
-  function rotuloTurma(t) {
-    if (!t) return '—';
-    var d = disciplinaDaTurma(t);
-    if (!d) return t.codigo;
-    /* Na pós o nome da especialização É o rótulo. Código de disciplina e
-       identificador de turma existem no documento porque o resto do sistema
-       pressupõe os dois, mas ninguém da pós os conhece — imprimir
-       "POS-01 PÓS" na agenda seria mostrar a plumbing. */
-    if (ehEspecializacao(d)) return d.nome;
-    return d.codigo + ' ' + t.codigo;
-  }
-  function rotuloTurmaLongo(t) {
-    if (!t) return '—';
-    var d = disciplinaDaTurma(t);
-    if (!d) return t.codigo;
-    if (ehEspecializacao(d)) return 'Pós-graduação · ' + d.nome;
-    return d.codigo + ' ' + t.codigo + ' · ' + d.nome;
-  }
   /* Linha de apoio da pista do agrupamento: as clínicas que ele reúne. Vem
      vazia quando o agrupamento tem uma clínica só com o mesmo nome — é o caso
      das pré-clínicas, que são individuais, e repetir o nome logo abaixo dele
@@ -403,61 +401,134 @@
     if (l.length === 1 && l[0].nome === nomeAgrupamento(agrupamentoId)) return '';
     return l.map(function (c) { return c.nome; }).join(' · ');
   }
-  /* Linha de apoio do bloco na agenda: na graduação é o nome da disciplina,
-     que o rótulo curto não traz; na pós o nome já está no rótulo, então
-     sobra dizer de que nível é a atividade. */
-  function subtituloTurma(t) {
-    var d = disciplinaDaTurma(t);
-    if (!d) return '';
-    return ehEspecializacao(d) ? 'Pós-graduação' : d.nome;
-  }
-  function turmasDoProfessor(uid) {
-    return estado.turmas.filter(function (t) { return t.professorCoordenadorId === uid; });
-  }
+  /* ── Disciplinas ──────────────────────────────────────────────────────
+     Desde 05/10/2026 disciplina é SÓ disciplina: código e nome na
+     graduação, nome na pós. A turma saiu do cadastro e do formulário — quem
+     precisa dizer que turma ocupa a clínica escreve na descrição da reserva
+     ("Descrição/Turma") —, e a reserva aponta direto para a disciplina
+     (`disciplinaId`).
 
-  /* ── Pós-graduação ────────────────────────────────────────────────────
-     A pós não tem disciplina nem turma: tem o nome da especialização e o
-     professor responsável por ela. Mas a reserva recorrente aponta para uma
-     TURMA — é dela que sai o `responsavelId` da ocupação, e é ele que
-     governa quem pode cancelar. Sem turma, uma especialização só conseguiria
-     lançar atividade pontual, que não é o caso de uso (pós ocupa clínica
-     toda semana, o semestre inteiro).
+     A pós continua sendo uma `disciplina` com `nivel: 'pos'`; sem `nivel` é
+     graduação, que é o estado de tudo gravado antes de 18/09/2026. A turma
+     interna que o sistema criava por trás de cada especialização deixou de
+     ser necessária: ela existia porque a reserva recorrente precisava de uma
+     turma para herdar o professor, e agora a reserva grava o professor nela
+     mesma.
 
-     Por isso a especialização é gravada nas coleções que já existem: uma
-     `disciplina` com `nivel: 'pos'` e UMA turma criada pelo sistema, que o
-     formulário da pós nunca mostra. A alternativa — coleção nova
-     `especializacoes` — exigiria publicar Security Rule nova no console
-     antes de funcionar, e até lá toda gravação seria recusada pelo
-     `match /{document=**}` que fecha o resto. Mudança de modelo que só
-     funciona depois de alguém mexer no console não pode ir para `main`.
-
-     Disciplina sem `nivel` é da graduação: é o estado de todo documento
-     gravado antes desta mudança. */
+     O professor é ligado às disciplinas na tela ACESSOS, e o vínculo mora
+     na disciplina (`professores`, lista de e-mails). Na disciplina, e não em
+     `autorizados`, porque a escrita de `disciplinas` já é da coordenação nas
+     Security Rules sem restrição de campo; a de `autorizados` tem regra por
+     campo, e um campo novo ali só funcionaria depois de alguém mexer no
+     console — o que não pode ser pré-requisito de nada que vai para `main`. */
   var CODIGO_TURMA_POS = 'PÓS';
 
   function ehEspecializacao(d) { return !!d && d.nivel === 'pos'; }
+  function nivelDaDisciplina(d) { return ehEspecializacao(d) ? 'pos' : 'graduacao'; }
+  function porNome(a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); }
   function especializacoes() {
-    return estado.disciplinas.filter(ehEspecializacao).sort(function (a, b) {
-      return String(a.nome).localeCompare(String(b.nome), 'pt-BR');
-    });
+    return estado.disciplinas.filter(ehEspecializacao).sort(porNome);
   }
   function disciplinasDeGraduacao() {
-    return estado.disciplinas.filter(function (d) { return !ehEspecializacao(d); });
+    return estado.disciplinas.filter(function (d) { return !ehEspecializacao(d); })
+      .sort(function (a, b) {
+        return String(a.codigo || a.nome).localeCompare(String(b.codigo || b.nome), 'pt-BR');
+      });
   }
-  function turmasDeGraduacao() {
-    return estado.turmas.filter(function (t) { return !ehEspecializacao(disciplinaDaTurma(t)); });
+  function disciplinasDoNivel(nivel) {
+    return nivel === 'pos' ? especializacoes() : disciplinasDeGraduacao();
   }
-  function turmaDaEspecializacao(disciplinaId) {
-    var achada = null;
+
+  /* Rótulos. A guarda de `d` nulo não é zelo: o título de toda ocorrência
+     passa por aqui, e uma disciplina apagada direto no console do Firebase
+     estourava TypeError dentro da montagem das ocorrências — o que derruba
+     Agenda, Painel e Agora de uma vez.
+     Na pós o nome da especialização É o rótulo; na graduação o rótulo curto
+     é o código, e o nome vai para a linha de apoio. */
+  function rotuloDisciplina(d) {
+    if (!d) return '—';
+    if (ehEspecializacao(d)) return d.nome;
+    return d.codigo || d.nome;
+  }
+  function rotuloDisciplinaLongo(d) {
+    if (!d) return '—';
+    if (ehEspecializacao(d)) return 'Pós-graduação · ' + d.nome;
+    return (d.codigo ? d.codigo + ' · ' : '') + d.nome;
+  }
+  function subtituloDisciplina(d) {
+    if (!d) return '';
+    return ehEspecializacao(d) ? 'Pós-graduação' : d.nome;
+  }
+
+  /* Professores vinculados. Gravados em `professores` desde 05/10/2026; a
+     disciplina que ainda não tem o campo herda o vínculo antigo, que era o
+     professor coordenador de cada TURMA dela. A limpeza do cadastro grava
+     essa herança no documento — depois dela, nada mais lê turma para isso. */
+  function professoresDaDisciplina(d) {
+    if (!d) return [];
+    if (Array.isArray(d.professores)) return d.professores.slice();
+    var saida = [];
     estado.turmas.forEach(function (t) {
-      if (!achada && t.disciplinaId === disciplinaId) achada = t;
+      if (t.disciplinaId !== d.id || !t.professorCoordenadorId) return;
+      if (saida.indexOf(t.professorCoordenadorId) === -1) saida.push(t.professorCoordenadorId);
     });
-    return achada;
+    return saida;
   }
-  function professorDaEspecializacao(disciplinaId) {
-    var t = turmaDaEspecializacao(disciplinaId);
+  function disciplinasDoProfessor(uid) {
+    return estado.disciplinas.filter(function (d) {
+      return professoresDaDisciplina(d).indexOf(uid) !== -1;
+    });
+  }
+
+  /* ── Leitura da reserva, com o legado embutido ─────────────────────────
+     Reserva gravada antes de 05/10/2026 não tem `disciplinaId`: aponta para
+     uma turma. A recorrente também não tem `responsavelId` — ele saía da
+     turma na hora de montar a ocorrência. Estas funções resolvem as duas
+     formas, e nenhuma tela deve ler `disciplinaId`/`responsavelId` cru de um
+     DOCUMENTO de reserva (a ocorrência já vem resolvida). A limpeza do
+     cadastro grava o que hoje é derivado, e a partir dela o legado deixa de
+     ser consultado. */
+  function turmaLegada(o) { return (o && o.turmaId) ? turma(o.turmaId) : null; }
+  function disciplinaIdDe(o) {
+    if (!o) return null;
+    if (o.disciplinaId) return o.disciplinaId;
+    var t = turmaLegada(o);
+    return t ? t.disciplinaId : null;
+  }
+  function disciplinaDe(o) { return disciplina(disciplinaIdDe(o)); }
+  function responsavelDe(o) {
+    if (!o) return null;
+    if (o.responsavelId) return o.responsavelId;
+    var t = turmaLegada(o);
     return t ? t.professorCoordenadorId : null;
   }
+  /* A turma passou a ser escrita na descrição. Na reserva antiga ela estava
+     no cadastro de turma e é trazida para o mesmo lugar: "T1 · …". A turma
+     interna da pós ('PÓS') não diz nada a ninguém e fica de fora. */
+  function rotuloTurmaTexto(codigo) {
+    var c = String(codigo || '').trim();
+    if (!c || c === CODIGO_TURMA_POS) return '';
+    return /^t/i.test(c) ? c : 'Turma ' + c;
+  }
+  function descricaoDe(o) {
+    if (!o) return '';
+    var base = String(o.descricao || o.observacao || '').trim();
+    if (!o.disciplinaId) {
+      var t = turmaLegada(o);
+      var tt = t ? rotuloTurmaTexto(t.codigo) : '';
+      if (tt && base.indexOf(tt) === -1) base = tt + (base ? ' · ' + base : '');
+    }
+    return base;
+  }
+  /* Graduação ou pós. A reserva nova grava o tipo; a recorrente antiga era
+     sempre 'aula' e a pontual antiga podia ter um dos sete tipos legados —
+     nos dois casos quem decide é o nível da disciplina. */
+  function nivelDe(o) {
+    if (o && (o.tipoAtividade === 'pos' || o.tipoAtividade === 'graduacao')) return o.tipoAtividade;
+    var d = disciplinaDe(o);
+    return d ? nivelDaDisciplina(d) : 'graduacao';
+  }
+
   /* O código não é pedido a ninguém — a pós não trabalha com código de
      disciplina. Ele existe porque o documento e as colunas de CSV anteriores
      à pós contam com ele. Sequencial sobre o que já está cadastrado. */
@@ -500,59 +571,116 @@
     return c.cadeiras - cadeirasInterditadas(clinicaId);
   }
 
+  /* ── Cadeiras da reserva ──────────────────────────────────────────────
+     Até 05/10/2026 a reserva era sempre INTEGRAL: reservar uma clínica
+     tomava todas as cadeiras dela, e nada mais cabia ali no mesmo horário.
+     Desde então a reserva diz QUANTAS cadeiras usa (`cadeirasPedidas`) e o
+     sistema escolhe QUAIS (`cadeirasAlocadas`), da menor para a maior, entre
+     as que nenhuma outra reserva segura naquele horário. O resto da clínica
+     continua livre para outras reservas até as cadeiras acabarem — e as
+     escolhidas já nascem marcadas como ocupadas, sem o professor registrar
+     uma a uma.
+
+     Três estados de documento:
+       · com `cadeirasAlocadas` — reserva nova (ou ajustada): segura aquelas;
+       · só com `cadeirasPedidas` — pedido do professor ainda não aprovado:
+         não segura cadeira, como não segura horário; elas são escolhidas na
+         aprovação;
+       · sem nenhum dos dois — reserva gravada antes da mudança. Continua
+         INTEGRAL, segurando o escopo inteiro, até alguém ajustar as cadeiras
+         dela: não há como adivinhar quantas ela usaria.
+     `cadeiras`, sem sufixo, é o nome antigo e segue ignorado: está gravado
+     com valores de antes de 17/09/2026 que ninguém confirma mais.
+
+     A alocação é a MESMA em todas as datas da reserva — a recorrente usa as
+     mesmas cadeiras toda semana. Por isso uma cadeira só é livre para ela se
+     estiver livre em TODAS as datas em que ela cai. */
+  function numeroCrescente(a, b) { return a - b; }
+  function ehIntegral(o) {
+    return !!o && !Array.isArray(o.cadeirasAlocadas) && !o.cadeirasPedidas;
+  }
+  function quantidadeDe(o) {
+    if (!o) return 0;
+    if (Array.isArray(o.cadeirasAlocadas)) return o.cadeirasAlocadas.length;
+    if (o.cadeirasPedidas) return Number(o.cadeirasPedidas) || 0;
+    return capacidadeEscopo(o.agrupamentoId, o.escopo);
+  }
+  /* Cadeiras que o DOCUMENTO segura. Pedido pendente não segura nenhuma. */
+  function cadeirasDe(o) {
+    if (!o) return [];
+    if (Array.isArray(o.cadeirasAlocadas)) return o.cadeirasAlocadas.slice().sort(numeroCrescente);
+    if (o.cadeirasPedidas) return [];
+    return poolDoEscopo(o.agrupamentoId, o.escopo);
+  }
+  function textoCadeiras(lista) {
+    return lista && lista.length ? C.faixasNumeros(lista) : '—';
+  }
+
   /* ── Expansão de recorrências ─────────────────────────────────────── */
+  /* O que toda ocorrência carrega da reserva de origem — disciplina,
+     professor, nível, descrição, ambiente e cadeiras —, já resolvido, com o
+     legado embutido. As telas leem daqui, nunca do documento. */
+  function baseDaOcorrencia(o) {
+    var did = disciplinaIdDe(o);
+    var d = disciplina(did);
+    var lista = cadeirasDe(o);
+    return {
+      d: d, disciplinaId: did,
+      cadeiras: lista.length, cadeirasLista: lista, integral: ehIntegral(o),
+      responsavelId: responsavelDe(o), nivel: nivelDe(o), descricao: descricaoDe(o),
+      ambiente: ambienteDe(o.agrupamentoId, o.escopo)
+    };
+  }
   function ocorrenciaDeRegra(r, data) {
-    var t = turma(r.turmaId);
+    var b = baseDaOcorrencia(r);
     return {
       chave: 'r:' + r.id + ':' + data,
       origem: 'recorrente', origemId: r.id,
       agrupamentoId: r.agrupamentoId, escopo: r.escopo,
       data: data, inicio: r.inicio, fim: r.fim,
-      turmaId: r.turmaId,
-      /* Reserva é sempre integral: 14 cadeiras numa clínica, 28 nas duas do
-         agrupamento. `cadeiras` virou DERIVADO do escopo em 17/09/2026 e o
-         valor gravado no documento é ignorado — ocupação antiga que reservava
-         10 de 14 passa a valer como clínica inteira, que é a regra nova. */
-      cadeiras: capacidadeEscopo(r.agrupamentoId, r.escopo),
-      /* Pelo rótulo, e não por `d.codigo + t.codigo`: é o único que sabe que
-         a pós se chama pelo nome da especialização — e o único que não
-         estoura quando a disciplina foi apagada por fora, no console. */
-      titulo: rotuloTurma(t),
-      subtitulo: subtituloTurma(t),
-      responsavelId: t ? t.professorCoordenadorId : null,
-      tipoAtividade: 'aula',
-      descricao: ''
+      disciplinaId: b.disciplinaId,
+      /* Quantas e quais cadeiras a reserva segura; na reserva anterior a
+         05/10/2026 é o escopo inteiro, e `integral` diz isso. */
+      cadeiras: b.cadeiras, cadeirasLista: b.cadeirasLista, integral: b.integral,
+      /* Pelo rótulo do Store: é o único que sabe que a pós se chama pelo nome
+         da especialização — e o único que não estoura quando a disciplina
+         foi apagada por fora, no console. */
+      titulo: b.d ? rotuloDisciplina(b.d) : (b.disciplinaId ? 'Disciplina removida' : 'Sem disciplina'),
+      subtitulo: subtituloDisciplina(b.d),
+      responsavelId: b.responsavelId,
+      tipoAtividade: 'aula', nivel: b.nivel, ambiente: b.ambiente,
+      descricao: b.descricao
     };
   }
-  /* Título DERIVADO: tipo + turma, ou tipo + quem pediu quando a atividade
-     não tem turma vinculada. Deixou de ser campo digitado em 17/09/2026 —
-     cada pessoa escrevia num formato diferente e a mesma atividade aparecia
-     com três nomes diferentes na agenda.
+  /* Título DERIVADO: tipo + disciplina, ou tipo + quem pediu quando a
+     atividade não tem disciplina ("Outros"). Deixou de ser campo digitado em
+     17/09/2026 — cada pessoa escrevia num formato diferente e a mesma
+     atividade aparecia com três nomes diferentes na agenda.
      `titulo` aparece sozinho em dez lugares (bloco da agenda, gantt, CSV,
      toasts), por isso carrega o tipo junto; o nome da disciplina vai para
-     `subtitulo`, como já acontece na recorrente. */
-  function tituloPontual(p, t) {
+     `subtitulo`, como na recorrente. */
+  function tituloPontual(p) {
+    var did = disciplinaIdDe(p), d = disciplina(did);
     return rotuloTipoAtividade(p.tipoAtividade) + ' · ' +
-      (t ? rotuloTurma(t) : nomePessoa(p.responsavelId));
+      (d ? rotuloDisciplina(d) : did ? 'Disciplina removida' : nomePessoa(responsavelDe(p)));
   }
   function ocorrenciaDePontual(p) {
-    var t = p.turmaId ? turma(p.turmaId) : null;
-    var d = t ? disciplinaDaTurma(t) : null;
+    var b = baseDaOcorrencia(p);
     return {
       chave: 'p:' + p.id,
       origem: 'pontual', origemId: p.id,
       agrupamentoId: p.agrupamentoId, escopo: p.escopo,
       data: p.data, inicio: p.inicio, fim: p.fim,
-      turmaId: p.turmaId,
-      cadeiras: capacidadeEscopo(p.agrupamentoId, p.escopo),
-      titulo: tituloPontual(p, t),
-      subtitulo: d ? d.nome : '',
+      disciplinaId: b.disciplinaId,
+      cadeiras: b.cadeiras, cadeirasLista: b.cadeirasLista, integral: b.integral,
+      titulo: tituloPontual(p),
+      subtitulo: subtituloDisciplina(b.d),
       /* Só existe em ocupação gravada antes da mudança. O detalhe da agenda
          mostra quando houver, para o texto que alguém escreveu não sumir. */
       tituloOriginal: p.titulo || '',
-      responsavelId: p.responsavelId,
-      tipoAtividade: p.tipoAtividade,
-      descricao: p.descricao || ''
+      responsavelId: b.responsavelId,
+      tipoAtividade: p.tipoAtividade, nivel: b.nivel, ambiente: b.ambiente,
+      descricao: b.descricao
     };
   }
 
@@ -667,22 +795,169 @@
      horário e a dimensioná-lo pela duração, e a folha impressa virou gantt
      de uma linha por dia: nenhuma das duas trabalha mais por hora cheia. */
 
-  /* ── Conflitos ────────────────────────────────────────────────────── */
-  /* Verifica sobreposição de horário entre ocupações que disputam ao menos
-     uma clínica. Uma ocupação de escopo duplo choca com qualquer uma das
-     duas metades. `ignorar` é o id de origem a desconsiderar (edição do
-     próprio registro). */
-  function conflitos(agrupamentoId, escopo, datas, inicio, fim, ignorar) {
-    if (!estado.parametros.bloquearSobreposicao) return [];
-    var achados = [];
-    datas.forEach(function (data) {
-      ocorrenciasDoDia(data, { agrupamentoId: agrupamentoId }).forEach(function (o) {
-        if (ignorar && o.origemId === ignorar) return;
-        if (!escoposColidem(agrupamentoId, escopo, o.agrupamentoId, o.escopo)) return;
-        if (C.sobrepoe(inicio, fim, o.inicio, o.fim)) achados.push(o);
+  /* ── Disputa de cadeiras ──────────────────────────────────────────────
+     Substituiu o antigo `conflitos` em 05/10/2026. Ele recusava qualquer
+     cruzamento de horário na mesma clínica; com a reserva por quantidade,
+     duas ocupações podem dividir a clínica no mesmo horário — o que não
+     podem é dividir a CADEIRA.
+
+     Toda a conta trabalha sobre ITENS na forma do índice
+     (`resumoDaOcupacao`), e é a MESMA função que roda no formulário, sobre o
+     cache, e dentro da transação, sobre o índice relido. Duas cópias da
+     regra, uma em cada lado, divergiriam na primeira mudança — e o
+     formulário passaria a prometer o que a gravação recusa. */
+
+  /* Cadeiras de um item do índice: as alocadas, ou o escopo inteiro no item
+     de reserva integral (gravado antes de 05/10/2026, sem `cadeiras`). */
+  function cadeirasDoItem(agrupamentoId, it) {
+    return (it.cadeiras && it.cadeiras.length) ? it.cadeiras : poolDoEscopo(agrupamentoId, it.escopo);
+  }
+
+  /* Itens que disputam cadeira com `alvo`: alguma clínica em comum, horário
+     cruzado e ao menos uma data em comum. Cada disputa leva as DATAS do
+     cruzamento — é com elas que a recorrente descobre em que dia falta
+     cadeira. `datasAlvo` substitui as datas do alvo quando quem pergunta já
+     as tem (o formulário, antes de o item existir). */
+  function disputas(agrupamentoId, alvo, itens, datasAlvo) {
+    var da = datasAlvo || datasDoItem(alvo);
+    var mapa = {};
+    da.forEach(function (d) { mapa[d] = true; });
+    var saida = [];
+    itens.forEach(function (it) {
+      if (it.id === alvo.id) return;
+      if (!escoposColidem(agrupamentoId, alvo.escopo, agrupamentoId, it.escopo)) return;
+      if (!C.sobrepoe(alvo.inicio, alvo.fim, it.inicio, it.fim)) return;
+      var comuns = datasDoItem(it).filter(function (d) { return mapa[d]; });
+      if (!comuns.length) return;
+      saida.push({ item: it, datas: comuns, cadeiras: cadeirasDoItem(agrupamentoId, it) });
+    });
+    return saida;
+  }
+  function tomadasPor(lista) {
+    var s = {};
+    lista.forEach(function (x) { x.cadeiras.forEach(function (n) { s[n] = true; }); });
+    return s;
+  }
+
+  /* As N menores, deixando por último as que estão em manutenção AGORA:
+     cadeira interditada não impede a reserva — o conserto costuma sair antes
+     da aula, e a regra de antes já era essa —, mas não é oferecida antes de
+     uma que funciona. */
+  function menores(agrupamentoId, candidatas, n) {
+    var cls = clinicasDoAgrupamento(agrupamentoId), boas = [], ruins = [];
+    candidatas.slice().sort(numeroCrescente).forEach(function (num) {
+      var c = clinicaDaCadeira(num, cls);
+      (c && cadeiraEmManutencao(c.id, num) ? ruins : boas).push(num);
+    });
+    return boas.concat(ruins).slice(0, n).sort(numeroCrescente);
+  }
+
+  function frasesLivres(n) {
+    if (n === 0) return 'nenhuma está livre';
+    return n === 1 ? 'só 1 está livre' : 'só ' + n + ' estão livres';
+  }
+
+  /* Escolhe as cadeiras de `alvo` (um item do índice) contra `itens`.
+       opcoes.quantidade  quantas
+       opcoes.preferidas  as que ela já tem — mantidas se continuarem livres
+       opcoes.fixo        só confere `preferidas`, sem trocar nenhuma: é o
+                          caminho de quem escolheu cadeira por cadeira
+       opcoes.checar      false quando a coordenação permitiu sobreposição
+     Devolve { ok, cadeiras } ou { ok:false, mensagem }. */
+  function alocar(agrupamentoId, alvo, itens, opcoes) {
+    var pool = poolDoEscopo(agrupamentoId, alvo.escopo);
+    var noPool = {};
+    pool.forEach(function (n) { noPool[n] = true; });
+    var tomadas = opcoes.checar === false ? {} : tomadasPor(disputas(agrupamentoId, alvo, itens));
+    var livres = pool.filter(function (n) { return !tomadas[n]; });
+    var pref = opcoes.preferidas || null;
+
+    if (opcoes.fixo) {
+      var presas = (pref || []).filter(function (n) { return !noPool[n] || tomadas[n]; });
+      if (presas.length) {
+        return {
+          ok: false, presas: presas,
+          mensagem: (presas.length === 1
+            ? 'A cadeira ' + presas[0] + ' já está com outra reserva neste horário'
+            : 'As cadeiras ' + C.faixasNumeros(presas) + ' já estão com outra reserva neste horário') +
+            '. Se pareciam livres, alguém reservou enquanto você escolhia — reveja as cadeiras.'
+        };
+      }
+      return { ok: true, cadeiras: (pref || []).slice().sort(numeroCrescente) };
+    }
+    var n = opcoes.quantidade;
+    if (pref && pref.length === n && pref.every(function (x) { return noPool[x] && !tomadas[x]; })) {
+      return { ok: true, cadeiras: pref.slice().sort(numeroCrescente) };
+    }
+    if (n > 0 && livres.length >= n) return { ok: true, cadeiras: menores(agrupamentoId, livres, n) };
+    /* Cobre o choque com o que já estava lá e a corrida em que alguém gravou
+       enquanto o formulário era preenchido. Culpar "outra pessoa" sempre
+       seria mentira na primeira situação, que é a mais comum. */
+    return {
+      ok: false, livres: livres.length,
+      mensagem: 'Faltam cadeiras em ' + rotuloEscopoCurto(agrupamentoId, alvo.escopo) +
+        ': a reserva é de ' + C.plural(n, 'cadeira', 'cadeiras') + ' e ' + frasesLivres(livres.length) +
+        ' neste horário. Se a agenda parecia livre, alguém reservou enquanto você preenchia — ' +
+        'reveja a quantidade, o horário ou a clínica.'
+    };
+  }
+
+  /* Itens do CACHE na forma do índice: o que segura cadeira neste
+     agrupamento — reservas ativas e aprovadas. Pedido pendente e reserva
+     excluída ficam de fora, como ficam fora do índice. */
+  function itensLocais(agrupamentoId, ignorarId) {
+    return recorrenciasAtivas().concat(pontuaisAtivas()).filter(function (o) {
+      return o.agrupamentoId === agrupamentoId && o.id !== ignorarId;
+    }).map(resumoDaOcupacao);
+  }
+
+  /* Quanto cabe, para o formulário: dado onde, quando e quantas, diz quais
+     cadeiras ficam livres em TODAS as datas, quantas ficam livres em cada
+     data, quem disputa e quais seriam as escolhidas.
+     `extras` são itens que ainda não existem — as outras linhas do mesmo
+     formulário, que disputam cadeira com esta igual a uma reserva gravada. */
+  function disponibilidade(q) {
+    var ag = q.agrupamentoId;
+    var pool = poolDoEscopo(ag, q.escopo);
+    var alvo = { id: q.ignorarId || '__novo', escopo: q.escopo, inicio: q.inicio, fim: q.fim };
+    var lista = estado.parametros.bloquearSobreposicao !== false
+      ? disputas(ag, alvo, itensLocais(ag, q.ignorarId).concat(q.extras || []), q.datas)
+      : [];
+    var tomadas = tomadasPor(lista);
+    var livres = pool.filter(function (n) { return !tomadas[n]; });
+    var porData = {};
+    q.datas.forEach(function (d) { porData[d] = {}; });
+    lista.forEach(function (x) {
+      x.datas.forEach(function (d) {
+        x.cadeiras.forEach(function (n) { porData[d][n] = true; });
       });
     });
-    return achados;
+    var livresNaData = {};
+    q.datas.forEach(function (d) {
+      livresNaData[d] = pool.filter(function (n) { return !porData[d][n]; }).length;
+    });
+    var qtd = Number(q.quantidade) || 0;
+    return {
+      pool: pool, livres: livres, livresNaData: livresNaData, disputas: lista,
+      sugestao: qtd > 0 && livres.length >= qtd ? menores(ag, livres, qtd) : null,
+      datasSemVaga: qtd > 0 ? q.datas.filter(function (d) { return livresNaData[d] < qtd; }) : []
+    };
+  }
+
+  /* Para o seletor de cadeiras: de quem é cada cadeira do escopo durante a
+     reserva `o` — em qualquer das datas dela, porque a alocação vale para
+     todas. */
+  function mapaDeCadeiras(o) {
+    var resumo = resumoDaOcupacao(o);
+    var lista = disputas(o.agrupamentoId, resumo, itensLocais(o.agrupamentoId, o.id));
+    var donos = {};
+    lista.forEach(function (x) {
+      x.cadeiras.forEach(function (n) {
+        if (!donos[n]) donos[n] = [];
+        if (donos[n].indexOf(x.item.id) === -1) donos[n].push(x.item.id);
+      });
+    });
+    return { pool: poolDoEscopo(o.agrupamentoId, o.escopo), donos: donos, minhas: cadeirasDe(o) };
   }
 
   /* ── Aprovação de pedidos ─────────────────────────────────────────────
@@ -740,10 +1015,9 @@
       .sort(function (a, b) { return String(b.excluidaEm).localeCompare(String(a.excluidaEm)); });
   }
 
-  /* `excedeCapacidade` deixou de existir junto com a quantidade pedida no
-     formulário: não há mais número a comparar com o teto, porque a reserva é
-     sempre o escopo inteiro. Quem mede ocupação de verdade agora é a
-     contagem de cadeiras registradas em uso (`atribuicoesDa`). */
+  /* `excedeCapacidade` saiu em 17/09/2026 e não voltou com a quantidade, em
+     05/10/2026: a quantidade não é comparada com um teto, e sim ALOCADA —
+     quem decide se cabe é `alocar`, cadeira por cadeira. */
 
   /* ── Escrita ──────────────────────────────────────────────────────────
      Toda mutação aplica a mudança no cache PRIMEIRO e persiste em seguida.
@@ -766,8 +1040,12 @@
   /* ── Índice de ocupação e revalidação transacional ────────────────────
      O índice indices/{agrupamentoId} guarda a forma compacta de tudo que
      ocupa aquele agrupamento. A transação relê ESSE documento e revalida a
-     sobreposição antes de gravar — é o que impede duas pessoas de gravarem
-     em cima uma da outra depois de as duas passarem na validação local. */
+     disputa de cadeiras antes de gravar — é o que impede duas pessoas de
+     gravarem em cima uma da outra depois de as duas passarem na validação
+     local.
+     `cadeiras` entrou no item em 05/10/2026: as que a reserva segura, ou
+     null na reserva integral. Item gravado antes disso não tem o campo, e a
+     ausência vale como integral — o mesmo que ele sempre significou. */
   function resumoDaOcupacao(o) {
     return {
       id: o.id, tipo: o.tipo, escopo: o.escopo,
@@ -775,7 +1053,8 @@
       dias: o.dias || null, data: o.data || null,
       vigenciaInicio: o.vigenciaInicio || null, vigenciaFim: o.vigenciaFim || null,
       encerradaEm: o.encerradaEm || null,
-      excecoes: (o.excecoes || []).map(function (x) { return x.data; })
+      excecoes: (o.excecoes || []).map(function (x) { return x.data; }),
+      cadeiras: Array.isArray(o.cadeirasAlocadas) ? o.cadeirasAlocadas.slice() : null
     };
   }
 
@@ -792,35 +1071,56 @@
     });
   }
 
-  /* Dois itens disputam espaço quando compartilham clínica, se cruzam no
-     horário e caem em pelo menos um mesmo dia do calendário. */
-  function itensChocam(agrupamentoId, a, b) {
-    if (!escoposColidem(agrupamentoId, a.escopo, agrupamentoId, b.escopo)) return false;
-    if (!C.sobrepoe(a.inicio, a.fim, b.inicio, b.fim)) return false;
-    var da = datasDoItem(a), db = datasDoItem(b);
-    for (var i = 0; i < da.length; i++) if (db.indexOf(da[i]) !== -1) return true;
-    return false;
-  }
-
-  function gravarOcupacaoNaNuvem(o, ignorarId) {
+  /* Grava a reserva pela transação, escolhendo as cadeiras DENTRO dela.
+     A escolha feita no cache (`alocarLocal`) entra como preferência: se as
+     cadeiras continuam livres no índice relido, ficam; se alguém tomou uma
+     delas no meio-tempo, a transação escolhe outras da menor para a maior, e
+     só recusa quando não sobra quantidade. É por isso que a alocação muda o
+     documento e o item do índice ali dentro, antes do `set`.
+       opcoes.fixo — cadeira por cadeira, escolhidas por alguém (o seletor de
+       cadeiras): não troca nenhuma, recusa se uma já estiver tomada.
+       opcoes.mensagem(res) — texto da recusa para quem chama num contexto
+       em que o padrão ("enquanto você escolhia") não faz sentido.
+     A reserva integral, anterior a 05/10/2026, continua com a regra de
+     antes: o escopo inteiro precisa estar livre. */
+  function gravarOcupacaoNaNuvem(o, opcoes) {
+    opcoes = opcoes || {};
     var resumo = resumoDaOcupacao(o);
-    var checar = estado.parametros.bloquearSobreposicao;
+    var checar = estado.parametros.bloquearSobreposicao !== false;
+    var integral = ehIntegral(o);
+    var quantidade = quantidadeDe(o);
     return N.gravarOcupacao(o.agrupamentoId, o.id, o, function (itens) {
-      if (!checar) return null;
-      for (var i = 0; i < itens.length; i++) {
-        var it = itens[i];
-        if (it.id === o.id || (ignorarId && it.id === ignorarId)) continue;
-        if (itensChocam(o.agrupamentoId, resumo, it)) {
-          /* Cobre os dois casos: choque com algo que já estava lá, e a
-             corrida em que alguém gravou enquanto o formulário era
-             preenchido. Culpar "outra pessoa" sempre seria mentira na
-             primeira situação, que é a mais comum. */
-          return 'Este horário choca com uma ocupação já registrada neste agrupamento. ' +
-            'Se a agenda parecia livre, alguém gravou enquanto você preenchia — reveja o horário.';
-        }
+      if (integral) {
+        if (!checar) return null;
+        var todas = alocar(o.agrupamentoId, resumo, itens, {
+          fixo: true, preferidas: poolDoEscopo(o.agrupamentoId, o.escopo)
+        });
+        return todas.ok ? null
+          : 'Este horário choca com uma ocupação já registrada neste agrupamento, e esta reserva ' +
+            'toma a clínica inteira. Se a agenda parecia livre, alguém gravou enquanto você ' +
+            'preenchia — reveja o horário.';
       }
+      var res = alocar(o.agrupamentoId, resumo, itens, {
+        checar: checar, quantidade: quantidade,
+        fixo: !!opcoes.fixo, preferidas: o.cadeirasAlocadas
+      });
+      if (!res.ok) return opcoes.mensagem ? opcoes.mensagem(res) : res.mensagem;
+      o.cadeirasAlocadas = res.cadeiras;
+      resumo.cadeiras = res.cadeiras.slice();
       return null;
     }, resumo);
+  }
+
+  /* A mesma escolha, feita no cache, para a tela já mostrar as cadeiras no
+     instante do clique — o cache é aplicado ANTES da gravação, como em toda
+     mutação daqui. A transação confere e, se precisar, corrige. */
+  function alocarLocal(o) {
+    var res = alocar(o.agrupamentoId, resumoDaOcupacao(o), itensLocais(o.agrupamentoId, o.id), {
+      checar: estado.parametros.bloquearSobreposicao !== false,
+      quantidade: quantidadeDe(o), preferidas: o.cadeirasAlocadas
+    });
+    return res.ok ? res.cadeiras
+      : poolDoEscopo(o.agrupamentoId, o.escopo).slice(0, quantidadeDe(o));
   }
 
   /* ── Mutações: agenda ─────────────────────────────────────────────────
@@ -838,15 +1138,29 @@
          `excecoes` — sem `dias`, sem horário. Esse órfão volta pelo onSnapshot
          e estoura TypeError em `r.dias.indexOf` dentro de `ocorrenciasDoDia`,
          derrubando Agenda, Agora, Painel e Relatórios de todo mundo. */
+  /* Quantidade pedida, saneada: inteiro de 1 até a capacidade do escopo. */
+  function quantidadeValida(dados) {
+    var n = Math.floor(Number(dados.cadeiras) || 0);
+    var cap = capacidadeEscopo(dados.agrupamentoId, dados.escopo || 'a');
+    return Math.max(1, Math.min(n || cap, cap));
+  }
+
+  /* Recorrente e pontual gravam os mesmos campos de vínculo desde
+     05/10/2026: `disciplinaId` (null no "Outros" da pontual), `responsavelId`
+     — que a recorrente antes herdava da turma — e `tipoAtividade`, que diz
+     se é graduação ou pós. Nenhum vai como `undefined`, que o Firestore
+     recusa e derrubaria o registro inteiro no primeiro clique. Sem `titulo`
+     nem `turmaId`: título é derivado, turma é texto na descrição. */
   function criarRecorrencia(dados) {
     var agora = C.carimbo();
     var r = {
       id: N.novoId('ocupacoes'), tipo: 'recorrente',
       agrupamentoId: dados.agrupamentoId, escopo: dados.escopo || 'a',
-      turmaId: dados.turmaId,
+      disciplinaId: dados.disciplinaId || null,
+      responsavelId: dados.responsavelId || euId(),
+      tipoAtividade: dados.tipoAtividade === 'pos' ? 'pos' : 'graduacao',
       dias: dados.dias.slice().sort(), inicio: dados.inicio, fim: dados.fim,
-      /* Sem `cadeiras`: a reserva é o escopo inteiro e o número é derivado na
-         leitura. Gravar a chave mandaria `undefined`, que o Firestore recusa. */
+      cadeirasPedidas: quantidadeValida(dados),
       /* A vigência nunca escapa do semestre: fora dele a agenda geraria
          encontros que nenhuma tela consegue mostrar. */
       vigenciaInicio: maiorISO(dados.vigenciaInicio, estado.semestre.inicio),
@@ -854,14 +1168,17 @@
       periodoLetivo: estado.periodoLetivo,
       excecoes: (dados.pular || []).map(function (d) {
         return {
-          data: d, motivo: dados.motivoPular || 'Data em conflito no lançamento da recorrência',
+          data: d, motivo: dados.motivoPular || 'Sem cadeira suficiente no lançamento da recorrência',
           registradoPor: euId(), registradoEm: agora
         };
       }),
       encerradaEm: null,
       criadoPor: euId(), criadoEm: agora,
-      observacao: dados.observacao || ''
+      descricao: String(dados.descricao || '').trim()
     };
+    /* As cadeiras são escolhidas já com as datas puladas fora: é contra as
+       datas que de fato acontecem que elas precisam estar livres. */
+    r.cadeirasAlocadas = alocarLocal(r);
     estado.recorrencias.push(r);
     commit();
     persistir(gravarOcupacaoNaNuvem(r), function () {
@@ -877,15 +1194,16 @@
       agrupamentoId: dados.agrupamentoId, escopo: dados.escopo || 'a',
       data: dados.data, inicio: dados.inicio, fim: dados.fim,
       tipoAtividade: dados.tipoAtividade,
-      /* Sem `titulo` nem `cadeiras`: os dois viraram derivados. Gravar a chave
-         mandaria `undefined`, que o Firestore recusa — e derrubaria o registro
-         inteiro no primeiro clique. */
-      descricao: dados.descricao || '',
-      turmaId: dados.turmaId || null, responsavelId: dados.responsavelId,
+      descricao: String(dados.descricao || '').trim(),
+      disciplinaId: dados.disciplinaId || null, responsavelId: dados.responsavelId,
+      cadeirasPedidas: quantidadeValida(dados),
       excecoes: [],
       situacao: soPedido ? 'pendente' : 'aprovada',
       criadoPor: euId(), criadoEm: C.carimbo()
     };
+    /* Pedido não segura cadeira, como não segura horário: as cadeiras dele
+       são escolhidas na aprovação, contra a agenda daquele momento. */
+    if (!soPedido) p.cadeirasAlocadas = alocarLocal(p);
     estado.pontuais.push(p);
     commit();
     /* Pedido é gravação simples: não reserva nada, logo não passa pela
@@ -901,7 +1219,7 @@
      virar ocorrência — a fila precisa do rótulo por outro caminho. Reusa
      `tituloPontual` para a fila e a agenda não divergirem no mesmo pedido. */
   function rotuloPedido(p) {
-    return tituloPontual(p, p.turmaId ? turma(p.turmaId) : null);
+    return tituloPontual(p);
   }
 
   /* Rótulo de uma reserva CRUA (o documento), não de ocorrência: a lixeira
@@ -910,7 +1228,8 @@
   function rotuloReserva(o) {
     if (!o) return '—';
     if (o.tipo === 'pontual') return rotuloPedido(o);
-    return rotuloTipoAtividade('aula') + ' · ' + rotuloTurma(turma(o.turmaId));
+    var d = disciplinaDe(o);
+    return rotuloTipoAtividade(nivelDe(o)) + ' · ' + (d ? rotuloDisciplina(d) : 'Sem disciplina');
   }
   function pedidosPendentes() {
     return estado.pontuais.filter(ehPendente).sort(ordemDePedido);
@@ -928,19 +1247,28 @@
   }
 
   /* Aprovar é o instante em que o pedido passa a reservar de verdade: é aqui
-     que ele entra na transação e no índice, e aqui que o choque pode barrar.
-     Devolve promessa porque a coordenação precisa saber se passou — se dois
-     pedidos disputam o mesmo horário, o segundo falha e o motivo aparece. */
+     que ele entra na transação e no índice, que as cadeiras dele são
+     escolhidas, e aqui que a falta de cadeira pode barrar. Devolve promessa
+     porque a coordenação precisa saber se passou — se dois pedidos disputam
+     as mesmas cadeiras, o segundo falha e o motivo aparece.
+     Pedido gravado antes de 05/10/2026 não tem quantidade e é aprovado como
+     era pedido: a clínica inteira. */
   function aprovarPedido(id) {
     var p = porId(estado.pontuais, id);
     if (!p || !ehPendente(p)) return global.Promise.resolve({ ok: false, mensagem: 'Pedido não está pendente.' });
-    var antes = { situacao: p.situacao, decididoPor: p.decididoPor, decididoEm: p.decididoEm };
+    var antes = {
+      situacao: p.situacao, decididoPor: p.decididoPor, decididoEm: p.decididoEm,
+      cadeirasAlocadas: p.cadeirasAlocadas
+    };
     p.situacao = 'aprovada';
     p.decididoPor = euId();
     p.decididoEm = C.carimbo();
+    if (!ehIntegral(p)) p.cadeirasAlocadas = alocarLocal(p);
     commit();
     return persistir(gravarOcupacaoNaNuvem(p), function () {
-      Object.keys(antes).forEach(function (k) { p[k] = antes[k]; });
+      Object.keys(antes).forEach(function (k) {
+        if (antes[k] === undefined) delete p[k]; else p[k] = antes[k];
+      });
     });
   }
 
@@ -982,35 +1310,34 @@
     return persistir(N.apagar('ocupacoes', id), function () { estado.pontuais.push(p); });
   }
 
-  function atualizarRecorrencia(id, dados) {
-    var r = porId(estado.recorrencias, id);
-    if (!r) return;
-    var antes = JSON.parse(JSON.stringify(r));
-    /* 'cadeiras' saiu: derivado do escopo. */
-    ['agrupamentoId', 'escopo', 'turmaId', 'inicio', 'fim',
-      'vigenciaInicio', 'vigenciaFim', 'observacao']
-      .forEach(function (k) { if (dados[k] !== undefined) r[k] = dados[k]; });
-    if (dados.dias) r.dias = dados.dias.slice().sort();
-    r.vigenciaInicio = maiorISO(r.vigenciaInicio, estado.semestre.inicio);
-    r.vigenciaFim = menorISO(r.vigenciaFim, estado.semestre.fim);
-    commit();
-    persistir(gravarOcupacaoNaNuvem(r, id), function () {
-      Object.keys(antes).forEach(function (k) { r[k] = antes[k]; });
-    });
-  }
+  /* `atualizarRecorrencia` e `atualizarPontual` saíram em 05/10/2026: nunca
+     tiveram botão, e ainda gravavam `turmaId`. O que se edita numa reserva
+     hoje são as cadeiras, por aqui — com a lista escolhida pela pessoa.
 
-  function atualizarPontual(id, dados) {
-    var p = porId(estado.pontuais, id);
-    if (!p) return;
-    var antes = JSON.parse(JSON.stringify(p));
-    /* 'titulo' e 'cadeiras' saíram da lista: são derivados. Deixá-los aqui
-       seria convite para reintroduzir campo digitado. */
-    ['agrupamentoId', 'escopo', 'data', 'inicio', 'fim',
-      'tipoAtividade', 'descricao', 'turmaId', 'responsavelId']
-      .forEach(function (k) { if (dados[k] !== undefined) p[k] = dados[k]; });
+     Troca as cadeiras de uma reserva aprovada pela lista escolhida, cadeira
+     por cadeira (`fixo`): se uma delas foi tomada enquanto a pessoa
+     escolhia, recusa em vez de trocar por outra que ela não viu. A
+     quantidade passa a ser o tamanho da lista. Vale para TODAS as datas da
+     reserva, porque a alocação é uma só.
+     Na reserva integral é aqui que ela deixa de ser integral: ganha lista e
+     quantidade, e o resto da clínica fica livre para outras. */
+  function alterarCadeiras(id, lista) {
+    var o = porId(estado.recorrencias, id) || porId(estado.pontuais, id);
+    if (!o) return global.Promise.resolve({ ok: false, mensagem: 'Reserva não encontrada.' });
+    var limpa = [];
+    (lista || []).forEach(function (n) {
+      n = Number(n);
+      if (n > 0 && limpa.indexOf(n) === -1) limpa.push(n);
+    });
+    if (!limpa.length) return global.Promise.resolve({ ok: false, mensagem: 'Escolha ao menos uma cadeira.' });
+    var antes = { cadeirasAlocadas: o.cadeirasAlocadas, cadeirasPedidas: o.cadeirasPedidas };
+    o.cadeirasAlocadas = limpa.sort(numeroCrescente);
+    o.cadeirasPedidas = limpa.length;
     commit();
-    persistir(gravarOcupacaoNaNuvem(p, id), function () {
-      Object.keys(antes).forEach(function (k) { p[k] = antes[k]; });
+    return persistir(gravarOcupacaoNaNuvem(o, { fixo: true }), function () {
+      Object.keys(antes).forEach(function (k) {
+        if (antes[k] === undefined) delete o[k]; else o[k] = antes[k];
+      });
     });
   }
 
@@ -1056,8 +1383,8 @@
   /* Substituiu o antigo `excluirRecorrencia`, que apagava o documento de vez
      e nunca foi ligado a botão nenhum. Serve recorrência e pontual: a marca
      e a saída do índice são as mesmas nos dois casos.
-     As atribuições de cadeira NÃO são limpas — é isso que faz a recuperação
-     devolver a reserva como ela era, com os registros de uso. */
+     Nem as cadeiras alocadas nem os nomes registrados nelas são limpos — é
+     isso que faz a recuperação devolver a reserva como ela era. */
   function excluirReserva(id, motivo) {
     var o = porId(estado.recorrencias, id) || porId(estado.pontuais, id);
     if (!o) return global.Promise.resolve({ ok: false, mensagem: 'Reserva não encontrada.' });
@@ -1076,41 +1403,71 @@
     });
   }
 
-  /* Recuperar reindexa pela transação, e PODE FALHAR por choque: enquanto a
-     reserva estava na lixeira o horário estava livre, e alguém pode ter
-     ocupado. Falhar aqui é o comportamento certo — o contrário seria criar
-     duas reservas no mesmo horário pelas costas da validação.
+  /* Recuperar reindexa pela transação, e PODE FALHAR: enquanto a reserva
+     estava na lixeira as cadeiras dela estavam livres, e alguém pode ter
+     ocupado. Se as mesmas cadeiras não estiverem mais livres, a transação
+     escolhe outras na mesma quantidade; falha só quando não sobra
+     quantidade — o contrário seria criar duas reservas na mesma cadeira
+     pelas costas da validação. `valor.realocada` avisa quem chamou que as
+     cadeiras mudaram.
      Pedido que ainda não foi aprovado volta sem indexar, como nasceu. */
   function recuperarReserva(id) {
     var o = porId(estado.recorrencias, id) || porId(estado.pontuais, id);
     if (!o) return global.Promise.resolve({ ok: false, mensagem: 'Reserva não encontrada.' });
     if (!estaExcluida(o)) return global.Promise.resolve({ ok: false, mensagem: 'Reserva não está excluída.' });
     var antes = {
-      excluidaEm: o.excluidaEm, excluidaPor: o.excluidaPor, motivoExclusao: o.motivoExclusao
+      excluidaEm: o.excluidaEm, excluidaPor: o.excluidaPor, motivoExclusao: o.motivoExclusao,
+      cadeirasAlocadas: o.cadeirasAlocadas
     };
+    var tinha = textoCadeiras(cadeirasDe(o));
     o.excluidaEm = null;
     o.excluidaPor = null;
     o.motivoExclusao = '';
-    commit();
     var indexavel = !(o.tipo === 'pontual' && situacaoDe(o) !== 'aprovada');
+    if (indexavel && !ehIntegral(o)) o.cadeirasAlocadas = alocarLocal(o);
+    commit();
     return persistir(
       indexavel ? gravarOcupacaoNaNuvem(o) : N.gravar('ocupacoes', o.id, o),
-      function () { Object.keys(antes).forEach(function (k) { o[k] = antes[k]; }); }
-    );
+      function () {
+        Object.keys(antes).forEach(function (k) {
+          if (antes[k] === undefined) delete o[k]; else o[k] = antes[k];
+        });
+      }
+    ).then(function (r) {
+      if (r.ok) r.realocada = textoCadeiras(cadeirasDe(o)) !== tinha;
+      return r;
+    });
   }
 
+  /* Devolver uma data à recorrência passa pela transação, com as cadeiras
+     que ela já tem (`fixo`): naquela data alguém pode ter reservado as
+     mesmas cadeiras depois do cancelamento, e o encontro não pode voltar por
+     cima. Antes de 05/10/2026 a restauração gravava direto, sem conferir
+     nada. Devolve promessa, para a tela saber se voltou. */
   function restaurarExcecao(regraId, data) {
     var r = porId(estado.recorrencias, regraId);
-    if (!r) return;
+    if (!r) return global.Promise.resolve({ ok: false });
     var antes = r.excecoes.slice();
     r.excecoes = r.excecoes.filter(function (e) { return e.data !== data; });
     commit();
-    persistir(N.gravar('ocupacoes', regraId, { excecoes: r.excecoes })
-      .then(function () { return N.atualizarIndice(r.agrupamentoId, regraId, resumoDaOcupacao(r)); }),
-      function () { r.excecoes = antes; });
+    return persistir(gravarOcupacaoNaNuvem(r, {
+      fixo: true,
+      mensagem: function (res) {
+        return 'O encontro de ' + C.fmtDia(data) + ' não pode voltar: depois do cancelamento, ' +
+          (res.presas && res.presas.length
+            ? (res.presas.length === 1 ? 'a cadeira ' + res.presas[0] + ' foi reservada'
+              : 'as cadeiras ' + C.faixasNumeros(res.presas) + ' foram reservadas')
+            : 'as cadeiras dela foram reservadas') + ' por outra ocupação nesse horário.';
+      }
+    }), function () { r.excecoes = antes; });
   }
 
-  /* ── Mutações: cadeiras ───────────────────────────────────────────── */
+  /* ── Mutações: nome na cadeira ────────────────────────────────────────
+     `atribuicoes` deixou de medir ocupação em 05/10/2026: a cadeira alocada
+     JÁ é a cadeira ocupada, marcada pelo sistema. O que sobrou do registro
+     antigo é o NOME de quem está na cadeira naquele encontro — opcional, e
+     só uma anotação do professor. A coleção e o formato são os mesmos, então
+     o nome registrado antes da mudança continua aparecendo. */
   function atribuicoesDa(chave) {
     return estado.atribuicoes.filter(function (a) { return a.chave === chave; });
   }
@@ -1137,41 +1494,44 @@
     persistir(N.apagarVarios('atribuicoes', alvo.map(function (a) { return a.id; })));
   }
 
-  /* A clínica sai do número DENTRO DO ESCOPO DA OCUPAÇÃO, nunca do polo
+  /* Escreve, troca ou apaga o nome numa cadeira de uma OCORRÊNCIA (`o` tem
+     `chave`). Nome vazio apaga a anotação.
+     A clínica sai do número DENTRO DO ESCOPO DA OCUPAÇÃO, nunca do polo
      inteiro: a cadeira 5 de uma ocupação na Pré-clínica maior é a 5 dela, e
-     não a 5 da Clínica 1. Guardar a clínica junto continua evitando a colisão
-     antiga, em que a cadeira 7 da Clínica 1 e a 7 da Clínica 2 gravavam a
-     mesma chave numa ocupação conjunta — dentro de um escopo o número segue
-     único, porque duas clínicas do mesmo agrupamento nunca repetem faixa. */
-  function ocuparCadeira(o, numero, alunoId, nome) {
-    if (atribuicaoDaCadeira(o.chave, numero)) return false;
+     não a 5 da Clínica 1 — dentro de um escopo o número é único, porque duas
+     clínicas do mesmo agrupamento nunca repetem faixa. */
+  function registrarNomeNaCadeira(o, numero, nome) {
+    var texto = String(nome || '').trim();
+    var atual = atribuicaoDaCadeira(o.chave, numero);
+    if (atual) {
+      if (!texto) {
+        estado.atribuicoes = estado.atribuicoes.filter(function (a) { return a.id !== atual.id; });
+        commit();
+        return persistir(N.apagar('atribuicoes', atual.id), function () { estado.atribuicoes.push(atual); });
+      }
+      var antes = { nome: atual.nome, alunoId: atual.alunoId };
+      atual.nome = texto;
+      atual.alunoId = null;
+      commit();
+      return persistir(N.gravar('atribuicoes', atual.id, { nome: texto, alunoId: null }), function () {
+        atual.nome = antes.nome; atual.alunoId = antes.alunoId;
+      });
+    }
+    if (!texto) return global.Promise.resolve({ ok: true });
     var c = clinicaDaCadeira(numero, clinicasDoEscopo(o.agrupamentoId, o.escopo));
     var registro = {
       id: N.novoId('atribuicoes'), chave: o.chave, clinicaId: c ? c.id : null,
       cadeira: numero,
-      /* Registrar cadeira em uso deixou de depender de aluno cadastrado em
-         17/09/2026: o professor marca a cadeira e, se quiser, escreve quem
-         está nela. `null` e string vazia o Firestore aceita — undefined não.
-         `alunoId` sobrevive por causa dos registros antigos. */
-      alunoId: alunoId || null,
-      nome: String(nome || '').trim(),
-      data: o.data,
+      /* `alunoId` sobrevive por causa dos registros antigos; `null` o
+         Firestore aceita, `undefined` não. */
+      alunoId: null, nome: texto, data: o.data,
       registradoPor: euId(), registradoEm: C.carimbo()
     };
     estado.atribuicoes.push(registro);
     commit();
-    persistir(N.gravar('atribuicoes', registro.id, registro), function () {
+    return persistir(N.gravar('atribuicoes', registro.id, registro), function () {
       estado.atribuicoes = estado.atribuicoes.filter(function (a) { return a.id !== registro.id; });
     });
-    return true;
-  }
-
-  function liberarCadeira(chave, numero) {
-    var alvo = atribuicaoDaCadeira(chave, numero);
-    if (!alvo) return;
-    estado.atribuicoes = estado.atribuicoes.filter(function (a) { return a.id !== alvo.id; });
-    commit();
-    persistir(N.apagar('atribuicoes', alvo.id), function () { estado.atribuicoes.push(alvo); });
   }
 
   /* ── Mutações: manutenção ─────────────────────────────────────────── */
@@ -1182,26 +1542,28 @@
   }
 
   /* Levantamento automático do impacto: quais ocorrências dos próximos 14
-     dias ficam sem cadeira suficiente com esta cadeira fora de operação. */
+     dias ficam sem cadeira com esta cadeira fora de operação. */
   function calcularImpacto(clinicaId, cadeira) {
     var hoje = C.hojeISO(), fim = C.addDays(hoje, 14);
     var jaInterditada = !!cadeiraEmManutencao(clinicaId, cadeira);
     var operantesDepois = cadeirasOperantes(clinicaId) - (jaInterditada ? 0 : 1);
-    /* Uma ocupação de escopo duplo dispõe das cadeiras das duas clínicas —
-       comparar com o total de uma só superestimaria o impacto. */
-    /* Mede pelo USO registrado, não pela reserva. Com reserva sempre integral,
-       comparar contra `o.cadeiras` (agora igual à capacidade do escopo) faria
-       QUALQUER interdição marcar TODAS as ocupações como afetadas — aviso que
-       grita sempre é aviso que ninguém lê. Afetada é a ocupação que já tem
-       mais cadeiras em uso do que restará de operante. */
+    /* Com a alocação, afetada é a ocupação que TEM esta cadeira: é ela que
+       precisa trocar de cadeira. A reserva integral, anterior a 05/10/2026,
+       segura todas — medir por ela faria QUALQUER interdição marcar todas
+       como afetadas, e aviso que grita sempre é aviso que ninguém lê. Nela
+       vale a regra antiga: afetada é a que tem mais nomes registrados do que
+       restará de operante. Uma ocupação de escopo duplo dispõe das cadeiras
+       das duas clínicas, e o desconto é sobre as duas. */
     var afetadas = ocorrenciasIntervalo(hoje, fim, clinicaId).filter(function (o) {
+      if (!o.integral) return o.cadeirasLista.indexOf(cadeira) !== -1;
       var disponiveis = cadeirasOperantesEscopo(o.agrupamentoId, o.escopo) - (jaInterditada ? 0 : 1);
       return atribuicoesDa(o.chave).length > disponiveis;
     });
+    /* O campo continua `turmasAfetadas` porque está gravado assim em cada
+       chamado já aberto; desde 05/10/2026 ele guarda o título da ocupação. */
     var turmasAfetadas = [];
     afetadas.forEach(function (o) {
-      var r = o.turmaId ? rotuloTurma(turma(o.turmaId)) : o.titulo;
-      if (turmasAfetadas.indexOf(r) === -1) turmasAfetadas.push(r);
+      if (turmasAfetadas.indexOf(o.titulo) === -1) turmasAfetadas.push(o.titulo);
     });
     return {
       cadeirasOperantesDepois: operantesDepois,
@@ -1258,7 +1620,10 @@
     }).sort(function (a, b) { return String(b.abertoEm).localeCompare(String(a.abertoEm)); });
   }
 
-  /* ── Mutações: disciplinas, turmas, alunos ────────────────────────── */
+  /* ── Mutações: disciplinas ────────────────────────────────────────────
+     Turma e aluno saíram em 05/10/2026 (`salvarTurma`, `excluirTurma`,
+     `vincularAluno`, `desvincularAluno`): disciplina é só disciplina, e o
+     professor é ligado a ela pela tela Acessos. */
   function salvarDisciplina(id, dados) {
     var d = id ? disciplina(id) : null;
     var novo = !d;
@@ -1268,9 +1633,10 @@
       if (dados[k] !== undefined) d[k] = dados[k];
     });
     commit();
-    /* Payload explícito, como em salvarTurma — não o objeto `d` inteiro, que
-       carrega `id` e, nas disciplinas criadas antes desta mudança, os campos
-       extintos que a hidratação copia crus do Firestore (linha 67).
+    /* Payload explícito — não o objeto `d` inteiro, que carrega `id` e, nas
+       disciplinas criadas antes de 14/09/2026, os campos extintos que a
+       hidratação copia crus do Firestore. Sem `professores` também: quem
+       grava o vínculo é `vincularDisciplinas`, e o merge preserva o campo.
        O que isto NÃO faz: N.gravar é set(dados, { merge: true }), então
        `especialidade` e `cargaHoraria` continuam gravados nos documentos
        antigos — deixar de enviá-los não os apaga. São lixo inerte, que nada
@@ -1290,43 +1656,38 @@
   }
 
   /* ── Mutações: especialização da pós ──────────────────────────────────
-     Duas gravações, cada uma com o próprio desfazer: a disciplina que guarda
-     o nome e a turma que o sistema mantém por trás. Se a segunda falhar, a
-     especialização fica sem turma e sem agenda possível — salvar de novo
-     recria, porque `turmaDaEspecializacao` devolve null e o caminho é o
-     mesmo do cadastro novo. */
+     Só o nome: a turma interna que esta função criava até 05/10/2026 saiu,
+     e o professor responsável é vinculado em Acessos, como o de qualquer
+     disciplina. */
   function salvarEspecializacao(id, dados) {
     var nome = String(dados.nome || '').trim();
-    var prof = dados.professorResponsavelId;
-    if (!nome || !prof) return null;
+    if (!nome) return null;
     var atual = id ? disciplina(id) : null;
     if (id && !atual) return null;
-    var d = salvarDisciplina(id, {
+    return salvarDisciplina(id, {
       codigo: (atual && atual.codigo) || proximoCodigoPos(),
       nome: nome, nivel: 'pos'
     });
-    var t = turmaDaEspecializacao(d.id);
-    salvarTurma(t ? t.id : null, {
-      disciplinaId: d.id, codigo: CODIGO_TURMA_POS, professorCoordenadorId: prof
+  }
+
+  /* Reservas que apontam para a disciplina, pelo `disciplinaId` ou pela
+     turma antiga. As excluídas só entram a pedido: a limpeza precisa movê-
+     las também, senão a recuperação devolveria uma reserva de disciplina
+     apagada. */
+  function reservasDaDisciplina(id, incluirExcluidas) {
+    return estado.recorrencias.concat(estado.pontuais).filter(function (o) {
+      if (!incluirExcluidas && estaExcluida(o)) return false;
+      return disciplinaIdDe(o) === id;
     });
-    return d;
   }
 
-  /* A turma sai primeiro: é `excluirTurma` que tira as recorrências do
-     índice de sobreposição. Excluir só a disciplina deixaria a reserva
-     segurando horário para sempre. */
-  function excluirEspecializacao(id) {
-    var d = disciplina(id);
-    if (!ehEspecializacao(d)) return;
-    var t = turmaDaEspecializacao(id);
-    if (t) excluirTurma(t.id);
-    excluirDisciplina(id);
-  }
-
-  /* Sem cascata: diferente de excluirTurma, uma disciplina com turma
-     vinculada não é removível — quem chama precisa checar antes (a view
-     bloqueia com um toast). Excluir aqui sem essa checagem deixaria turmas
-     apontando para um disciplinaId inexistente. */
+  /* Sem cascata: disciplina com reserva não é removível — quem chama
+     precisa checar antes por `reservasDaDisciplina` (a view bloqueia com um
+     toast). Excluir sem essa checagem deixaria reservas apontando para uma
+     disciplina que não existe, que a agenda mostra como "Disciplina
+     removida". Vale para a pós também: a cascata que a especialização tinha
+     tirava as reservas da agenda sem volta, e a exclusão de reserva hoje é
+     reversível — quem quiser tirá-las faz isso pela agenda. */
   function excluirDisciplina(id) {
     var d = porId(estado.disciplinas, id);
     if (!d) return;
@@ -1337,84 +1698,173 @@
     });
   }
 
-  function salvarTurma(id, dados) {
-    var t = id ? turma(id) : null;
-    var novo = !t;
-    if (!t) {
-      t = { id: N.novoId('turmas'), alunos: [], periodoLetivo: estado.periodoLetivo };
-      estado.turmas.push(t);
+  /* ── Vínculo professor ↔ disciplina ───────────────────────────────────
+     Feito pela tela Acessos, pessoa por pessoa: `ids` é a lista COMPLETA de
+     disciplinas de `email`. Grava só as disciplinas que mudaram — e a que
+     ainda herda o vínculo das turmas ganha a lista explícita, já com a
+     mudança. */
+  function vincularDisciplinas(email, ids) {
+    var mudadas = [];
+    estado.disciplinas.forEach(function (d) {
+      var atual = professoresDaDisciplina(d);
+      var tem = atual.indexOf(email) !== -1, quer = ids.indexOf(d.id) !== -1;
+      if (tem === quer) return;
+      mudadas.push({
+        d: d, antes: d.professores,
+        novo: quer ? atual.concat([email]) : atual.filter(function (x) { return x !== email; })
+      });
+    });
+    if (!mudadas.length) return global.Promise.resolve({ ok: true });
+    mudadas.forEach(function (m) { m.d.professores = m.novo; });
+    commit();
+    return persistir(global.Promise.all(mudadas.map(function (m) {
+      return N.gravar('disciplinas', m.d.id, { professores: m.novo });
+    })), function () {
+      mudadas.forEach(function (m) {
+        if (m.antes === undefined) delete m.d.professores; else m.d.professores = m.antes;
+      });
+    });
+  }
+
+  /* ── Limpeza do cadastro ──────────────────────────────────────────────
+     A turma saiu do modelo em 05/10/2026, mas o banco de produção ainda a
+     carrega de três jeitos. A limpeza resolve os três de uma vez, com
+     prévia e a pedido da coordenação — nunca sozinha, no boot:
+       1. reserva antiga que aponta para TURMA ganha `disciplinaId`, o
+          `responsavelId` que herdava dela e a turma escrita na descrição;
+       2. disciplinas com a turma no NOME ("Implantodontia T1", "… T2") —
+          que era como a pós distinguia turmas, sem ter turma — viram UMA
+          disciplina com o nome-base, e as reservas de cada uma passam para
+          ela com o "T1"/"T2" na descrição;
+       3. disciplina cujo vínculo de professor ainda vem das turmas ganha a
+          lista gravada em `professores`.
+     É idempotente: o plano é recalculado do estado atual, então rodar de
+     novo depois de uma falha parcial termina o que faltou. A coleção
+     `turmas` não é apagada — fica inerte, e nada mais depende dela. */
+  var RE_TURMA_FIM = /^(.*\S)[\s\-–—·:,(]+(?:turma|t)\s*\.?\s*-?\s*(\d{1,2}|[a-z])\)?\s*$/i;
+  var RE_TURMA_INICIO = /^(?:turma|t)\s*\.?\s*-?\s*(\d{1,2}|[a-z])\s*[\-–—·:]+\s*(.+)$/i;
+
+  /* "Implantodontia T1" → { base: "Implantodontia", turma: "T1" }. Também
+     "Implantodontia - Turma 2", "Implantodontia (T3)" e "T1 - Implantodontia".
+     Nome sem turma devolve null — "Prótese Total" não é a turma "o" da
+     Prótese: o identificador precisa fechar o nome. */
+  function separarTurmaDoNome(nome) {
+    var s = String(nome || '').replace(/\s+/g, ' ').trim(), m;
+    if ((m = RE_TURMA_FIM.exec(s))) {
+      return { base: m[1].replace(/[\s\-–—·:,(]+$/, ''), turma: 'T' + m[2].toUpperCase() };
     }
-    var antes = JSON.parse(JSON.stringify(t));
-    ['disciplinaId', 'codigo', 'professorCoordenadorId'].forEach(function (k) {
-      if (dados[k] !== undefined) t[k] = dados[k];
+    if ((m = RE_TURMA_INICIO.exec(s))) return { base: m[2].trim(), turma: 'T' + m[1].toUpperCase() };
+    return null;
+  }
+  function chaveDeNome(s) { return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+  function planoDeLimpeza() {
+    var reservas = estado.recorrencias.concat(estado.pontuais);
+    var migrar = reservas.filter(function (o) {
+      var t = turmaLegada(o);
+      return !o.disciplinaId && !!t && !!t.disciplinaId;
     });
-    commit();
-    /* `alunos` é derivado da coleção matriculas — não vai no documento. */
-    persistir(N.gravar('turmas', t.id, {
-      disciplinaId: t.disciplinaId, codigo: t.codigo,
-      professorCoordenadorId: t.professorCoordenadorId, periodoLetivo: t.periodoLetivo
-    }), function () {
-      if (novo) estado.turmas = estado.turmas.filter(function (x) { return x.id !== t.id; });
-      else Object.keys(antes).forEach(function (k) { t[k] = antes[k]; });
+
+    var grupos = {}, ordem = [];
+    estado.disciplinas.forEach(function (d) {
+      var s = separarTurmaDoNome(d.nome);
+      if (!s || !s.base) return;
+      var k = nivelDaDisciplina(d) + '|' + chaveDeNome(s.base);
+      if (!grupos[k]) { grupos[k] = { nivel: nivelDaDisciplina(d), base: s.base, membros: [] }; ordem.push(k); }
+      grupos[k].membros.push({ disciplina: d, turma: s.turma });
     });
-    return t;
+    var unificar = ordem.map(function (k) {
+      var g = grupos[k];
+      /* O destino é a disciplina que JÁ tem o nome-base, quando existe; senão
+         o primeiro membro, renomeado. */
+      var existente = null;
+      estado.disciplinas.forEach(function (d) {
+        if (!existente && nivelDaDisciplina(d) === g.nivel && chaveDeNome(d.nome) === chaveDeNome(g.base)) existente = d;
+      });
+      var n = 0;
+      g.membros.forEach(function (m) { n += reservasDaDisciplina(m.disciplina.id, true).length; });
+      return {
+        chave: k, nivel: g.nivel, base: g.base, membros: g.membros, reservas: n,
+        destino: existente || g.membros[0].disciplina, renomear: !existente
+      };
+    });
+
+    var professores = estado.disciplinas.filter(function (d) {
+      return !Array.isArray(d.professores) && professoresDaDisciplina(d).length > 0;
+    });
+    return {
+      migrar: migrar, unificar: unificar, professores: professores,
+      vazio: !migrar.length && !unificar.length && !professores.length
+    };
   }
 
-  function apagarMatriculasDaTurma(turmaId) {
-    return N.lerColecao('matriculas').then(function (l) {
-      return N.apagarVarios('matriculas', l.filter(function (m) {
-        return m.turmaId === turmaId;
-      }).map(function (m) { return m.id; }));
-    });
-  }
-
-  function excluirTurma(id) {
-    var t = porId(estado.turmas, id);
-    if (!t) return;
-    var regras = estado.recorrencias.filter(function (r) { return r.turmaId === id; });
-    estado.turmas = estado.turmas.filter(function (x) { return x.id !== id; });
-    estado.recorrencias = estado.recorrencias.filter(function (r) { return r.turmaId !== id; });
-    commit();
-    var passos = [N.apagar('turmas', id), apagarMatriculasDaTurma(id)];
-    regras.forEach(function (r) { passos.push(N.removerOcupacao(r.agrupamentoId, r.id)); });
-    persistir(global.Promise.all(passos), function () {
-      estado.turmas.push(t);
-      regras.forEach(function (r) { estado.recorrencias.push(r); });
-    });
-  }
-
-  function vincularAluno(turmaId, dados) {
-    var t = turma(turmaId); if (!t) return null;
-    var a = null;
-    estado.alunos.forEach(function (x) { if (x.matricula === dados.matricula) a = x; });
-    var alunoNovo = !a;
-    if (!a) {
-      a = { id: N.novoId('alunos'), nome: dados.nome, matricula: dados.matricula, periodo: dados.periodo };
-      estado.alunos.push(a);
+  /* Executa o plano. `chaves` restringe os grupos de unificação aos que a
+     coordenação deixou marcados na prévia; migração e vínculo de professor
+     vão sempre — não há o que decidir neles. */
+  function executarLimpeza(plano, chaves) {
+    var reservasMudadas = {}, discMudadas = {}, apagar = [];
+    function mudar(alvo, mapa, campos) {
+      var reg = mapa[alvo.id] || (mapa[alvo.id] = {});
+      Object.keys(campos).forEach(function (k) { alvo[k] = campos[k]; reg[k] = campos[k]; });
     }
-    if (t.alunos.indexOf(a.id) !== -1) return a;
-    t.alunos.push(a.id);
+
+    /* 3 antes de tudo: é o único que ainda lê turma para decidir. */
+    plano.professores.forEach(function (d) {
+      mudar(d, discMudadas, { professores: professoresDaDisciplina(d) });
+    });
+
+    /* 1. Os campos são calculados ANTES de aplicados: com `disciplinaId`
+       gravado, `descricaoDe` deixa de trazer a turma antiga. */
+    plano.migrar.forEach(function (o) {
+      var t = turmaLegada(o);
+      if (!t) return;
+      var campos = { disciplinaId: t.disciplinaId, descricao: descricaoDe(o) };
+      if (!o.responsavelId && t.professorCoordenadorId) campos.responsavelId = t.professorCoordenadorId;
+      mudar(o, reservasMudadas, campos);
+    });
+
+    /* 2. */
+    var reservas = estado.recorrencias.concat(estado.pontuais);
+    plano.unificar.forEach(function (g) {
+      if (chaves && chaves.indexOf(g.chave) === -1) return;
+      var profs = professoresDaDisciplina(g.destino);
+      g.membros.forEach(function (m) {
+        var d = m.disciplina;
+        reservas.forEach(function (o) {
+          if (disciplinaIdDe(o) !== d.id) return;
+          var desc = descricaoDe(o);
+          if (desc.indexOf(m.turma) === -1) desc = m.turma + (desc ? ' · ' + desc : '');
+          mudar(o, reservasMudadas, { disciplinaId: g.destino.id, descricao: desc });
+        });
+        professoresDaDisciplina(d).forEach(function (p) { if (profs.indexOf(p) === -1) profs.push(p); });
+        if (d.id !== g.destino.id) apagar.push(d);
+      });
+      var campos = { professores: profs };
+      if (g.renomear) campos.nome = g.base;
+      mudar(g.destino, discMudadas, campos);
+    });
+
+    var idsApagados = apagar.map(function (d) { return d.id; });
+    estado.disciplinas = estado.disciplinas.filter(function (d) { return idsApagados.indexOf(d.id) === -1; });
     commit();
-    /* Id determinístico: vincular duas vezes não cria matrícula duplicada. */
-    var idMatricula = turmaId + '__' + a.id;
+
     var passos = [];
-    if (alunoNovo) passos.push(N.gravar('alunos', a.id, a));
-    passos.push(N.gravar('matriculas', idMatricula, { turmaId: turmaId, alunoId: a.id }));
-    persistir(global.Promise.all(passos), function () {
-      t.alunos = t.alunos.filter(function (x) { return x !== a.id; });
-      if (alunoNovo) estado.alunos = estado.alunos.filter(function (x) { return x.id !== a.id; });
+    Object.keys(reservasMudadas).forEach(function (id) {
+      passos.push(N.gravar('ocupacoes', id, reservasMudadas[id]));
     });
-    return a;
-  }
-
-  function desvincularAluno(turmaId, alunoId) {
-    var t = turma(turmaId); if (!t) return;
-    if (t.alunos.indexOf(alunoId) === -1) return;
-    t.alunos = t.alunos.filter(function (x) { return x !== alunoId; });
-    commit();
-    persistir(N.apagar('matriculas', turmaId + '__' + alunoId), function () {
-      t.alunos.push(alunoId);
+    Object.keys(discMudadas).forEach(function (id) {
+      if (idsApagados.indexOf(id) === -1) passos.push(N.gravar('disciplinas', id, discMudadas[id]));
     });
+    idsApagados.forEach(function (id) { passos.push(N.apagar('disciplinas', id)); });
+    var contagem = {
+      reservas: Object.keys(reservasMudadas).length,
+      disciplinas: Object.keys(discMudadas).length, apagadas: idsApagados.length
+    };
+    /* Sem desfazer peça por peça: a falha pode ter sido parcial. Relê o
+       acervo do servidor, que é a verdade — e a limpeza pode rodar de novo. */
+    return persistir(global.Promise.all(passos), function () {
+      carregar().then(function () { commit(); });
+    }).then(function (r) { r.contagem = contagem; return r; });
   }
 
   /* ── Mutações: acessos ────────────────────────────────────────────────
@@ -1513,41 +1963,81 @@
      relatórios 6, e as duas telas discordavam sobre a mesma semana. */
   function fimDaSemana(ini) { return C.addDays(ini, 5); }
 
-  /* Horas de clínica, e não horas de relógio: uma ocupação das duas
-     clínicas consome o dobro de horas de clínica. */
-  function horasSemana(ini) {
-    var total = 0;
-    ocorrenciasIntervalo(ini, fimDaSemana(ini)).forEach(function (o) {
-      total += C.duracaoH(o.inicio, o.fim) * clinicasDoEscopo(o.agrupamentoId, o.escopo).length;
+  /* Horas de USO de uma clínica num dia: a UNIÃO dos intervalos das
+     ocupações dela. Desde 05/10/2026 duas reservas podem dividir a clínica no
+     mesmo horário, cada uma com as suas cadeiras — somar as durações
+     contaria a mesma hora duas vezes e a clínica passaria de 100%. */
+  function horasDeUso(lista) {
+    var faixas = lista.map(function (o) { return [C.toMin(o.inicio), C.toMin(o.fim)]; })
+      .sort(function (a, b) { return a[0] - b[0]; });
+    var total = 0, ini = null, fim = null;
+    faixas.forEach(function (f) {
+      if (ini === null || f[0] > fim) {
+        if (ini !== null) total += fim - ini;
+        ini = f[0]; fim = f[1];
+      } else if (f[1] > fim) {
+        fim = f[1];
+      }
     });
-    return total;
+    if (ini !== null) total += fim - ini;
+    return total / 60;
   }
+  function horasDaClinica(clinicaId, ini, fim) {
+    var h = 0, d = ini, guarda = 0;
+    while (d <= fim && guarda++ < 400) {
+      h += horasDeUso(ocorrenciasDoDia(d, clinicaId));
+      d = C.addDays(d, 1);
+    }
+    return h;
+  }
+  /* Cadeiras de uma ocorrência que caem DENTRO de uma clínica: a ocupação
+     das duas clínicas tem parte das cadeiras em cada uma. */
+  function cadeirasNaClinica(o, clinicaId) {
+    var f = faixaCadeiras(clinicaId);
+    return o.cadeirasLista.filter(function (n) { return n >= f[0] && n <= f[1]; }).length;
+  }
+
+  /* Horas de clínica, e não horas de relógio: uma ocupação das duas
+     clínicas consome hora nas duas. */
   function horasPorClinica(ini) {
     var fim = fimDaSemana(ini);
     return estado.clinicas.map(function (c) {
-      var h = 0;
-      ocorrenciasIntervalo(ini, fim, c.id).forEach(function (o) { h += C.duracaoH(o.inicio, o.fim); });
-      return { clinica: c, horas: h };
+      return { clinica: c, horas: horasDaClinica(c.id, ini, fim) };
     });
+  }
+  function horasSemana(ini) {
+    return horasPorClinica(ini).reduce(function (s, x) { return s + x.horas; }, 0);
   }
   function horasPorAgrupamento(ini) {
     var fim = fimDaSemana(ini);
     return estado.agrupamentos.map(function (g) {
       var h = 0;
-      ocorrenciasIntervalo(ini, fim, { agrupamentoId: g.id }).forEach(function (o) {
-        h += C.duracaoH(o.inicio, o.fim) * clinicasDoEscopo(o.agrupamentoId, o.escopo).length;
-      });
+      clinicasDoAgrupamento(g.id).forEach(function (c) { h += horasDaClinica(c.id, ini, fim); });
       return { agrupamento: g, horas: h };
     });
   }
-  function horasPorTurma(ini) {
+  /* Cadeira·hora: a medida de ocupação que a reserva por quantidade pede.
+     Uma clínica de 14 cadeiras com uma turma de 7 a manhã inteira está em
+     uso a manhã inteira, mas só meio ocupada — e é a outra metade que fica
+     livre para reserva. */
+  function cadeirasHoraPorClinica(ini) {
+    var fim = fimDaSemana(ini);
+    return estado.clinicas.map(function (c) {
+      var ch = 0;
+      ocorrenciasIntervalo(ini, fim, c.id).forEach(function (o) {
+        ch += C.duracaoH(o.inicio, o.fim) * cadeirasNaClinica(o, c.id);
+      });
+      return { clinica: c, cadeirasHora: ch };
+    });
+  }
+  function horasPorDisciplina(ini) {
     var fim = fimDaSemana(ini), mapa = {};
     ocorrenciasIntervalo(ini, fim).forEach(function (o) {
-      if (!o.turmaId) return;
-      mapa[o.turmaId] = (mapa[o.turmaId] || 0) + C.duracaoH(o.inicio, o.fim);
+      if (!o.disciplinaId) return;
+      mapa[o.disciplinaId] = (mapa[o.disciplinaId] || 0) + C.duracaoH(o.inicio, o.fim);
     });
-    return estado.turmas.map(function (t) {
-      return { turma: t, horas: mapa[t.id] || 0 };
+    return estado.disciplinas.map(function (d) {
+      return { disciplina: d, horas: mapa[d.id] || 0 };
     }).sort(function (a, b) { return b.horas - a.horas; });
   }
   function emAndamento() {
@@ -1555,16 +2045,40 @@
       return statusOcorrencia(o) === 'em_andamento';
     });
   }
-  /* Cadeira EM USO é cadeira com aluno registrado — nunca cadeira apenas
-     reservada. O antigo fallback `atribuições || o.cadeiras` fazia o KPI do
-     painel dizer "34 de 112" enquanto a tela de Ocupação, que conta só as
-     atribuições, dizia "0 de 28" para os mesmos dados. */
+  /* Cadeira EM USO é cadeira alocada a uma ocupação em andamento — desde
+     05/10/2026 a alocação já é a marcação de uso, sem o professor registrar
+     cadeira por cadeira. A reserva integral antiga conta o escopo inteiro,
+     que é o que ela segura. */
   function cadeirasEmUsoAgora() {
     var n = 0;
-    emAndamento().forEach(function (o) {
-      n += atribuicoesDa(o.chave).length;
-    });
+    emAndamento().forEach(function (o) { n += o.cadeiras; });
     return n;
+  }
+
+  /* ── Permissão sobre as cadeiras de uma reserva ───────────────────────
+     Coordenação troca as cadeiras de qualquer reserva; o professor, as da
+     reserva pela qual responde e as das disciplinas a que está vinculado —
+     "o professor responsável por cada disciplina que está ocupando".
+     Aceita documento ou ocorrência: as duas formas passam pelos mesmos
+     resolvedores. */
+  function podeGerirCadeiras(o) {
+    if (!o || !usuarioAtual || !pode('cadeira.ocupar')) return false;
+    if (usuarioAtual.perfil === 'coordenador') return true;
+    var doc = o.origemId ? reservaPorId(o.origemId) : o;
+    if (!doc) return false;
+    if (responsavelDe(doc) === usuarioAtual.id) return true;
+    var did = disciplinaIdDe(doc);
+    return !!did && professoresDaDisciplina(disciplina(did)).indexOf(usuarioAtual.id) !== -1;
+  }
+  /* Com a aprovação ligada, o professor TROCA cadeiras e pode devolver
+     algumas, mas não cresce a reserva além do que a coordenação aprovou —
+     senão pedir 5 e depois marcar 14 passaria por fora da fila. */
+  function limiteDeCadeiras(o) {
+    var doc = o && o.origemId ? reservaPorId(o.origemId) : o;
+    if (!doc) return 0;
+    var cap = capacidadeEscopo(doc.agrupamentoId, doc.escopo);
+    if (!usuarioAtual || usuarioAtual.perfil === 'coordenador' || !exigirAprovacao()) return cap;
+    return Math.min(cap, quantidadeDe(doc));
   }
   function totalCadeiras() {
     return estado.clinicas.reduce(function (s, c) { return s + c.cadeiras; }, 0);
@@ -1572,8 +2086,9 @@
 
   /* Consulta os tipos vigentes E os legados: sem os legados, uma atividade
      gravada antes de 17/09/2026 apareceria com o id cru ("reposicao").
-     'aula' é o tipo fixo das recorrentes — elas não têm campo de tipo, e
-     turma de graduação é o que o recorrente atende hoje. */
+     'aula' é o tipo das recorrentes gravadas antes de 05/10/2026, que não
+     tinham campo de tipo; quem precisa distinguir graduação de pós nelas usa
+     `nivelDe`, que olha a disciplina. */
   function rotuloTipoAtividade(id) {
     var r = id;
     D.TIPOS_ATIVIDADE.concat(D.TIPOS_LEGADOS).forEach(function (t) {
@@ -1602,24 +2117,35 @@
     rotuloEscopo: rotuloEscopo, localCadeira: localCadeira,
     capacidadeEscopo: capacidadeEscopo, cadeirasOperantesEscopo: cadeirasOperantesEscopo,
     cadeirasInterditadas: cadeirasInterditadas,
-    turma: turma, disciplina: disciplina,
+    poolDoEscopo: poolDoEscopo, rotuloEscopoCurto: rotuloEscopoCurto,
+    ehPreClinica: ehPreClinica, ambienteDe: ambienteDe,
+    disciplina: disciplina,
     aluno: aluno, pessoa: pessoa, nomePessoa: nomePessoa,
-    disciplinaDaTurma: disciplinaDaTurma, rotuloTurma: rotuloTurma, rotuloTurmaLongo: rotuloTurmaLongo,
-    subtituloTurma: subtituloTurma, subtituloAgrupamento: subtituloAgrupamento,
-    turmasDoProfessor: turmasDoProfessor,
+    subtituloAgrupamento: subtituloAgrupamento,
     ehEspecializacao: ehEspecializacao, especializacoes: especializacoes,
-    disciplinasDeGraduacao: disciplinasDeGraduacao, turmasDeGraduacao: turmasDeGraduacao,
-    turmaDaEspecializacao: turmaDaEspecializacao,
-    professorDaEspecializacao: professorDaEspecializacao,
-    salvarEspecializacao: salvarEspecializacao, excluirEspecializacao: excluirEspecializacao,
+    disciplinasDeGraduacao: disciplinasDeGraduacao, disciplinasDoNivel: disciplinasDoNivel,
+    nivelDaDisciplina: nivelDaDisciplina,
+    rotuloDisciplina: rotuloDisciplina, rotuloDisciplinaLongo: rotuloDisciplinaLongo,
+    subtituloDisciplina: subtituloDisciplina,
+    professoresDaDisciplina: professoresDaDisciplina, disciplinasDoProfessor: disciplinasDoProfessor,
+    disciplinaIdDe: disciplinaIdDe, disciplinaDe: disciplinaDe, responsavelDe: responsavelDe,
+    descricaoDe: descricaoDe, nivelDe: nivelDe,
+    salvarEspecializacao: salvarEspecializacao, reservasDaDisciplina: reservasDaDisciplina,
+    vincularDisciplinas: vincularDisciplinas,
+    separarTurmaDoNome: separarTurmaDoNome,
+    planoDeLimpeza: planoDeLimpeza, executarLimpeza: executarLimpeza,
     manutencoesAbertas: manutencoesAbertas, cadeiraEmManutencao: cadeiraEmManutencao,
     cadeirasOperantes: cadeirasOperantes, historicoCadeira: historicoCadeira,
     ocorrenciasDoDia: ocorrenciasDoDia, ocorrenciasIntervalo: ocorrenciasIntervalo,
     datasDaRegra: datasDaRegra, statusOcorrencia: statusOcorrencia,
     janelaHoras: janelaHoras,
-    conflitos: conflitos, nomeNaCadeira: nomeNaCadeira,
+    ehIntegral: ehIntegral, quantidadeDe: quantidadeDe, cadeirasDe: cadeirasDe,
+    textoCadeiras: textoCadeiras,
+    disponibilidade: disponibilidade, mapaDeCadeiras: mapaDeCadeiras,
+    podeGerirCadeiras: podeGerirCadeiras, limiteDeCadeiras: limiteDeCadeiras,
+    alterarCadeiras: alterarCadeiras,
+    nomeNaCadeira: nomeNaCadeira, registrarNomeNaCadeira: registrarNomeNaCadeira,
     criarRecorrencia: criarRecorrencia, criarPontual: criarPontual,
-    atualizarRecorrencia: atualizarRecorrencia, atualizarPontual: atualizarPontual,
     exigirAprovacao: exigirAprovacao, situacaoDe: situacaoDe,
     rotuloPedido: rotuloPedido,
     pedidosPendentes: pedidosPendentes, meusPedidos: meusPedidos,
@@ -1632,17 +2158,15 @@
     reservasExcluidas: reservasExcluidas,
     excluirReserva: excluirReserva, recuperarReserva: recuperarReserva,
     atribuicoesDa: atribuicoesDa, atribuicaoDaCadeira: atribuicaoDaCadeira,
-    ocuparCadeira: ocuparCadeira, liberarCadeira: liberarCadeira,
     abrirManutencao: abrirManutencao, encerrarManutencao: encerrarManutencao,
     calcularImpacto: calcularImpacto,
     salvarDisciplina: salvarDisciplina, excluirDisciplina: excluirDisciplina,
-    salvarTurma: salvarTurma, excluirTurma: excluirTurma,
-    vincularAluno: vincularAluno, desvincularAluno: desvincularAluno,
     atualizarClinica: atualizarClinica, atualizarParametros: atualizarParametros,
     atualizarSemestre: atualizarSemestre,
     estruturaPendente: estruturaPendente, provisionarEstrutura: provisionarEstrutura,
     horasSemana: horasSemana, horasPorClinica: horasPorClinica,
-    horasPorAgrupamento: horasPorAgrupamento, horasPorTurma: horasPorTurma,
+    horasPorAgrupamento: horasPorAgrupamento, horasPorDisciplina: horasPorDisciplina,
+    cadeirasHoraPorClinica: cadeirasHoraPorClinica, horasDeUso: horasDeUso,
     fimDaSemana: fimDaSemana,
     emAndamento: emAndamento, cadeirasEmUsoAgora: cadeirasEmUsoAgora, totalCadeiras: totalCadeiras,
     rotuloTipoAtividade: rotuloTipoAtividade, rotuloCategoriaManutencao: rotuloCategoriaManutencao

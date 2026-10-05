@@ -2,7 +2,13 @@
    A tela é do AGRUPAMENTO: as clínicas dele aparecem lado a lado, cada uma
    com as suas cadeiras. O número da cadeira NÃO identifica a clínica: as de
    atendimento seguem a numeração contínua do polo, mas cada pré-clínica
-   numera as suas do 1. Por isso a seleção guarda a clínica junto do número. */
+   numera as suas do 1. Por isso a seleção guarda a clínica junto do número.
+
+   Desde 05/10/2026 a clínica pode ter VÁRIAS reservas ao mesmo tempo, cada
+   uma com as cadeiras dela, e a cadeira alocada já nasce ocupada — o
+   professor não registra mais cadeira por cadeira. A grade diz de qual
+   reserva é cada cadeira (letra A, B, C… quando há mais de uma), e o
+   professor responsável troca, devolve ou acrescenta cadeira dali mesmo. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI, M = global.Manutencao;
@@ -12,6 +18,7 @@
   /* Altura, em pixels, da faixa de uma clínica na linha do dia. Uma
      ocupação das duas clínicas ocupa as duas faixas. */
   var ALTURA_FAIXA = 32;
+  var LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
   function render(alvo, params) {
     if (!S.pode('agenda.ver')) { alvo.appendChild(U.semPermissao()); return; }
@@ -50,29 +57,23 @@
       if (!cSel || cSel.agrupamentoId !== sel.agrupamentoId) { sel.cadeira = null; sel.clinicaId = null; }
     }
 
+    var ref = referenciaDoAgrupamento(sel.agrupamentoId, hoje);
     alvo.appendChild(C.el('section', { class: 'split3' }, [
       C.el('div', { class: 'c-left' }, listaAgrupamentos(hoje)),
-      C.el('div', { class: 'c-mid' }, painelAgrupamento(hoje)),
-      C.el('div', { class: 'c-right' }, painelCadeira(hoje))
+      C.el('div', { class: 'c-mid' }, painelAgrupamento(hoje, ref)),
+      C.el('div', { class: 'c-right' }, painelCadeira(hoje, ref))
     ]));
   }
 
   /* ── Leituras compartilhadas ──────────────────────────────────────── */
 
-  /* "Cadeiras em uso" é sempre cadeira com USO REGISTRADO — não com aluno
-     cadastrado, que deixou de ser exigência. O antigo fallback
-     `atribuições || o.cadeiras` fazia a mesma tela dizer 71% num canto e
-     0 de 13 no outro: cadeira reservada não é cadeira em uso. E agora que a
-     reserva é sempre integral, essa distinção é a única medida de ocupação
-     que significa algo. */
-  function cadeirasEmUso(o) { return S.atribuicoesDa(o.chave).length; }
-  function cadeirasReservadas(o) { return o.cadeiras; }
-
+  /* Cadeira EM USO é cadeira alocada a uma reserva em andamento. Desde
+     05/10/2026 a alocação já é a marcação: a reserva de 8 cadeiras tem 8 em
+     uso, sem ninguém registrar uma a uma. */
   function emUsoNoAgrupamento(agrupamentoId, hoje) {
     var n = 0;
     S.ocorrenciasDoDia(hoje, { agrupamentoId: agrupamentoId }).forEach(function (o) {
-      if (S.statusOcorrencia(o) !== 'em_andamento') return;
-      n += cadeirasEmUso(o);
+      if (S.statusOcorrencia(o) === 'em_andamento') n += o.cadeiras;
     });
     return n;
   }
@@ -82,57 +83,65 @@
     }, 0);
   }
 
-  /* Ocupação vigente na clínica — a que está em andamento agora; se não
-     houver, a próxima de hoje; se não houver, a última encerrada. */
-  function ocupacaoVigente(clinicaId, hoje) {
+  /* Reservas de REFERÊNCIA de uma clínica hoje: as que estão em andamento
+     agora; se nenhuma, as do próximo horário com ocupação; se não sobrar
+     nada hoje, nenhuma — e a última encerrada só serve para a linha de
+     estado dizer até quando a clínica foi usada. */
+  function referencia(clinicaId, hoje) {
     var doDia = S.ocorrenciasDoDia(hoje, clinicaId);
     var andando = doDia.filter(function (o) { return S.statusOcorrencia(o) === 'em_andamento'; });
-    if (andando.length) return andando[0];
+    if (andando.length) return { lista: andando, agora: true, doDia: doDia };
     var futuras = doDia.filter(function (o) { return S.statusOcorrencia(o) === 'agendada'; });
-    if (futuras.length) return futuras[0];
-    return doDia.length ? doDia[doDia.length - 1] : null;
+    if (futuras.length) {
+      var t = futuras.reduce(function (m, o) { return Math.min(m, C.toMin(o.inicio)); }, 24 * 60);
+      return {
+        lista: futuras.filter(function (o) { return C.toMin(o.inicio) <= t; }),
+        agora: false, doDia: doDia
+      };
+    }
+    return { lista: [], agora: false, doDia: doDia };
   }
 
-  /* A ocupação que toma as duas clínicas do agrupamento neste momento. */
-  function ocupacaoConjunta(agrupamentoId, hoje) {
-    var l = S.ocorrenciasDoDia(hoje, { agrupamentoId: agrupamentoId }).filter(function (o) {
-      return S.clinicasDoEscopo(o.agrupamentoId, o.escopo).length > 1 &&
-        S.statusOcorrencia(o) === 'em_andamento';
+  /* A letra é do AGRUPAMENTO, não da clínica: a ocupação das duas clínicas
+     tem cadeira nas duas grades, e precisa da mesma letra nas duas. */
+  function referenciaDoAgrupamento(agrupamentoId, hoje) {
+    var vistas = {}, lista = [], porClinica = {};
+    S.clinicasDoAgrupamento(agrupamentoId).forEach(function (c) {
+      var r = referencia(c.id, hoje);
+      porClinica[c.id] = r;
+      r.lista.forEach(function (o) {
+        if (vistas[o.chave]) return;
+        vistas[o.chave] = true;
+        lista.push(o);
+      });
     });
-    return l.length ? l[0] : null;
-  }
-
-  /* Sem cadeira escolhida, a lista de cadeiras em uso mostra a ocupação
-     conjunta do agrupamento ou a primeira clínica com ocupação vigente. */
-  function ocupacaoDeReferencia(agrupamentoId, hoje) {
-    var conj = ocupacaoConjunta(agrupamentoId, hoje);
-    if (conj) return conj;
-    var clinicas = S.clinicasDoAgrupamento(agrupamentoId), achada = null;
-    clinicas.forEach(function (c) {
-      if (achada) return;
-      achada = ocupacaoVigente(c.id, hoje);
+    lista.sort(function (a, b) {
+      return C.toMin(a.inicio) - C.toMin(b.inicio) || String(a.titulo).localeCompare(String(b.titulo));
     });
-    return achada;
+    var letra = {};
+    lista.forEach(function (o, i) { letra[o.chave] = LETRAS.charAt(i % LETRAS.length); });
+    return { porClinica: porClinica, lista: lista, letra: letra, varias: lista.length > 1 };
   }
 
-  /* Reserva é da clínica INTEIRA desde 17/09/2026: não existe mais cadeira
-     "fora da faixa" dentro de uma clínica reservada, e por isso caiu o
-     cálculo de posição no escopo que comparava com a quantidade pedida.
-     Se a clínica está ocupada, toda cadeira dela está reservada — 'ocupada'
-     quando alguém registrou o uso, 'vaga' quando ainda não registrou. */
-  function statusCadeira(clinicaId, numero, occ) {
-    if (S.cadeiraEmManutencao(clinicaId, numero)) return 'manut';
-    if (!occ) return 'livre';
-    return S.atribuicaoDaCadeira(occ.chave, numero) ? 'ocupada' : 'vaga';
+  function donoDaCadeira(ref, clinicaId, n) {
+    var r = ref.porClinica[clinicaId];
+    if (!r) return null;
+    for (var i = 0; i < r.lista.length; i++) if (r.lista[i].cadeirasLista.indexOf(n) !== -1) return r.lista[i];
+    return null;
   }
 
-  /* Ocupar e liberar dependem da permissão E da relação com a ocupação:
-     a coordenação opera qualquer uma, o professor só as suas. */
-  function podeOperar(occ) {
-    if (!occ || !S.pode('cadeira.ocupar')) return false;
-    var u = S.usuario();
-    if (!u) return false;
-    return u.perfil === 'coordenador' || occ.responsavelId === u.id;
+  /* Manutenção vence: cadeira interditada não atende, esteja ou não numa
+     reserva. 'ocupada' é cadeira de reserva em andamento; 'reservada', de
+     reserva que ainda vai começar hoje. */
+  function statusCadeira(ref, clinicaId, n) {
+    if (S.cadeiraEmManutencao(clinicaId, n)) return 'manut';
+    var o = donoDaCadeira(ref, clinicaId, n);
+    if (!o) return 'livre';
+    return S.statusOcorrencia(o) === 'em_andamento' ? 'ocupada' : 'reservada';
+  }
+
+  function rotuloOcorrencia(ref, o) {
+    return (ref.varias ? ref.letra[o.chave] + ' · ' : '') + o.titulo;
   }
 
   /* ── Coluna esquerda ──────────────────────────────────────────────── */
@@ -151,14 +160,14 @@
           C.el('span', { class: 'num', style: 'font-size:13px', text: pct + '%' })
         ]),
         C.el('small', {
-          text: S.cadeirasOperantesEscopo(g.id, 'ambas') + ' de ' + capacidade + ' cadeiras operantes'
+          text: emUso + ' em uso · ' + S.cadeirasOperantesEscopo(g.id, 'ambas') + ' de ' + capacidade + ' operantes'
         })
       ]));
     });
 
     caixa.appendChild(C.el('div', { class: 'legend', style: 'margin-top:24px' }, [
-      legenda('ocupada', 'Em uso registrado'),
-      legenda('vaga', 'Reservada, sem registro'),
+      legenda('ocupada', 'Ocupada — reserva em andamento'),
+      legenda('reservada', 'Reservada para mais tarde'),
       legenda('', 'Livre'),
       legenda('manut', 'Em manutenção')
     ]));
@@ -166,27 +175,23 @@
   }
   function legenda(cls, texto) {
     return C.el('div', { class: 'row', style: 'gap:9px' }, [
-      C.el('span', { class: 'k ' + cls, style: cls === 'ocupada'
-        ? 'background:var(--fill-strong);border-color:var(--fill-strong)'
-        : cls === 'vaga' ? 'border-color:var(--fill-strong);border-width:2px'
-          : cls === 'manut' ? 'background:var(--color-neutral-300)' : '' }),
+      C.el('span', { class: 'chair-k ' + cls }),
       C.el('span', { text: texto })
     ]);
   }
 
   /* ── Coluna central ───────────────────────────────────────────────── */
-  function painelAgrupamento(hoje) {
+  function painelAgrupamento(hoje, ref) {
     var g = S.agrupamento(sel.agrupamentoId);
     var clinicas = S.clinicasDoAgrupamento(g.id);
     var capacidade = S.capacidadeEscopo(g.id, 'ambas');
-    var faixa = S.faixaEscopo(g.id, 'ambas');
     var emUso = emUsoNoAgrupamento(g.id, hoje);
     var interditadas = interditadasNoAgrupamento(g.id);
     var caixa = C.el('div');
 
-    var resumo = emUso + ' de ' + capacidade + ' cadeiras em uso · ' + faixa[0] + '–' + faixa[1];
-    /* O déficit precisa aparecer: cadeira interditada dentro da faixa
-       reservada some da conta sem que ninguém veja. */
+    var resumo = emUso + ' de ' + capacidade + ' cadeiras em uso';
+    /* O déficit precisa aparecer: cadeira interditada some da conta sem que
+       ninguém veja. */
     if (interditadas) resumo += ' · ' + C.plural(interditadas, 'cadeira', 'cadeiras') + ' em manutenção';
 
     caixa.appendChild(C.el('div', {
@@ -196,33 +201,23 @@
       C.el('span', { class: 'muted', style: 'font-size:13px', text: resumo })
     ]));
 
-    var conj = ocupacaoConjunta(g.id, hoje);
-    if (conj) {
-      caixa.appendChild(C.el('div', {
-        class: 'row',
-        style: 'gap:14px;padding:12px 16px;margin-bottom:20px;background:var(--fill-tint);color:var(--on-tint)'
-      }, [
-        /* A faixa já é --fill-tint; o selo repete o tom mais escuro da
-           ocupação conjunta para não sumir dentro dela. */
-        C.el('span', { class: 'badge conjunta',
-          style: 'background:var(--fill-deep);color:var(--color-accent-100)', text: 'Conjunta' }),
-        C.el('span', { style: 'font-size:13px', text: conj.titulo + ' nas duas clínicas até ' + conj.fim })
-      ]));
-    }
-
-    var grades = C.el('div', { style: 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0' });
-    clinicas.forEach(function (c, i) { grades.appendChild(colunaClinica(c, i, hoje)); });
+    /* `grades-clinicas` empilha as duas grades em tela estreita: lado a lado
+       elas pedem ~510px e empurravam a página para o lado no celular. */
+    var grades = C.el('div', {
+      class: 'grades-clinicas',
+      style: 'display:grid;grid-template-columns:repeat(' + Math.max(1, Math.min(2, clinicas.length)) + ',minmax(0,1fr));gap:0'
+    });
+    clinicas.forEach(function (c, i) { grades.appendChild(colunaClinica(c, i, hoje, ref)); });
     caixa.appendChild(grades);
 
     caixa.appendChild(C.el('div', { style: 'margin-top:34px' }, linhaDoDia(hoje)));
     return caixa;
   }
 
-  function colunaClinica(c, indice, hoje) {
-    var occ = ocupacaoVigente(c.id, hoje);
+  function colunaClinica(c, indice, hoje, ref) {
     var f = S.faixaCadeiras(c.id);
     var grade = C.el('div', { class: 'chairs' });
-    for (var n = f[0]; n <= f[1]; n++) grade.appendChild(cadeiraBtn(c, n, occ));
+    for (var n = f[0]; n <= f[1]; n++) grade.appendChild(cadeiraBtn(c, n, ref));
 
     return C.el('div', {
       style: indice > 0
@@ -235,35 +230,54 @@
           ? C.el('span', { style: 'font-size:12px;color:var(--accent-ink)', text: c.especialidade })
           : null
       ]),
-      C.el('div', { class: 'muted', style: 'font-size:12.5px;margin:6px 0 16px', text: linhaEstado(occ) }),
+      C.el('div', { style: 'margin:6px 0 16px' }, linhasEstado(c, ref)),
       grade
     ]);
   }
 
-  /* Uma linha por clínica: o que está acontecendo, o que vem a seguir, ou
-     o que já encerrou. */
-  function linhaEstado(occ) {
-    if (!occ) return 'Livre o dia inteiro';
-    var st = S.statusOcorrencia(occ);
-    if (st === 'em_andamento') {
-      return occ.titulo + ' · ' + S.nomePessoa(occ.responsavelId) + ' · ' + occ.inicio + '–' + occ.fim;
+  /* O que acontece na clínica: cada reserva de referência numa linha, com
+     as cadeiras dela — ou, sem nenhuma, se a clínica está livre o dia
+     inteiro ou até quando foi usada. */
+  function linhasEstado(c, ref) {
+    var r = ref.porClinica[c.id];
+    if (!r || !r.lista.length) {
+      var ultima = r && r.doDia.length ? r.doDia[r.doDia.length - 1] : null;
+      return C.el('div', { class: 'muted', style: 'font-size:12.5px',
+        text: ultima ? 'Livre · encerrada ' + ultima.fim : 'Livre o dia inteiro' });
     }
-    if (st === 'agendada') return 'Livre · próxima ' + occ.inicio + ' · ' + occ.titulo;
-    return 'Livre · encerrada ' + occ.fim;
+    /* Na ordem das letras, que é a da grade e a da lista da direita. */
+    var lista = r.lista.slice().sort(function (a, b) {
+      return String(ref.letra[a.chave]).localeCompare(String(ref.letra[b.chave]));
+    });
+    return C.el('div', { class: 'stack', style: 'gap:3px' }, lista.map(function (o) {
+      return C.el('div', { class: 'muted', style: 'font-size:12.5px' }, [
+        ref.varias ? C.el('b', { class: 'letra-res', text: ref.letra[o.chave] }) : null,
+        (r.agora ? '' : 'Próxima · ') + o.inicio + '–' + o.fim + ' · ' + o.titulo + ' · ' +
+        C.primeiroNome(S.nomePessoa(o.responsavelId)) + ' · ' +
+        C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' (' + S.textoCadeiras(o.cadeirasLista) + ')'
+      ]);
+    }));
   }
 
-  function cadeiraBtn(c, n, occ) {
-    var st = statusCadeira(c.id, n, occ);
+  function cadeiraBtn(c, n, ref) {
+    var st = statusCadeira(ref, c.id, n);
+    var dono = donoDaCadeira(ref, c.id, n);
     /* A seleção é do par (clínica, número): duas clínicas podem ter a
        cadeira 5, e sem a clínica a grade marcaria as duas. */
     var cls = 'chair' + (st === 'livre' ? '' : ' ' + st) +
       (sel.cadeira === n && sel.clinicaId === c.id ? ' sel' : '');
+    var nome = dono ? S.atribuicaoDaCadeira(dono.chave, n) : null;
     return C.el('button', {
-      class: cls, text: C.pad(n),
-      title: (st === 'manut' ? 'Em manutenção' : st === 'ocupada' ? 'Em uso registrado'
-        : st === 'vaga' ? 'Reservada, sem registro de uso' : 'Livre') + ' · ' + S.localCadeira(n, c),
+      class: cls,
+      title: (st === 'manut' ? 'Em manutenção' : st === 'ocupada' ? 'Ocupada'
+        : st === 'reservada' ? 'Reservada para mais tarde' : 'Livre') +
+        (dono ? ' · ' + rotuloOcorrencia(ref, dono) : '') +
+        (nome ? ' · ' + S.nomeNaCadeira(nome) : '') + ' · ' + S.localCadeira(n, c),
       onclick: function () { sel.cadeira = n; sel.clinicaId = c.id; global.App.recarregar(); }
-    });
+    }, [
+      C.pad(n),
+      dono && ref.varias ? C.el('span', { class: 'letra', text: ref.letra[dono.chave] }) : null
+    ]);
   }
 
   /* Janela horária da régua. Derivada dos horários das clínicas, alargada
@@ -287,6 +301,19 @@
     return [ini, fim];
   }
 
+  /* Empilha, dentro da faixa da clínica, as ocupações que se cruzam no
+     tempo — desde que a clínica comporta várias ao mesmo tempo, sem isto
+     uma barra cobriria a outra. Só conta quem disputa as mesmas clínicas. */
+  function nivel(lista, idx) {
+    var o = lista[idx], n = 0;
+    for (var i = 0; i < idx; i++) {
+      var p = lista[i];
+      if (!S.escoposColidem(o.agrupamentoId, o.escopo, p.agrupamentoId, p.escopo)) continue;
+      if (C.sobrepoe(o.inicio, o.fim, p.inicio, p.fim)) n++;
+    }
+    return n;
+  }
+
   /* Linha do tempo do dia: uma pista por agrupamento, com uma faixa para
      cada clínica. A ocupação das duas clínicas atravessa as duas faixas. */
   function linhaDoDia(hoje) {
@@ -304,35 +331,47 @@
 
       for (var i = 0; i <= clinicas.length; i++) {
         trilha.appendChild(C.el('div', {
-          style: 'position:absolute;left:0;right:0;top:' + (i * ALTURA_FAIXA) +
+          style: 'position:absolute;left:0;right:0;pointer-events:none;top:' + (i * ALTURA_FAIXA) +
             'px;height:1px;background:var(--line-soft)'
         }));
       }
 
-      S.ocorrenciasDoDia(hoje, { agrupamentoId: g.id }).forEach(function (o) {
+      var lista = S.ocorrenciasDoDia(hoje, { agrupamentoId: g.id });
+      var niveis = lista.map(function (o, k) { return nivel(lista, k); });
+      var divisor = 1;
+      niveis.forEach(function (n) { if (n + 1 > divisor) divisor = n + 1; });
+
+      lista.forEach(function (o, k) {
         var a = Math.max(ini, C.toMin(o.inicio)), b = Math.min(fim, C.toMin(o.fim));
         if (b <= a) return;
         var ids = S.idsDoEscopo(o.agrupamentoId, o.escopo);
         var dupla = ids.length > 1;
         var idx = Math.max(0, g.clinicas.indexOf(ids[0]));
         var st = S.statusOcorrencia(o);
-        var topo = (dupla ? 0 : idx * ALTURA_FAIXA) + 3;
-        var alt = (dupla ? altura : ALTURA_FAIXA) - 6;
+        var baseTopo = dupla ? 0 : idx * ALTURA_FAIXA;
+        var baseAlt = dupla ? altura : ALTURA_FAIXA;
+        var sub = baseAlt / divisor;
         trilha.appendChild(C.el('button', {
-          class: 'tl-blk' + (dupla ? ' conjunta' : o.origem === 'pontual' ? ' pontual' : '') +
+          class: 'tl-blk amb-' + o.ambiente + (o.origem === 'pontual' ? ' pontual' : '') +
             (st === 'em_andamento' ? ' agora' : ''),
           style: 'left:' + ((a - ini) / span * 100) + '%;width:' + ((b - a) / span * 100) +
-            '%;top:' + topo + 'px;height:' + alt + 'px',
-          text: o.inicio + '–' + o.fim + ' · ' + o.titulo,
-          title: S.rotuloEscopo(o.agrupamentoId, o.escopo) + ' · ' + o.inicio + '–' + o.fim,
+            '%;top:' + (baseTopo + niveis[k] * sub + 3) + 'px;height:' + Math.max(8, sub - 6) + 'px',
+          title: S.rotuloEscopo(o.agrupamentoId, o.escopo) + ' · ' + o.inicio + '–' + o.fim + ' · ' +
+            C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' (' + S.textoCadeiras(o.cadeirasLista) + ')',
           onclick: function () { global.Agenda.detalhe(o); }
-        }));
+        }, [
+          C.el('span', { class: 'marcas' }, [
+            U.icone(o.origem === 'pontual' ? 'pontual' : 'recorrente'),
+            o.nivel === 'pos' ? U.icone('pos') : null
+          ]),
+          o.inicio + '–' + o.fim + ' · ' + o.titulo + ' · ' + o.cadeiras + ' cad.'
+        ]));
       });
 
       if (agora >= ini && agora <= fim) {
         trilha.appendChild(C.el('div', { class: 'tl-now', style: 'left:' + ((agora - ini) / span * 100) + '%' }));
       }
-      return C.el('div', { class: 'tl-row' }, [
+      return C.el('div', { class: 'tl-row', style: 'min-height:' + (altura + 20) + 'px' }, [
         C.el('div', { class: 'tl-lbl' }, [
           g.nome,
           /* A linha de baixo lista as clínicas do agrupamento — mas a
@@ -352,33 +391,42 @@
           text: C.pad(ini / 60) + 'h–' + C.pad(fim / 60) + 'h' })
       ]),
       marcas,
-      C.el('div', { style: 'border-top:1px solid var(--color-divider)' }, linhas)
+      C.el('div', { style: 'border-top:1px solid var(--color-divider)' }, linhas),
+      C.el('div', { class: 'legenda-marcas' }, [
+        C.el('span', {}, [C.el('i', { class: 'sw amb-clinica' }), 'Clínica']),
+        C.el('span', {}, [C.el('i', { class: 'sw amb-dupla' }), 'Duas clínicas']),
+        C.el('span', {}, [C.el('i', { class: 'sw amb-pre' }), 'Pré-clínica']),
+        C.el('span', {}, [U.icone('recorrente'), 'Recorrente']),
+        C.el('span', {}, [U.icone('pontual'), 'Pontual']),
+        C.el('span', {}, [U.icone('pos'), 'Pós-graduação'])
+      ])
     ]);
   }
 
   /* ── Coluna direita ───────────────────────────────────────────────── */
-  function painelCadeira(hoje) {
+  function painelCadeira(hoje, ref) {
     var caixa = C.el('div');
 
     if (!sel.cadeira) {
       caixa.appendChild(C.el('h5', { text: 'Cadeira' }));
       caixa.appendChild(C.el('p', { class: 'muted', style: 'font-size:13px;line-height:1.6;margin-top:8px',
-        text: 'Escolha uma cadeira em uma das duas grades para ver quem está atendendo ou registrar a ocupação dela.' }));
-      caixa.appendChild(cadeirasRegistradas(ocupacaoDeReferencia(sel.agrupamentoId, hoje)));
+        text: 'As cadeiras de cada reserva já aparecem ocupadas, escolhidas da menor para a maior. ' +
+          'Clique numa cadeira para ver de quem ela é, anotar quem está nela ou trocá-la.' }));
+      caixa.appendChild(reservasDeReferencia(ref));
       return caixa;
     }
 
     var n = sel.cadeira;
     var c = S.clinica(sel.clinicaId);
-    var occ = ocupacaoVigente(c.id, hoje);
-    var st = statusCadeira(c.id, n, occ);
+    var st = statusCadeira(ref, c.id, n);
+    var dono = donoDaCadeira(ref, c.id, n);
     var manut = S.cadeiraEmManutencao(c.id, n);
 
     caixa.appendChild(C.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px' }, [
       C.el('h4', { text: 'Cadeira ' + n }),
       C.el('span', {
-        class: 'badge ' + (st === 'manut' ? 'warn' : st === 'ocupada' ? 'strong' : st === 'vaga' ? 'soft' : 'neutral'),
-        text: st === 'manut' ? 'Manutenção' : st === 'ocupada' ? 'Ocupada' : st === 'vaga' ? 'Vaga' : 'Livre'
+        class: 'badge ' + (st === 'manut' ? 'warn' : st === 'ocupada' ? 'strong' : st === 'reservada' ? 'soft' : 'neutral'),
+        text: st === 'manut' ? 'Manutenção' : st === 'ocupada' ? 'Ocupada' : st === 'reservada' ? 'Reservada' : 'Livre'
       })
     ]));
     caixa.appendChild(C.el('div', { class: 'muted', style: 'font-size:12.5px;margin:3px 0 18px',
@@ -386,53 +434,27 @@
 
     if (manut) {
       caixa.appendChild(M.ficha(manut));
+      /* Interditada E alocada: a reserva precisa de outra cadeira, e quem
+         pode trocar é avisado aqui, onde descobre. */
+      if (dono) {
+        caixa.appendChild(C.el('div', { class: 'alert', style: 'margin-top:14px',
+          text: 'Esta cadeira está na reserva ' + rotuloOcorrencia(ref, dono) + '. ' +
+            (S.podeGerirCadeiras(dono) ? 'Troque-a por uma livre em "Alterar cadeiras".'
+              : 'O professor responsável precisa trocá-la por uma livre.') }));
+        if (S.podeGerirCadeiras(dono)) caixa.appendChild(botaoAlterar(dono));
+      }
       if (S.pode('manutencao.encerrar')) {
         caixa.appendChild(C.el('button', {
           class: 'btn btn-primary', style: 'margin-top:18px', text: 'Encerrar manutenção',
           onclick: function () { M.encerrar(manut, function () { global.App.recarregar(); }); }
         }));
       }
-      caixa.appendChild(historico(n));
+      caixa.appendChild(historico(n, c));
       return caixa;
     }
 
-    var atrib = occ ? S.atribuicaoDaCadeira(occ.chave, n) : null;
-    if (atrib) {
-      var al = atrib.alunoId ? S.aluno(atrib.alunoId) : null;
-      caixa.appendChild(C.el('div', { class: 'stack', style: 'gap:0' }, [
-        U.kv('Em uso por', S.nomeNaCadeira(atrib)),
-        /* Matrícula e período só existem quando o registro veio do vínculo
-           com aluno cadastrado — o registro novo é nome em texto livre, e
-           mostrar "—" nas duas linhas seria ruído em toda cadeira. */
-        al ? U.kv('Matrícula', al.matricula) : null,
-        al ? U.kv('Período', al.periodo + 'º período') : null,
-        U.kv('Ocupação', occ.titulo),
-        U.kv('Onde', S.rotuloEscopo(occ.agrupamentoId, occ.escopo)),
-        U.kv('Professor coordenador', S.nomePessoa(occ.responsavelId)),
-        U.kv('Faixa', occ.inicio + '–' + occ.fim),
-        U.kv('Registrado', C.fmtCarimbo(atrib.registradoEm))
-      ]));
-      if (podeOperar(occ)) {
-        caixa.appendChild(C.el('button', {
-          class: 'btn btn-primary', style: 'margin-top:18px', text: 'Liberar cadeira',
-          onclick: function () {
-            S.liberarCadeira(occ.chave, n);
-            C.toast('Cadeira ' + n + ' liberada.');
-            global.App.recarregar();
-          }
-        }));
-      }
-    } else if (occ) {
-      /* Sem ramo "fora da faixa": com reserva integral, toda cadeira de uma
-         clínica ocupada é reservada. Se não tem registro de uso, dá para
-         registrar. */
-      caixa.appendChild(ocuparForm(occ, n));
-    } else {
-      caixa.appendChild(C.el('p', {
-        class: 'muted', style: 'font-size:13px;line-height:1.6',
-        text: 'Sem ocupação vigente nesta clínica.'
-      }));
-    }
+    if (dono) caixa.appendChild(fichaDaCadeira(dono, n, ref));
+    else caixa.appendChild(cadeiraLivre(c, n, ref));
 
     if (S.pode('manutencao.abrir')) {
       caixa.appendChild(C.el('button', {
@@ -441,14 +463,146 @@
       }));
     }
 
-    caixa.appendChild(historico(n));
+    caixa.appendChild(historico(n, c));
     return caixa;
   }
 
-  /* Histórico de manutenção da cadeira — pelo número global, que já
-     determina a clínica. */
-  function historico(n) {
-    var hist = S.historicoCadeira(n);
+  function botaoAlterar(o) {
+    return C.el('button', {
+      class: 'btn btn-outline', style: 'margin-top:12px', text: 'Alterar cadeiras',
+      onclick: function () {
+        var doc = S.reservaPorId(o.origemId);
+        if (doc) global.Cadeiras.escolher(doc, function () { global.App.recarregar(); });
+      }
+    });
+  }
+
+  /* Cadeira de uma reserva: de quem é, o nome de quem está nela (anotação
+     opcional do professor) e, para quem responde pela reserva, as trocas. */
+  function fichaDaCadeira(o, n, ref) {
+    var caixa = C.el('div');
+    var atrib = S.atribuicaoDaCadeira(o.chave, n);
+    var al = atrib && atrib.alunoId ? S.aluno(atrib.alunoId) : null;
+    var gerir = S.podeGerirCadeiras(o);
+    caixa.appendChild(C.el('div', { class: 'stack', style: 'gap:0' }, [
+      U.kv('Reserva', rotuloOcorrencia(ref, o)),
+      o.subtitulo ? U.kv(o.nivel === 'pos' ? 'Especialização' : 'Disciplina', o.subtitulo) : null,
+      U.kv('Professor coordenador', S.nomePessoa(o.responsavelId)),
+      U.kv('Horário', o.inicio + '–' + o.fim),
+      U.kv('Cadeiras da reserva', C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' · ' + S.textoCadeiras(o.cadeirasLista)),
+      o.descricao ? U.kv('Descrição/Turma', o.descricao) : null,
+      /* Matrícula e período só existem quando o registro veio do vínculo
+         antigo com aluno cadastrado. */
+      atrib && !gerir ? U.kv('Na cadeira', S.nomeNaCadeira(atrib)) : null,
+      al ? U.kv('Matrícula', al.matricula) : null
+    ]));
+    if (!gerir) return caixa;
+
+    var nome = atrib ? S.nomeNaCadeira(atrib) : '';
+    caixa.appendChild(C.el('div', { class: 'stack', style: 'gap:10px;margin-top:16px' }, [
+      U.campo('Quem está na cadeira', C.el('input', {
+        class: 'input', type: 'text', value: atrib ? nome : '', placeholder: 'Nome — opcional',
+        oninput: function (ev) { nome = ev.target.value; }
+      }), 'anotação deste encontro; em branco apaga'),
+      C.el('button', {
+        class: 'btn btn-primary', type: 'button', text: 'Salvar nome',
+        onclick: function () {
+          S.registrarNomeNaCadeira(o, n, nome).then(function (r) {
+            if (r && r.ok) C.toast(String(nome || '').trim() ? 'Nome anotado na cadeira ' + n + '.' : 'Anotação da cadeira ' + n + ' apagada.');
+            global.App.recarregar();
+          });
+        }
+      })
+    ]));
+
+    var acoes = C.el('div', { class: 'row', style: 'gap:10px;margin-top:16px' });
+    if (o.cadeiras > 1) {
+      acoes.appendChild(C.el('button', {
+        class: 'btn btn-outline', type: 'button', text: 'Devolver esta cadeira',
+        title: 'Tira a cadeira ' + n + ' da reserva em todas as datas dela — ela fica livre para outras reservas',
+        onclick: function () {
+          var doc = S.reservaPorId(o.origemId);
+          if (!doc) return;
+          var nova = S.cadeirasDe(doc).filter(function (x) { return x !== n; });
+          S.alterarCadeiras(doc.id, nova).then(function (r) {
+            if (r && r.ok) C.toast('Cadeira ' + n + ' devolvida · a reserva fica com ' + S.textoCadeiras(nova) + '.');
+            global.App.recarregar();
+          });
+        }
+      }));
+    }
+    acoes.appendChild(botaoAlterar(o));
+    caixa.appendChild(acoes);
+    return caixa;
+  }
+
+  /* Cadeira livre: quem responde por uma reserva desta clínica neste
+     horário pode puxá-la para a reserva — desde que ela esteja livre em
+     TODAS as datas da reserva, e que a reserva não passe do aprovado. */
+  function cadeiraLivre(c, n, ref) {
+    var caixa = C.el('div');
+    var r = ref.porClinica[c.id];
+    var candidatas = (r ? r.lista : []).filter(function (o) { return S.podeGerirCadeiras(o); });
+    caixa.appendChild(C.el('p', { class: 'muted', style: 'font-size:13px;line-height:1.6',
+      text: r && r.lista.length
+        ? 'Livre — nenhuma das reservas deste horário está com ela.'
+        : 'Sem reserva nesta clínica agora.' }));
+    candidatas.forEach(function (o) {
+      var doc = S.reservaPorId(o.origemId);
+      if (!doc) return;
+      var mapa = S.mapaDeCadeiras(doc);
+      var tomada = !!(mapa.donos[n] && mapa.donos[n].length);
+      var noLimite = S.cadeirasDe(doc).length >= S.limiteDeCadeiras(doc);
+      caixa.appendChild(C.el('button', {
+        class: 'btn btn-outline', type: 'button', style: 'margin-top:8px;display:flex',
+        disabled: (tomada || noLimite) ? true : null,
+        title: tomada ? 'Em outra data desta reserva a cadeira ' + n + ' já está com outra reserva.'
+          : noLimite ? 'A reserva já tem as ' + S.limiteDeCadeiras(doc) + ' cadeiras aprovadas — devolva uma antes.'
+            : 'Acrescenta a cadeira ' + n + ' à reserva, em todas as datas dela',
+        text: 'Pôr na reserva ' + rotuloOcorrencia(ref, o),
+        onclick: function () {
+          var nova = S.cadeirasDe(doc).concat([n]);
+          S.alterarCadeiras(doc.id, nova).then(function (res) {
+            if (res && res.ok) C.toast('Cadeira ' + n + ' entrou na reserva · ' + S.textoCadeiras(S.cadeirasDe(doc)) + '.');
+            global.App.recarregar();
+          });
+        }
+      }));
+    });
+    return caixa;
+  }
+
+  /* As reservas do agrupamento neste momento, com as cadeiras de cada uma.
+     Substitui a antiga lista de "cadeiras registradas": a alocação já diz
+     quais estão em uso, e o que sobra para conferir é de quem são. */
+  function reservasDeReferencia(ref) {
+    var caixa = C.el('div', { style: 'margin-top:26px' }, [
+      C.el('span', { class: 'eyebrow', style: 'display:block;margin-bottom:10px',
+        text: ref.lista.length ? 'Reservas deste horário' : 'Nenhuma reserva neste horário' })
+    ]);
+    ref.lista.forEach(function (o) {
+      var nomes = S.atribuicoesDa(o.chave).length;
+      caixa.appendChild(C.el('div', { style: 'padding:9px 0;border-bottom:1px solid var(--line-soft)' }, [
+        C.el('div', { class: 'row', style: 'gap:8px' }, [
+          ref.varias ? C.el('b', { class: 'letra-res', text: ref.letra[o.chave] }) : null,
+          C.el('b', { style: 'font-size:13px', text: o.titulo })
+        ]),
+        C.el('div', { class: 'muted', style: 'font-size:12px', text:
+          o.inicio + '–' + o.fim + ' · ' + S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + ' · ' +
+          C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' (' + S.textoCadeiras(o.cadeirasLista) + ')' +
+          ' · ' + S.nomePessoa(o.responsavelId) +
+          (nomes ? ' · ' + C.plural(nomes, 'nome anotado', 'nomes anotados') : '') }),
+        S.podeGerirCadeiras(o) ? botaoAlterar(o) : null
+      ]));
+    });
+    return caixa;
+  }
+
+  /* Histórico de manutenção da cadeira. A clínica estreita a busca: com as
+     pré-clínicas numeradas do 1, o número sozinho não diz de qual cadeira 5
+     se trata. */
+  function historico(n, c) {
+    var hist = S.historicoCadeira(n).filter(function (m) { return !m.clinicaId || m.clinicaId === c.id; });
     if (!hist.length) return C.el('div');
     return C.el('div', { style: 'margin-top:26px' }, [
       C.el('span', { class: 'eyebrow', style: 'display:block;margin-bottom:8px', text: 'Histórico de manutenção' }),
@@ -459,85 +613,6 @@
         ]);
       }))
     ]);
-  }
-
-  /* Registrar ocupação de cadeira deixou de depender de aluno cadastrado: é
-     o professor dizendo quais cadeiras da reserva dele estão em uso, como
-     quem abre um registro de manutenção. O nome é texto livre e opcional —
-     marcar a cadeira sem dizer quem é um uso legítimo, e era a exigência de
-     matrícula que travava o professor sem turma montada. */
-  function ocuparForm(occ, n) {
-    if (!podeOperar(occ)) {
-      return C.el('p', {
-        class: 'muted', style: 'font-size:13px',
-        text: 'Cadeira reservada por esta ocupação, sem registro de uso.'
-      });
-    }
-    var nome = '';
-    return C.el('div', { class: 'stack', style: 'gap:14px' }, [
-      U.campo('Quem está na cadeira', C.el('input', {
-        class: 'input', type: 'text', placeholder: 'Nome — opcional',
-        oninput: function (ev) { nome = ev.target.value; }
-      }), 'em branco marca só como ocupada'),
-      C.el('button', {
-        class: 'btn btn-primary', text: 'Registrar ocupação da cadeira ' + n,
-        onclick: function () {
-          /* Gravação pode falhar (cadeira tomada no intervalo, sem espaço
-             para persistir): só anuncia sucesso quando houve sucesso. */
-          if (S.ocuparCadeira(occ, n, null, nome)) {
-            var quem = String(nome || '').trim();
-            C.toast(quem ? quem + ' na cadeira ' + n + '.' : 'Cadeira ' + n + ' registrada como ocupada.');
-          } else {
-            C.toast('Não foi possível registrar a cadeira ' + n + '. Recarregue e tente de novo.');
-          }
-          global.App.recarregar();
-        }
-      })
-    ]);
-  }
-
-  /* Lista o que foi REGISTRADO em uso, não a matrícula da turma. Antes era
-     "os alunos da turma", e ocupação sem turma não mostrava nada — o que
-     fazia o professor sem turma montada não ter como acompanhar cadeira
-     alguma. Agora mostra o que ele registrou, que é justamente o dado que
-     passou a medir ocupação nos relatórios. */
-  function cadeirasRegistradas(occ) {
-    if (!occ) return C.el('div');
-    var atribs = S.atribuicoesDa(occ.chave).slice().sort(function (a, b) {
-      return a.cadeira - b.cadeira;
-    });
-    var cap = S.capacidadeEscopo(occ.agrupamentoId, occ.escopo);
-    var t = occ.turmaId ? S.turma(occ.turmaId) : null;
-    var caixa = C.el('div', { style: 'margin-top:28px' }, [
-      C.el('span', {
-        class: 'eyebrow', style: 'display:block;margin-bottom:10px',
-        text: 'Cadeiras em uso · ' + atribs.length + ' de ' + cap +
-          (t ? ' · ' + S.rotuloTurma(t) : '')
-      })
-    ]);
-    if (!atribs.length) {
-      caixa.appendChild(C.el('p', {
-        class: 'muted', style: 'font-size:12.5px;line-height:1.6',
-        text: 'Nenhuma cadeira registrada em uso. A clínica está reservada por inteiro — ' +
-          'clique numa cadeira para registrar quem está nela.'
-      }));
-      return caixa;
-    }
-    caixa.appendChild(C.el('div', {}, atribs.map(function (a) {
-      return C.el('div', { class: 'row', style: 'gap:11px;padding:7px 0' }, [
-        C.el('span', {
-          class: 'num',
-          style: 'width:26px;height:22px;display:grid;place-items:center;font-size:11px;flex:none;' +
-            'background:var(--fill-strong);color:var(--on-strong)',
-          text: C.pad(a.cadeira)
-        }),
-        C.el('span', { style: 'min-width:0' }, [
-          C.el('div', { style: 'font-size:13px', text: S.nomeNaCadeira(a) }),
-          C.el('div', { class: 'muted', style: 'font-size:11.5px', text: C.fmtCarimbo(a.registradoEm) })
-        ])
-      ]);
-    })));
-    return caixa;
   }
 
   global.ViewAgora = { render: render };

@@ -13,7 +13,7 @@
     {
       id: 'professor',
       nome: 'Professor',
-      descricao: 'Conduz as turmas sob sua coordenação. Registra atividades pontuais, ocupa e libera cadeiras, abre chamados de manutenção.'
+      descricao: 'Responde pelas disciplinas a que a coordenação o vinculou. Pede ocupação das clínicas para elas e ajusta as cadeiras das próprias reservas.'
     },
     {
       id: 'tecnico',
@@ -33,21 +33,24 @@
     { id: 'agenda.cancelarQualquer', area: 'Agenda', rotulo: 'Cancelar qualquer registro' },
     { id: 'agenda.excluir', area: 'Agenda', rotulo: 'Excluir e recuperar reservas' },
     { id: 'agenda.cancelarPropria', area: 'Agenda', rotulo: 'Cancelar os próprios registros' },
-    { id: 'cadeira.ocupar', area: 'Operação', rotulo: 'Ocupar e liberar cadeiras' },
-    { id: 'disciplinas.ver', area: 'Disciplinas', rotulo: 'Consultar disciplinas e turmas' },
-    { id: 'disciplinas.editar', area: 'Disciplinas', rotulo: 'Criar e editar disciplinas e turmas' },
-    { id: 'alunos.vincular', area: 'Disciplinas', rotulo: 'Vincular e desvincular alunos' },
+    /* A cadeira deixou de ser marcada à mão em 05/10/2026: a reserva aloca as
+       suas sozinha, da menor para a maior. O que sobrou para o professor é
+       TROCAR quais cadeiras a reserva dele segura. */
+    { id: 'cadeira.ocupar', area: 'Operação', rotulo: 'Trocar as cadeiras das próprias reservas' },
+    /* Turma e vínculo de aluno saíram junto, em 05/10/2026: disciplina ficou
+       só disciplina, e `alunos.vincular` deixou de ter tela. */
+    { id: 'disciplinas.ver', area: 'Disciplinas', rotulo: 'Consultar disciplinas' },
+    { id: 'disciplinas.editar', area: 'Disciplinas', rotulo: 'Criar, editar e limpar disciplinas' },
     { id: 'estrutura.ver', area: 'Estrutura', rotulo: 'Ver a estrutura das clínicas' },
     { id: 'estrutura.editar', area: 'Estrutura', rotulo: 'Alterar cadeiras e parâmetros' },
     { id: 'manutencao.abrir', area: 'Estrutura', rotulo: 'Abrir registro de manutenção' },
     { id: 'manutencao.encerrar', area: 'Estrutura', rotulo: 'Encerrar registro de manutenção' },
     { id: 'relatorios.ver', area: 'Relatórios', rotulo: 'Consultar e exportar relatórios' },
     { id: 'acessos.ver', area: 'Acessos', rotulo: 'Ver o controle de acessos' },
-    /* Concedido ao coordenador, mas exercido FORA do sistema: liberar alguém
-       é alterar app/js/autorizados.js e publicar. Enquanto não houver
-       servidor, nenhum botão dentro do app concede acesso — e o rótulo não
-       pode sugerir que concede. */
-    { id: 'acessos.editar', area: 'Acessos', rotulo: 'Responder pela lista de acesso (alterada fora do sistema)' }
+    /* Desde a mudança para o Firestore a concessão é feita aqui dentro, e
+       desde 05/10/2026 é também aqui que o professor é ligado às disciplinas
+       dele — o vínculo que antes passava pela turma. */
+    { id: 'acessos.editar', area: 'Acessos', rotulo: 'Conceder acessos e vincular professores às disciplinas' }
   ];
 
   var MATRIZ = {
@@ -57,7 +60,7 @@
        cadeira está interditada para planejar a aula, só não abre o registro. */
     professor: [
       'painel.ver', 'agenda.ver', 'agenda.criarPontual', 'agenda.cancelarPropria',
-      'cadeira.ocupar', 'disciplinas.ver', 'alunos.vincular',
+      'cadeira.ocupar', 'disciplinas.ver',
       'estrutura.ver', 'relatorios.ver'
     ],
     tecnico: [

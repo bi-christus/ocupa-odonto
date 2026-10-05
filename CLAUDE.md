@@ -44,11 +44,13 @@ firebase-app-compat.js
 firebase-auth-compat.js
 firebase-firestore-compat.js
 core.js  config.js  nuvem.js  acesso.js  dados.js  store.js  ui.js
-registro.js  manutencao.js  impressao.js  painel.js  agora.js  agenda.js
-disciplinas.js  relatorios.js  estrutura.js  acessos.js  app.js
+registro.js  manutencao.js  cadeiras.js  impressao.js  painel.js  agora.js
+agenda.js  disciplinas.js  relatorios.js  estrutura.js  acessos.js  app.js
 ```
 
 `impressao.js` vem antes das views porque Agenda e Relatórios chamam as duas.
+`cadeiras.js` (o seletor de cadeiras da reserva, 05/10/2026) também: Agenda e
+Ocupação agora chamam `Cadeiras.escolher`.
 
 Também na raiz de `app/`: `privacidade.html` e `termos.html` — páginas estáticas,
 sem script algum, exigidas pelo Google. Não as transforme em rota do app.
@@ -80,7 +82,8 @@ Decisão central, tomada para não reescrever as sete telas:
 - Se a gravação falha, o cache é desfeito e a pessoa é avisada por toast — nunca
   um sucesso que não aconteceu.
 - `onSnapshot` ligado em `ocupacoes`, `manutencoes`, `autorizados`,
-  `atribuicoes` e `matriculas`.
+  `atribuicoes` e `disciplinas` (esta desde 05/10/2026: é nela que mora o
+  vínculo do professor). `matriculas` saiu da leitura junto com a turma.
 
 Efeito colateral desejado: perder o acesso durante a sessão derruba a pessoa na
 hora, pelo snapshot de `autorizados`.
@@ -98,43 +101,83 @@ hora, pelo snapshot de `autorizados`.
 | `autorizados` | e-mail em minúsculas | `nome`, `nivel`, `ativo`, `ultimoAcesso` |
 | `agrupamentos` | `ag1`–`ag6` | `nome`, `clinicas[]` |
 | `clinicas` | `cl1`–`cl10` | `nome`, `agrupamentoId`, `especialidade`, `cadeiras`, `primeiraCadeira`, `abertura`, `fechamento` |
-| `disciplinas` | auto | `codigo`, `nome`, `nivel` (`graduacao` \| `pos`) |
-| `turmas` | auto | `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo` |
-| `alunos` | auto | `nome`, `matricula`, `periodo` |
-| `matriculas` | `{turmaId}__{alunoId}` | `turmaId`, `alunoId` |
-| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `criadoPor`, `criadoEm`, `excecoes[]`, `excluidaEm`, `excluidaPor`, `motivoExclusao` · recorrente: `turmaId`, `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm`, `observacao` · pontual: `data`, `tipoAtividade`, `descricao`, `turmaId`, `responsavelId`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` (mais `titulo` só nas gravadas antes de 17/09/2026) |
+| `disciplinas` | auto | `codigo`, `nome`, `nivel` (`graduacao` \| `pos`), `professores[]` (e-mails; desde 05/10/2026) |
+| `turmas` | auto | **legado, sem tela desde 05/10/2026** — `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo`; lida só para as reservas antigas acharem disciplina e professor |
+| `alunos` | auto | **legado, sem tela** — `nome`, `matricula`, `periodo`; lida só para o nome das atribuições antigas |
+| `matriculas` | `{turmaId}__{alunoId}` | **não é mais lida** (o vínculo de alunos saiu com a turma) |
+| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `disciplinaId`, `responsavelId`, `tipoAtividade`, `descricao`, `cadeirasPedidas`, `cadeirasAlocadas[]`, `criadoPor`, `criadoEm`, `excecoes[]`, `excluidaEm`, `excluidaPor`, `motivoExclusao` · recorrente: `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm` · pontual: `data`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` · **legado**: `turmaId` e `observacao` (antes de 05/10/2026), `titulo` (antes de 17/09/2026), `cadeiras` (antes de 17/09/2026, ignorado) |
 | `manutencoes` | auto | `protocolo`, `clinicaId`, `cadeira`, `categoria`, `criticidade`, `motivo`, `abertoPor`, `abertoEm`, `previsaoRetorno`, `status`, `fechadoPor`, `fechadoEm`, `laudo`, `impacto{}` |
-| `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `nome`, `alunoId` (nulo nos registros novos), `data`, `registradoPor`, `registradoEm` |
-| `indices` | `ag1`–`ag6` | `agrupamentoId`, `itens[]` |
+| `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `nome`, `alunoId` (nulo nos registros novos), `data`, `registradoPor`, `registradoEm` — desde 05/10/2026 é só o NOME anotado na cadeira |
+| `indices` | `ag1`–`ag6` | `agrupamentoId`, `itens[]` — cada item com `cadeiras[]` (ou `null`/ausente = integral) |
 
 **Não existe coleção `cadeiras`.** Cadeira é derivada de `primeiraCadeira` +
 `cadeiras` da clínica. O estado de uma cadeira vive em `manutencoes` e
 `atribuicoes`.
 
-**Reserva é sempre integral, e `ocupacoes.cadeiras` não existe mais.** Reservar
-uma clínica reserva TODAS as cadeiras dela — 14 nas de atendimento, 70 na
-pré-clínica maior, 20 na menor —, e o escopo duplo reserva a soma das duas do
-agrupamento. O número é DERIVADO do escopo (`capacidadeEscopo`) na montagem da
-ocorrência, e o valor gravado nos documentos antigos é ignorado — ocupação que
-reservava 10 de 14 passa a valer como clínica inteira. Não recrie o campo de quantidade no
-formulário, e não leia `r.cadeiras`/`p.cadeiras` do documento cru: vem
-`undefined` nos registros novos.
+### Reserva por QUANTIDADE de cadeiras (05/10/2026)
 
-Disso decorre que **não existe cadeira "livre" dentro de clínica reservada**.
-`statusCadeira` só devolve `manut`, `ocupada` (uso registrado) ou `vaga`
-(reservada, ninguém registrou ainda).
+**Reverteu a "reserva integral" de 17/09/2026.** A reserva diz QUANTAS
+cadeiras usa (`cadeirasPedidas`, obrigatório no formulário) e o sistema
+escolhe QUAIS (`cadeirasAlocadas`), **da menor para a maior** entre as que
+nenhuma outra reserva segura naquele horário — e elas já nascem marcadas
+como ocupadas. O resto da clínica continua livre para outras reservas no
+mesmo horário até as cadeiras acabarem. Várias reservas dividem a clínica;
+o que não pode é dividir a CADEIRA.
 
-**Quem mede ocupação é `atribuicoes`, não a reserva.** Registrar cadeira em uso
-não depende de aluno cadastrado: o professor marca a cadeira e escreve o nome
-em texto livre, opcional (`nome`), como quem abre um chamado de manutenção.
-`alunoId` continua no modelo por causa dos registros antigos e vem `null` nos
-novos — use `S.nomeNaCadeira(atrib)`, que resolve aluno cadastrado, nome livre
-ou "sem identificação". O CSV semanal tem as duas colunas separadas, e é
-"Cadeiras em uso" que significa algo: "Cadeiras reservadas" é sempre a clínica
-inteira.
-Por isso `calcularImpacto` compara o uso registrado com o que resta operante —
-comparar com a reserva marcaria toda ocupação como afetada por qualquer
-interdição.
+Três estados de documento (`S.ehIntegral`, `S.quantidadeDe`, `S.cadeirasDe`):
+
+- com `cadeirasAlocadas` — reserva nova ou ajustada: segura aquelas;
+- só com `cadeirasPedidas` — **pedido** de professor ainda não aprovado: não
+  segura cadeira (como não segura horário); a aprovação escolhe;
+- sem nenhum dos dois — reserva **anterior a 05/10/2026**: continua
+  INTEGRAL (o escopo inteiro), porque não há como adivinhar quantas ela
+  usaria. Deixa de ser integral quando alguém ajusta as cadeiras dela.
+
+`cadeiras` sem sufixo é o nome antigo (antes de 17/09/2026) e segue ignorado —
+**não leia `r.cadeiras` do documento cru**; a ocorrência já vem com
+`cadeiras` (quantidade), `cadeirasLista` e `integral` resolvidos.
+
+**A alocação é UMA para todas as datas da reserva**: a recorrente usa as
+mesmas cadeiras toda semana. Uma cadeira só é livre para ela se estiver livre
+em TODAS as datas em que ela cai. Cadeira em manutenção AGORA vai para o fim
+da fila de escolha, mas não impede a reserva (a regra de antes já era essa).
+
+**A escolha acontece dentro da transação** (`gravarOcupacaoNaNuvem` →
+`alocar`), contra o índice relido: a escolha do cache (`alocarLocal`) entra
+como preferência; se alguém tomou uma delas no meio-tempo, a transação
+escolhe outras e só recusa quando falta quantidade. O seletor de cadeiras
+grava com `fixo`: não troca nada, recusa se uma das escolhidas foi tomada.
+`alocar` é a MESMA função no formulário (`S.disponibilidade`, sobre o cache)
+e na transação (sobre o índice) — não crie uma segunda cópia da regra.
+
+**`atribuicoes` deixou de medir ocupação.** A cadeira alocada já é a cadeira
+ocupada. O que sobrou é o NOME de quem está na cadeira naquele encontro —
+anotação opcional do professor (`S.registrarNomeNaCadeira`); use
+`S.nomeNaCadeira(atrib)`, que resolve aluno cadastrado (registro antigo), nome
+livre ou "sem identificação".
+
+`calcularImpacto`: afetada é a ocupação que TEM a cadeira interditada (precisa
+trocá-la). Na reserva integral vale a regra antiga (mais nomes registrados do
+que restará de operante) — senão toda interdição marcaria todas as integrais.
+
+**Trocar cadeiras** (item "podendo ser alterado pelo professor responsável"):
+`S.alterarCadeiras(id, lista)`, pelo seletor (`Cadeiras.escolher`, na Agenda e
+em Ocupação agora) ou pelos atalhos de Ocupação agora (devolver uma cadeira,
+pôr uma cadeira livre na reserva). Quem pode: `S.podeGerirCadeiras` —
+coordenação, o responsável da reserva e os professores vinculados à
+disciplina dela. Com `exigirAprovacaoProfessor` ligado, o professor troca e
+devolve, mas **não cresce** a reserva além do aprovado (`S.limiteDeCadeiras`)
+— senão pedir 5 e marcar 14 passaria por fora da fila. A troca vale para
+todas as datas da reserva.
+
+`bloquearSobreposicao` (Estrutura) agora significa "mesma cadeira em duas
+reservas": desligado, a alocação ainda prefere as livres, mas não recusa.
+
+**Métricas**: horas de USO de uma clínica são a união dos intervalos do dia
+(`S.horasDeUso`) — somar durações contaria a mesma hora duas vezes. A
+ocupação dos relatórios é cadeira·hora sobre a capacidade
+(`S.cadeirasHoraPorClinica`). "Cadeiras em uso agora" é a soma das cadeiras
+alocadas das ocorrências em andamento.
 
 O store traduz `autorizados.nivel` para `perfil` na hidratação; as views não
 sabem da diferença.
@@ -153,11 +196,12 @@ onde já há manutenção e atribuição gravadas com o número global.
 > ⚠️ **O número da cadeira não identifica mais a clínica.** A cadeira 5 existe
 > na Clínica 1, na Pré-clínica maior e na menor. Quem procura cadeira por
 > número passa a lista onde procurar — `S.clinicaDaCadeira(n, entre)` —, e quem
-> exibe local passa a clínica — `S.localCadeira(n, clinica)`. `ocuparCadeira`
-> resolve a clínica dentro do escopo da ocupação, e manutenção resolve por
-> `m.clinicaId`, não pela faixa (era o contrário até esta data). Dentro de uma
-> ocupação o número continua único, porque duas clínicas do mesmo agrupamento
-> nunca repetem faixa — e a pré-clínica é agrupamento de uma clínica só.
+> exibe local passa a clínica — `S.localCadeira(n, clinica)`.
+> `registrarNomeNaCadeira` resolve a clínica dentro do escopo da ocupação, e
+> manutenção resolve por `m.clinicaId`, não pela faixa (era o contrário até
+> 22/09/2026). Dentro de um AGRUPAMENTO o número continua único, porque duas
+> clínicas dele nunca repetem faixa — e é isso que deixa `cadeirasAlocadas` e
+> o índice guardarem só o número.
 
 A hidratação ordena as clínicas por agrupamento e depois por
 `primeiraCadeira`: só por `primeiraCadeira` três empatavam no 1 e a ordem
@@ -171,8 +215,9 @@ aparecem como reserva conjunta; `primeiroEscopoLivre` e o clique na pista do
 dia já eram guardados do mesmo jeito (`i >= cls.length`, `clinicas.length > 1`),
 então o formato de agrupamento com uma clínica só não exigiu código novo.
 Cada uma tem o próprio `indices/{agrupamentoId}`, então uma não disputa
-horário com a outra — conferido no harness: as duas aceitam ocupação no mesmo
-horário, e a segunda tentativa na MESMA pré-clínica é recusada por choque.
+cadeira com a outra. Desde 05/10/2026 a MESMA pré-clínica também aceita várias
+reservas no mesmo horário enquanto houver cadeira — o acervo do harness tem
+duas na maior (30 e 20 cadeiras), e uma terceira de 25 é recusada por falta.
 
 Na pista do dia (Agenda e Ocupação agora) o agrupamento de uma clínica só não
 repete o nome na linha de baixo: `S.subtituloAgrupamento` devolve vazio quando
@@ -201,76 +246,93 @@ formulário. Clínica nova entra pela semente (provisionamento) ou, num banco j�
 provisionado, gravando `agrupamentos` e `clinicas` direto — foi assim que as
 duas pré-clínicas entraram em produção.
 
-### Pós-graduação — especialização sem disciplina e sem turma
+### Disciplina sem turma (05/10/2026)
 
-A pós não trabalha com código de disciplina nem com identificador de turma:
-uma **especialização** é o nome dela mais o professor responsável, e é só isso
-que a aba **Pós-graduação** (em Disciplinas) pede.
+**Turma deixou de existir como cadastro.** Saíram o cadastro de turma, o código
+de turma e o vínculo de alunos (que era por turma). Disciplina é só
+disciplina: `codigo` + `nome` na graduação, `nome` na pós (`nivel: 'pos'`). A
+reserva aponta direto para a disciplina (`disciplinaId`) e grava o próprio
+`responsavelId` — que a recorrente antes herdava de
+`turma.professorCoordenadorId`. **A turma de cada ocupação é escrita no
+campo "Descrição/Turma"** do formulário, nos dois modos e nos dois tipos.
 
-Por baixo ela é gravada nas coleções que já existem — uma `disciplina` com
-`nivel: 'pos'` e **uma** `turma` criada pelo sistema, com `codigo: 'PÓS'`, que
-o formulário nunca mostra. Duas razões:
+**O professor é vinculado às disciplinas na tela ACESSOS** (editar a pessoa →
+lista marcável com busca). O vínculo mora na DISCIPLINA, em `professores` (lista
+de e-mails), e não em `autorizados`: a regra de `disciplinas` já é "escrita só
+de coordenador", sem restrição de campo; a de `autorizados` restringe campo,
+e um campo novo ali só funcionaria depois de alguém mexer no console.
+`S.vincularDisciplinas(email, ids)` grava só as disciplinas que mudaram.
+Professor vê no formulário só as disciplinas dele (+ "Outros" na pontual).
 
-- a reserva **recorrente** aponta para uma turma, e é de
-  `turma.professorCoordenadorId` que sai o `responsavelId` da ocupação — quem
-  governa quem pode cancelar. Sem turma a especialização só conseguiria
-  lançar atividade pontual, que não é o caso de uso;
-- coleção nova (`especializacoes`) exigiria **publicar Security Rule nova no
-  console antes de funcionar** — até lá o `match /{document=**}` recusaria
-  toda gravação. Mudança que só funciona depois de alguém mexer no console
-  não pode ir para `main`.
+**Legado embutido — nunca leia `disciplinaId`/`responsavelId` cru de um
+documento de reserva.** Use `S.disciplinaIdDe`, `S.disciplinaDe`,
+`S.responsavelDe`, `S.descricaoDe` e `S.nivelDe`: eles resolvem a reserva
+antiga pela turma (disciplina, professor, e a turma escrita na descrição como
+"T1 · …"). `S.professoresDaDisciplina` herda o vínculo das turmas enquanto a
+disciplina não tiver `professores`. A ocorrência já vem resolvida.
 
-### O vínculo da atividade PONTUAL
-
-O campo de vínculo do formulário pontual segue o campo **Tipo**, e só existe
-assim no modo pontual:
-
-| Tipo | Rótulo do campo | O que lista |
-|---|---|---|
-| Graduação | "Turma vinculada" | turmas da graduação + **Outros** |
-| Pós-graduação | "Especialização" | especializações + **Outros** |
-
-- Trocar o Tipo chama `desenhar()`, não `atualizar()`: é o tipo que decide a
-  lista e o rótulo. `ajustarVinculo()` reencaixa a escolha anterior — turma da
-  graduação selecionada não pode sobreviver à troca para pós, senão o select
-  exibe um valor que a lista não contém, que é o campo em branco que se quer
-  evitar.
-- **O vínculo é obrigatório e "Outros" é resposta válida.** `SEM_VINCULO` vale
-  `'outros'` e **nunca chega ao Firestore**: `vinculoGravavel()` o traduz para
-  `null`. O padrão é a primeira opção do tipo, ou "Outros" quando não há
-  nenhuma — o campo nunca nasce vazio.
-- A dica do campo Tipo troca "turma" por "especialização" junto com o resto.
-- **E o campo Descrição vira "Descrição/Turma"** (22/09/2026). A especialização
-  cadastrada não tem identificador de turma — o sistema mantém uma só, interna,
-  que o formulário nunca mostra —, então é na descrição que a turma daquele
-  encontro é escrita. Na graduação o rótulo continua "Descrição": a turma já
-  veio no campo de vínculo logo acima, e repetir a palavra ali confundiria.
-  Vale só no modo pontual, que é onde o campo existe.
-- **O modo recorrente não se divide**: a lista lá continua única, com
-  graduação e pós juntas, porque a reserva recorrente da pós aponta para a
-  turma que o sistema mantém. Separar ali deixaria a pós sem como ocupar
-  clínica toda semana, e não existe "Outros" na recorrente — sem turma não há
-  de quem herdar o professor coordenador que responde pela reserva.
+**Limpeza do cadastro** (aba Disciplinas, coordenação, com prévia):
+`S.planoDeLimpeza` + `S.executarLimpeza` resolvem de uma vez as três formas em
+que a turma ainda vive no banco — (1) reserva antiga apontando para turma
+ganha `disciplinaId`, `responsavelId` e a turma na descrição; (2) disciplinas
+com a turma no NOME ("Implantodontia T1", "… T2" — era como a pós distinguia
+turmas) viram UMA com o nome-base, e as reservas de cada uma passam para ela
+com o "T1"/"T2" na descrição (`S.separarTurmaDoNome`); (3) vínculo de
+professor herdado vira `professores` gravado. É idempotente (rodar de novo
+termina o que faltou) e a coleção `turmas` NÃO é apagada — fica inerte.
+**Ainda não foi rodada em produção**: é a coordenação que dispara.
 
 Consequências para quem mexer aqui:
 
-- **Use os seletores.** `S.especializacoes()`, `S.disciplinasDeGraduacao()` e
-  `S.turmasDeGraduacao()` — ler `estado.disciplinas`/`estado.turmas` cru faz a
-  turma interna da pós vazar para as listas da graduação, onde ela não tem
-  código para exibir, não recebe aluno e não é editável.
-- **Rotule pelo Store.** `S.rotuloTurma` devolve o NOME da especialização na
-  pós e `d.codigo + ' ' + t.codigo` na graduação; `S.rotuloTurmaLongo` e
-  `S.subtituloTurma` seguem a mesma regra. Montar rótulo com `d.codigo` na mão
-  imprime `POS-01 PÓS` na agenda — e ainda estoura se a disciplina tiver sido
-  apagada por fora.
+- **Use os seletores.** `S.especializacoes()`, `S.disciplinasDeGraduacao()`,
+  `S.disciplinasDoNivel(nivel)`, `S.disciplinasDoProfessor(uid)`.
+- **Rotule pelo Store.** `S.rotuloDisciplina` (código na graduação, nome na
+  pós), `S.rotuloDisciplinaLongo`, `S.subtituloDisciplina`. Montar rótulo na mão
+  estoura quando a disciplina foi apagada por fora.
 - `codigo` da especialização é gerado (`POS-01`, `POS-02`…) só porque o
-  documento e as colunas de CSV anteriores à pós contam com ele.
-- Excluir especialização é em cascata: a turma sai primeiro, porque é
-  `excluirTurma` que tira as recorrências do índice de sobreposição.
+  documento e as colunas de CSV contam com ele.
+- Excluir disciplina (graduação ou pós) com reserva é bloqueado — tire as
+  reservas pela Agenda (exclusão reversível). A cascata antiga da pós tirava
+  as reservas sem volta.
 - Disciplina **sem** `nivel` é da graduação — é o estado de tudo que foi
   gravado antes de 18/09/2026.
+- `tipoAtividade` agora é gravado também na recorrente (`graduacao`/`pos`);
+  na antiga ele é `aula`, e `S.nivelDe` decide pela disciplina.
 
-**Disciplina da graduação tem só `codigo` e `nome`.** `especialidade` é da CLÍNICA e não tem
+### O formulário de ocupação
+
+| Campo | Recorrente | Pontual |
+|---|---|---|
+| Tipo | Graduação / Pós (filtra a lista) | idem |
+| Disciplina / Especialização | obrigatória | obrigatória, com **Outros** |
+| Professor coordenador | coordenação escolhe (vinculados primeiro); professor = ele mesmo | idem |
+| Clínica + **Cadeiras** | uma linha | **várias linhas** |
+| Turnos | **vários** | vários, por linha |
+| Descrição/Turma | sim | sim (vale para todas as linhas) |
+
+- **Cadeiras é obrigatório e nasce vazio**; vazio só trava o botão (a dica do
+  campo diz "obrigatório"), não vira alerta vermelho no formulário recém-aberto.
+  A dica mostra quantas estão livres e quais ficariam ("ficariam as 51–65").
+- O seletor de clínica mostra só o NOME da clínica (a especialidade saiu de
+  todos os seletores: ao lado do nome ela passava por disciplina) e as
+  cadeiras livres no horário de cada linha.
+- **Turnos múltiplos**: manhã + tarde dão 07:40–17:20 (início do primeiro,
+  término do último). A marcação continua DERIVADA do horário, então os
+  marcados são sempre uma faixa contínua: manhã e noite cobrem a tarde, e o
+  clique na tarde do meio é recusado com aviso (para usar manhã e noite sem a
+  tarde, duas ocupações). Clique de fora estende; da ponta, recolhe.
+- **Várias ocupações pontuais num envio** ("+ Adicionar ocupação"): cada linha
+  com clínica, cadeiras, data e horário; a nova nasce igual à última. Cada
+  linha disputa cadeira com as reservas gravadas E com as linhas anteriores do
+  mesmo formulário (entram como itens virtuais em `S.disponibilidade`). Na
+  gravação, uma por vez e em ordem — cada uma entra no cache antes da seguinte
+  escolher as cadeiras dela. Com aprovação ligada, cada linha vira um pedido.
+- `SEM_VINCULO` (`'outros'`) **nunca chega ao Firestore**: vira `null`.
+- `C.el` agora seta a PROPRIEDADE `value` de `<textarea>`: o atributo é
+  ignorado pelo navegador, e todo redesenho devolvia a descrição em branco na
+  tela (com o texto ainda guardado e indo para a gravação sem ninguém ver).
+
+**Disciplina da graduação tem só `codigo` e `nome`** (mais `professores`). `especialidade` é da CLÍNICA e não tem
 relação nenhuma com disciplina. O arquivo com mais ocorrências da palavra é
 `relatorios.js` — três colunas "Especialidade" em CSV, todas de clínica e
 nenhuma delas precisa mudar: nunca faça busca-e-substitui global lá.
@@ -280,11 +342,13 @@ mas como a gravação é `set(..., {merge:true})` isso **não os apaga** — sã
 inerte, que nada lê. Limpar de verdade exigiria `FieldValue.delete()`.
 
 **`responsavelId` aparece na tela como "Professor coordenador".** O campo guarda
-quem responde pela ocupação: na recorrente o store o copia de
-`turma.professorCoordenadorId`; na pontual é quem registrou, que pode não ser o
-coordenador da turma vinculada. O rótulo é único em todas as telas desde
-14/09/2026 — não volte a alternar para "Responsável", e não renomeie o campo,
-que governa quem pode cancelar (`agenda.js`, `agora.js`, `painel.js`).
+quem responde pela ocupação, e desde 05/10/2026 é gravado nas DUAS formas
+(recorrente e pontual): o professor que pede é ele mesmo; a coordenação escolhe,
+com os vinculados à disciplina primeiro. Na recorrente antiga ele saía de
+`turma.professorCoordenadorId` — por isso `S.responsavelDe`. O rótulo é único
+em todas as telas desde 14/09/2026 — não volte a alternar para "Responsável",
+e não renomeie o campo, que governa quem pode cancelar (`agenda.js`,
+`agora.js`, `painel.js`).
 Cuidado: `acesso.js` descreve o perfil Técnico como "Responsável pelas cadeiras"
 — ali é adjetivo comum, não este campo.
 
@@ -298,16 +362,20 @@ campo também vale como ligado**), ocupação criada por professor nasce
 pela fila no Painel; `agenda.aprovar` é a permissão, só do coordenador. O
 próprio autor pode retirar o pedido enquanto ninguém decidiu.
 
-**Pedido não segura horário.** Ele não entra em `indices/{agrupamentoId}`,
-então vários professores podem pedir o mesmo horário. É a **aprovação** que
-passa pela transação e pode falhar por choque — e aí a coordenação vê a
-mensagem. Por isso o formulário avisa, com todas as letras, que pedir não
-reserva.
+**Pedido não segura cadeira.** Ele não entra em `indices/{agrupamentoId}`
+e só tem `cadeirasPedidas` (a quantidade), então vários professores podem
+pedir as mesmas. É a **aprovação** que passa pela transação, ESCOLHE as
+cadeiras e pode falhar por falta — e aí a coordenação vê a mensagem. Por isso
+o formulário avisa, com todas as letras, que pedir não reserva. Pedido
+anterior a 05/10/2026 não tem quantidade e é aprovado como foi pedido: a
+clínica inteira.
 
 O filtro que sustenta tudo isso é uma linha em `ocorrenciasDoDia`: pontual com
 `situacao` diferente de `'aprovada'` é descartada ali. Como essa função é o
-funil único de Agenda, Agora, Painel, relatórios e `conflitos`, filtrar ali
-cobre o sistema inteiro. A fila lê `estado.pontuais` direto, por fora do funil.
+funil único de Agenda, Agora, Painel e relatórios — e a disputa de cadeiras do
+formulário (`itensLocais`) lê pelo mesmo seletor `pontuaisAtivas` —, filtrar
+ali cobre o sistema inteiro. A fila lê `estado.pontuais` direto, por fora do
+funil.
 
 Ocupação gravada antes de 17/09/2026 não tem `situacao`, e `situacaoDe` trata a
 ausência como aprovada — o contrário faria a agenda inteira desaparecer da tela
@@ -332,13 +400,19 @@ sem sair do índice a reserva sumiria de todas as telas e continuaria bloqueando
 o horário, que é o fantasma que o comentário de `removerOcupacao` já descrevia.
 
 A lixeira é a aba **Excluídas** da Agenda, com contagem no rótulo, e só aparece
-para quem pode recuperar. **Recuperar passa pela transação e pode falhar por
-choque** — enquanto a reserva estava excluída o horário estava livre, e alguém
-pode ter ocupado. Falhar aí é o comportamento correto. Pedido ainda não
-aprovado volta sem indexar, como nasceu.
+para quem pode recuperar. **Recuperar passa pela transação**: se as cadeiras
+dela foram tomadas enquanto estava excluída, ela volta com OUTRAS na mesma
+quantidade (`valor.realocada` avisa, e o toast diz quais); só falha quando
+não sobra a quantidade. Pedido ainda não aprovado volta sem indexar, como
+nasceu.
 
-As atribuições de cadeira **não** são limpas na exclusão: é isso que faz a
-recuperação devolver a reserva como ela era, com os registros de uso.
+Nem as cadeiras alocadas nem os nomes anotados são limpos na exclusão: é isso
+que faz a recuperação devolver a reserva como ela era.
+
+**Restaurar uma exceção** (devolver um encontro cancelado da recorrente)
+também passa pela transação desde 05/10/2026, com as cadeiras que a regra já
+tem (`fixo`): naquela data alguém pode ter reservado as mesmas cadeiras depois
+do cancelamento. Antes a restauração gravava direto, sem conferir nada.
 
 **Use os seletores `S.recorrenciasAtivas()` e `S.pontuaisAtivas()`**, nunca
 `estado.recorrencias`/`estado.pontuais` direto numa tela. Os seletores já
@@ -387,6 +461,37 @@ duas horas, e a coluna não dizia nada sobre ocupação real da clínica.
 - A vista **Dia** (gantt) já era proporcional, no eixo X. Não mudou.
 - A folha impressa da semana tem forma própria (gantt por dia) — ver
   "Impressão e PDF". Só a régua de horas é compartilhada.
+- A primeira linha do bloco diz quantas cadeiras a reserva toma ("Clínica 1 ·
+  8 cad.") — com várias reservas por clínica é o número que distingue uma da
+  outra — e a descrição (onde a turma é escrita) vem numa terceira linha.
+
+## Marcadores e filtros da agenda (05/10/2026)
+
+Cada bloco diz, sem texto, o **tipo de ambiente** e o **tipo de reserva**:
+
+- **Ambiente → preenchimento** (`amb-clinica`, `amb-dupla`, `amb-pre`, de
+  `S.ambienteDe`): aço na clínica de atendimento; tom de agrupamento com um
+  traço também na DIREITA (como chave abrangendo as duas) na reserva das duas
+  clínicas; cinza neutro na pré-clínica (`--pre-*`). Sem cor nova — o Industry
+  é monocromático.
+- **Tipo de reserva → desenho**: ícone de traço fino (Lucide, `U.icone`) ↻
+  recorrente, calendário-1 pontual, capelo na pós; a pontual mantém a borda
+  tracejada (e listras por cima do tom no gantt).
+
+Os **botões do filtro são os próprios marcadores** e fazem as vezes de legenda:
+clicar esconde ou mostra aquele tipo (riscado = escondido). Junto deles,
+disciplina e professor coordenador por lista. O filtro vale para Semana, Dia,
+Recorrências e para a folha impressa — que diz no subtítulo que é filtrada.
+`casaFiltros` recebe OCORRÊNCIA; `casaFiltrosRegra` é a mesma regra sobre o
+documento da recorrência. No gantt, a pista de um agrupamento cujo ambiente o
+filtro esconde inteiro some.
+
+**Aba "Por disciplina"**: todas as reservas de UMA disciplina no semestre, numa
+grade de semanas × dias (seg–sáb), com encontros, horas, cadeiras por encontro
+e clínicas; embaixo a lista dos documentos (recorrências com os dias, pontuais
+com a situação — pedido pendente aparece só aqui, porque não reserva). Entra
+também pelo "Ver no semestre" da tela Disciplinas (`App.ir('agenda',
+{ disciplinaId })`), e imprime pela folha `Impressao.disciplina`.
 
 ## Movimento — a camada que o design system não trazia
 
@@ -466,12 +571,13 @@ garantia de que o agrupamento existe ou de que a data cabe no semestre.
   impossível — foi exatamente o que a coordenação relatou em 18/09/2026
   ("não consegui clicar na agenda e marcar").
 - **O clique na semana não sabe de clínica, então o formulário escolhe a
-  primeira LIVRE naquele horário** (`primeiroEscopoLivre`, registro.js). Cair
-  sempre na Clínica 1 fazia o formulário abrir já bloqueado por choque sempre
-  que ela estivesse ocupada, com as outras sete vazias ao lado — e na tela
-  isso se lê como "a agenda não deixa lançar", não como "troque de clínica".
-  Quando todas estão ocupadas, abre na primeira mesmo e o aviso de choque é a
-  resposta certa.
+  primeira com cadeira LIVRE naquele horário** (`primeiroEscopoLivre`,
+  registro.js). Cair sempre na Clínica 1 fazia o formulário abrir já
+  bloqueado sempre que ela estivesse cheia, com as outras vazias ao lado — e
+  na tela isso se lê como "a agenda não deixa lançar", não como "troque de
+  clínica". A quantidade ainda não foi informada nesse momento: o seletor de
+  clínica mostra quantas sobram em cada uma, e é ali que a pessoa acerta.
+  O pré-preenchimento vai para a PRIMEIRA linha do formulário.
 - **Dia:** a pista do agrupamento dá mais: o eixo X vira horário (encaixado em
   meia hora) e o eixo Y diz qual das duas clínicas foi apontada — faixa de
   cima é escopo `a`, a de baixo é `b`. As guias horizontais levam
@@ -508,9 +614,11 @@ Controle de clínicas…".
 Não use `window.open`: o bloqueador de pop-up derruba sem avisar e sem deixar
 a pessoa entender por que nada aconteceu.
 
-- Três folhas: semana (paisagem, **gantt de uma linha por dia**), dia
-  (retrato, uma tabela por agrupamento) e recorrências (retrato). O botão da
-  Agenda imprime **a vista aberta**; Relatórios traz as duas primeiras como
+- Quatro folhas: semana (paisagem, **gantt de uma linha por dia**), dia
+  (retrato, uma tabela por agrupamento, com a coluna das cadeiras),
+  recorrências (retrato) e **disciplina no semestre** (retrato, lista por mês;
+  05/10/2026). O botão da Agenda imprime **a vista aberta, com o filtro
+  aplicado** e dito no subtítulo; Relatórios traz semana e recorrências como
   cartão.
 - **A semana impressa NÃO é a grade da tela**, e isso é decisão, não
   esquecimento. A grade reserva a altura de todas as horas do dia nas seis
@@ -533,7 +641,14 @@ a pessoa entender por que nada aconteceu.
   para o navegador que não dispara o evento, senão o título da página ficaria
   trocado para sempre.
 
-### "Criar pulando as datas em conflito" — o que estava quebrado
+### "Criar pulando as datas sem cadeira" — o que estava quebrado
+
+(Até 05/10/2026 o botão se chamava "pulando as datas em conflito". Hoje ele
+aparece quando faltam cadeiras em algumas datas da recorrência e, sem elas, a
+MESMA alocação cabe em todas as outras — a recorrente usa as mesmas cadeiras
+toda semana. Quando a falta vem de cadeiras livres em datas diferentes, que
+nenhuma alocação única cobre, o botão não aparece e o aviso manda ajustar
+quantidade, horário ou clínica.)
 
 Até 18/09/2026 esse botão **nunca funcionou, e ainda derrubava o sistema**. Ele
 criava a recorrência e só então chamava `cancelarOcorrencia` para cada data
@@ -571,7 +686,11 @@ em 1 MiB.
 
 A revalidação compara escopo (interseção de clínicas), horário e datas
 concretas — expandindo recorrências e descontando exceções e encerramento.
-Cobre recorrente×recorrente, pontual×pontual e recorrente×pontual.
+Cobre recorrente×recorrente, pontual×pontual e recorrente×pontual. Desde
+05/10/2026 o que ela protege é a CADEIRA: cada item do índice leva as
+`cadeiras` que segura (ausente = o escopo inteiro, que é o item antigo), e a
+transação escolhe as da reserva nova entre as que sobram — ver "Reserva por
+QUANTIDADE de cadeiras".
 
 Custo: quatro documentos quentes, um por agrupamento. Se um dia virar gargalo,
 o índice se divide por mês.
@@ -580,9 +699,14 @@ o índice se divide por mês.
 
 ## Acesso
 
-Três níveis — `coordenador`, `professor`, `tecnico` — e **19 permissões** em
-`acesso.js`. "Técnico de manutenção" é só rótulo de tela. Não existe perfil
+Três níveis — `coordenador`, `professor`, `tecnico` — e **18 permissões** em
+`acesso.js` (eram 19 até 05/10/2026: `alunos.vincular` saiu junto com a turma,
+e `cadeira.ocupar` passou a significar trocar as cadeiras das próprias
+reservas). "Técnico de manutenção" é só rótulo de tela. Não existe perfil
 "administrador"; coordenador cumpre esse papel.
+
+A tela Acessos também vincula o professor às disciplinas (gravado em
+`disciplinas.professores`, por `acessos.editar`).
 
 O único portão é a coleção `autorizados`, aplicada **no servidor** pelas Security
 Rules. Concessão e suspensão acontecem pela tela Acessos, dentro do app.
@@ -600,7 +724,8 @@ exatamente o bug que custou caro aqui.
   `ultimoAcesso` e `nome` (`diff().affectedKeys().hasOnly([...])`).
   Sem essa restrição de campos, um professor se promoveria a coordenador.
 - `config`, `agrupamentos`, `clinicas`, `disciplinas`, `turmas`, `alunos`,
-  `matriculas` → escrita só de coordenador.
+  `matriculas` → escrita só de coordenador. (É por isso que o vínculo
+  professor ↔ disciplina mora em `disciplinas`: funciona sem mexer no console.)
 - `manutencoes` → coordenador ou técnico.
 - `ocupacoes`, `indices`, `atribuicoes` → coordenador ou professor.
   (`ocupacoes` e `indices` são gravados na mesma transação: quem escreve um
@@ -628,22 +753,28 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
 - Turnos (manhã 07:40–11:20, tarde 13:40–17:20, noite 18:20–22:00) são
   **atalho do formulário, não restrição**: preenchem início e término de uma
   vez, e a digitação livre do horário continua valendo. Vivem em
-  `Dados.TURNOS`. A marcação do botão é derivada do horário no formulário, não
-  um estado à parte — não transforme turno em campo gravado na ocupação
+  `Dados.TURNOS`. **Vários podem ser marcados** (05/10/2026): o início é o do
+  primeiro e o término o do último. A marcação do botão é derivada do horário
+  no formulário, não um estado à parte — não transforme turno em campo gravado
+  na ocupação
+- **Toda reserva informa quantas cadeiras usa**; o sistema escolhe quais, da
+  menor para a maior, e o resto da clínica segue reservável
 - **Tipo da ocupação é só `graduacao` ou `pos`.** Os sete tipos antigos
   (reposicao, avaliacao, evento…) vivem em `Dados.TIPOS_LEGADOS`, fora do
   formulário: servem só para `rotuloTipoAtividade` conseguir exibir ocupação
   já gravada. Não acrescente nada lá. `aula` é o tipo fixo das recorrentes,
   que não têm campo de tipo
-- **O título da ocupação é DERIVADO, não digitado**: `tipo · turma`, ou
-  `tipo · nome de quem pediu` quando não há turma vinculada
-  (`tituloPontual` em `store.js`). Não recrie o campo de título — cada pessoa
-  escrevia num formato diferente. O texto antigo sobrevive em `tituloOriginal`
-  e aparece no detalhe da ocorrência só quando existe
+- **O título da ocupação é DERIVADO, não digitado**: `tipo · disciplina`, ou
+  `tipo · nome de quem pediu` quando a pontual é "Outros"
+  (`tituloPontual` em `store.js`); na recorrente, só a disciplina. Não recrie o
+  campo de título — cada pessoa escrevia num formato diferente. O texto antigo
+  sobrevive em `tituloOriginal` e aparece no detalhe da ocorrência só quando
+  existe. A turma vai na descrição, nunca no título
 - **Manutenção não é do professor.** Abrir chamado é coordenação ou técnico;
   encerrar, idem. O professor mantém `estrutura.ver` para saber qual cadeira
   está interditada, mas não abre registro
-- Bloqueio de sobreposição na mesma clínica
+- Bloqueio da mesma CADEIRA em duas reservas no mesmo horário (a clínica pode
+  ter várias reservas ao mesmo tempo)
 - Ocupação das duas clínicas do mesmo agrupamento — **menos nas pré-clínicas**,
   que são agrupamentos de uma clínica só e por isso só se reservam sozinhas
 - Numeração contínua de cadeiras nas clínicas de atendimento, 1 a 112; cada
@@ -679,6 +810,13 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
    captura sai do Painel. `?denso=1` (botão "semana cheia") enche a segunda de
    ocupações cruzadas: é o único jeito de ver a largura das colunas da semana
    sob pressão, porque o acervo magro do dublê nunca faz duas disputarem espaço.
+   Desde 05/10/2026 o acervo MISTURA os dois modelos, como produção: reservas
+   antigas por turma e integrais, reservas novas com disciplina e cadeiras
+   contadas (duas na mesma pré-clínica, no mesmo horário), e as especializações
+   "Implantodontia T1/T2" para a limpeza do cadastro ter o que juntar. O
+   índice da transação de mentira nasce SEMEADO com o acervo — vazio, ela não
+   via choque nenhum e escondia a classe de defeito que existe para pegar.
+   `?imprimir=disciplina` monta a folha da disciplina `d1`.
 4. Nunca reescreva um arquivo digitando conteúdo vindo de saída de ferramenta
    (pode estar truncada). Edite in place.
 5. Não semeie nem edite dados de produção pelo console do Firebase sem avisar.
@@ -703,8 +841,25 @@ pós. A verificação rodou contra um `window.Nuvem` de mentira — o código de
 produção inteiro, com o Firestore trocado —, e não contra o banco real: nenhum
 dado de produção foi criado ou alterado.
 
+Em 05/10/2026 entraram, verificados no harness nos três perfis (sem tocar em
+produção): reserva por quantidade de cadeiras com alocação automática e troca
+pelo professor; turnos múltiplos; várias ocupações pontuais num envio;
+disciplina sem turma, com a turma na "Descrição/Turma"; vínculo professor ↔
+disciplina pela tela Acessos; limpeza do cadastro; marcadores e filtros da
+agenda; aba "Por disciplina"; e a especialidade fora dos seletores de clínica.
+
 ### Pendências
 
+- **Rodar a limpeza do cadastro em produção** (Disciplinas → "Revisar e
+  limpar", coordenação): junta "… T1/T2" no nome, grava disciplina/professor
+  nas reservas antigas e o vínculo dos professores. Até lá tudo funciona pelo
+  legado embutido (`S.disciplinaIdDe` etc.), mas as disciplinas com "T" no nome
+  continuam separadas
+- **Vincular os professores às disciplinas em Acessos**: só os que eram
+  coordenadores de turma herdam o vínculo; os demais veem só "Outros" no
+  formulário até a coordenação vincular
+- As reservas anteriores a 05/10/2026 seguem INTEGRAIS (clínica inteira) até
+  alguém ajustar as cadeiras delas em "Alterar cadeiras"
 - Trocar o e-mail de contato de `privacidade.html`, `termos.html` e do consent
   screen por um endereço institucional, quando houver
 - Revisão jurídica das duas páginas pela Christus

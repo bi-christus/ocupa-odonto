@@ -198,11 +198,13 @@
         C.plural(cat.prazoDias, 'dia corrido', 'dias corridos'));
       linha('Capacidade de ' + cl.nome, S.cadeirasOperantes(clId) + ' → ' +
         C.plural(impacto.cadeirasOperantesDepois, 'cadeira operante', 'cadeiras operantes'));
+      /* Desde 05/10/2026 a reserva tem cadeiras próprias: afetada é a que
+         está COM esta cadeira e precisa trocá-la. */
       linha('Impacto na agenda', impacto.ocorrenciasAfetadas === 0
-        ? 'nenhuma ocupação dos próximos ' + C.plural(janela, 'dia', 'dias') + ' fica sem cadeira'
+        ? 'nenhuma ocupação dos próximos ' + C.plural(janela, 'dia', 'dias') + ' usa esta cadeira'
         : C.plural(impacto.ocorrenciasAfetadas, 'ocupação', 'ocupações') + ' dos próximos ' +
           C.plural(janela, 'dia', 'dias') +
-          (impacto.ocorrenciasAfetadas === 1 ? ' fica' : ' ficam') + ' sem cadeira suficiente — ' +
+          (impacto.ocorrenciasAfetadas === 1 ? ' usa' : ' usam') + ' esta cadeira — ' +
           impacto.turmasAfetadas.join(', '));
       linha('Histórico da cadeira', hist.length === 0
         ? 'primeira manutenção registrada'
@@ -228,8 +230,9 @@
       if (impacto.ocorrenciasAfetadas > 0 && proxima && C.dataValida(proxima[0])) {
         avisos.appendChild(C.el('div', { class: 'alert danger' }, [
           C.el('b', { text: 'A agenda será afetada.' }),
-          ' A primeira ocupação sem cadeira suficiente é em ' + C.fmtDiaAno(proxima[0]) +
-          (proxima[1] ? ' às ' + proxima[1] : '') + '. Avise a coordenação para remanejar.'
+          ' A primeira ocupação com esta cadeira é em ' + C.fmtDiaAno(proxima[0]) +
+          (proxima[1] ? ' às ' + proxima[1] : '') + '. Quem responde por ela troca a cadeira em ' +
+          '"Alterar cadeiras", na Agenda ou em Ocupação agora.'
         ]));
       }
 

@@ -48,41 +48,69 @@
   global.__escritas = [];
   global.__indices = {};
 
+  function faixa(a, b) { var l = []; for (var n = a; n <= b; n++) l.push(n); return l; }
+
+  /* O acervo mistura os DOIS modelos de propósito, porque produção também
+     mistura: reserva gravada antes de 05/10/2026 aponta para TURMA e é
+     integral (sem cadeirasPedidas/cadeirasAlocadas); a nova aponta para a
+     disciplina e segura cadeiras contadas. E a pós tem "Implantodontia T1"
+     e "T2" — a turma no nome que a limpeza do cadastro precisa juntar. */
   function acervo() {
     var C = global.Core, D = global.Dados;
     var s = D.semente();
     var hoje = C.hojeISO(), seg = C.startOfWeek(hoje);
     var disciplinas = [
-      { id: 'd1', codigo: 'ODO-301', nome: 'Clínica Integrada I', nivel: 'graduacao' },
+      { id: 'd1', codigo: 'ODO-301', nome: 'Clínica Integrada I', nivel: 'graduacao', professores: ['prof@teste.br'] },
+      /* Sem `nivel` nem `professores`: o estado de disciplina antiga — é
+         graduação, e o professor vem da turma t2. */
       { id: 'd2', codigo: 'ODO-402', nome: 'Prótese Dentária' },
-      { id: 'd3', codigo: 'POS-01', nome: 'Implantodontia', nivel: 'pos' }
+      { id: 'd3', codigo: 'POS-01', nome: 'Implantodontia T1', nivel: 'pos' },
+      { id: 'd4', codigo: 'POS-02', nome: 'Implantodontia T2', nivel: 'pos', professores: ['prof@teste.br'] },
+      { id: 'd5', codigo: 'POS-03', nome: 'Endodontia', nivel: 'pos', professores: [] }
     ];
     var turmas = [
       { id: 't1', disciplinaId: 'd1', codigo: 'T1', professorCoordenadorId: 'prof@teste.br', periodoLetivo: s.periodoLetivo },
       { id: 't2', disciplinaId: 'd2', codigo: 'T2', professorCoordenadorId: 'coord@teste.br', periodoLetivo: s.periodoLetivo },
       { id: 't3', disciplinaId: 'd3', codigo: 'PÓS', professorCoordenadorId: 'prof@teste.br', periodoLetivo: s.periodoLetivo }
     ];
+    function rec(id, ag, esc, x) {
+      var o = { id: id, tipo: 'recorrente', agrupamentoId: ag, escopo: esc,
+        vigenciaInicio: s.semestre.inicio, vigenciaFim: s.semestre.fim, periodoLetivo: s.periodoLetivo,
+        excecoes: [], criadoPor: 'coord@teste.br', criadoEm: C.carimbo() };
+      Object.keys(x).forEach(function (k) { o[k] = x[k]; });
+      return o;
+    }
+    function pont(id, ag, esc, x) {
+      var o = { id: id, tipo: 'pontual', agrupamentoId: ag, escopo: esc, excecoes: [],
+        criadoPor: 'coord@teste.br', criadoEm: C.carimbo() };
+      Object.keys(x).forEach(function (k) { o[k] = x[k]; });
+      return o;
+    }
     var ocupacoes = [
-      { id: 'r1', tipo: 'recorrente', agrupamentoId: 'ag1', escopo: 'a', turmaId: 't1',
-        dias: [1, 3], inicio: '07:40', fim: '11:20', vigenciaInicio: s.semestre.inicio,
-        vigenciaFim: s.semestre.fim, periodoLetivo: s.periodoLetivo, excecoes: [],
-        criadoPor: 'coord@teste.br', criadoEm: C.carimbo() },
-      { id: 'r2', tipo: 'recorrente', agrupamentoId: 'ag2', escopo: 'ambas', turmaId: 't3',
-        dias: [2], inicio: '18:20', fim: '22:00', vigenciaInicio: s.semestre.inicio,
-        vigenciaFim: s.semestre.fim, periodoLetivo: s.periodoLetivo, excecoes: [],
-        criadoPor: 'coord@teste.br', criadoEm: C.carimbo() },
-      { id: 'r3', tipo: 'recorrente', agrupamentoId: 'ag3', escopo: 'b', turmaId: 't2',
-        dias: [4, 5], inicio: '13:40', fim: '17:20', vigenciaInicio: s.semestre.inicio,
-        vigenciaFim: s.semestre.fim, periodoLetivo: s.periodoLetivo, excecoes: [],
-        criadoPor: 'coord@teste.br', criadoEm: C.carimbo() },
-      { id: 'p1', tipo: 'pontual', agrupamentoId: 'ag4', escopo: 'a', data: C.addDays(seg, 1),
-        inicio: '13:40', fim: '17:20', tipoAtividade: 'graduacao', descricao: 'Atendimento extra do semestre.',
-        turmaId: 't1', responsavelId: 'coord@teste.br', situacao: 'aprovada', excecoes: [],
-        criadoPor: 'coord@teste.br', criadoEm: C.carimbo() },
-      { id: 'p2', tipo: 'pontual', agrupamentoId: 'ag4', escopo: 'b', data: C.addDays(seg, 2),
-        inicio: '07:40', fim: '11:20', tipoAtividade: 'pos', descricao: 'Pedido aguardando a coordenação.',
-        turmaId: 't3', responsavelId: 'prof@teste.br', situacao: 'pendente', excecoes: [],
-        criadoPor: 'prof@teste.br', criadoEm: C.carimbo() }
+      /* Legado: turma, sem quantidade — integral, segura a clínica inteira. */
+      rec('r1', 'ag1', 'a', { turmaId: 't1', dias: [1, 3], inicio: '07:40', fim: '11:20' }),
+      rec('r2', 'ag2', 'ambas', { turmaId: 't3', dias: [2], inicio: '18:20', fim: '22:00' }),
+      /* Modelo novo: disciplina, professor, quantidade e cadeiras alocadas. */
+      rec('r3', 'ag3', 'b', { disciplinaId: 'd2', responsavelId: 'coord@teste.br', tipoAtividade: 'graduacao',
+        dias: [4, 5], inicio: '13:40', fim: '17:20', cadeirasPedidas: 8, cadeirasAlocadas: faixa(71, 78),
+        descricao: 'T2 · prótese fixa' }),
+      /* Duas reservas na MESMA pré-clínica e no mesmo horário: o que a
+         reserva por quantidade passou a permitir. */
+      rec('r4', 'ag5', 'a', { disciplinaId: 'd1', responsavelId: 'prof@teste.br', tipoAtividade: 'graduacao',
+        dias: [1], inicio: '13:40', fim: '17:20', cadeirasPedidas: 30, cadeirasAlocadas: faixa(1, 30),
+        descricao: 'T1 · laboratório' }),
+      rec('r5', 'ag5', 'a', { disciplinaId: 'd4', responsavelId: 'prof@teste.br', tipoAtividade: 'pos',
+        dias: [1], inicio: '13:40', fim: '17:20', cadeirasPedidas: 20, cadeirasAlocadas: faixa(31, 50),
+        descricao: 'Turma da noite' }),
+      pont('p1', 'ag4', 'a', { data: C.addDays(seg, 1), inicio: '13:40', fim: '17:20', tipoAtividade: 'graduacao',
+        disciplinaId: 'd1', responsavelId: 'coord@teste.br', situacao: 'aprovada',
+        cadeirasPedidas: 6, cadeirasAlocadas: faixa(85, 90), descricao: 'T1 · atendimento extra' }),
+      pont('p2', 'ag4', 'b', { data: C.addDays(seg, 2), inicio: '07:40', fim: '11:20', tipoAtividade: 'pos',
+        disciplinaId: 'd4', responsavelId: 'prof@teste.br', situacao: 'pendente', cadeirasPedidas: 10,
+        descricao: 'T2 · cirurgia guiada', criadoPor: 'prof@teste.br' }),
+      /* Pontual antiga: turma, tipo legado, integral. */
+      pont('p3', 'ag1', 'b', { data: C.addDays(seg, 5), inicio: '07:40', fim: '11:20', tipoAtividade: 'reposicao',
+        turmaId: 't1', responsavelId: 'coord@teste.br', situacao: 'aprovada', descricao: 'Reposição do feriado.' })
     ];
 
     /* ?denso=1 — a segunda-feira cheia. A grade da semana só mostra o que
@@ -92,31 +120,47 @@
        pela coordenação — cartões espremidos a ~35px — não aparece. */
     if (/[?&]denso=1/.test(location.search)) {
       var densas = [
-        { ag: 'ag2', escopo: 'ambas', ini: '11:00', fim: '21:00', turma: 't3', tipo: 'pos' },
-        { ag: 'ag1', escopo: 'a', ini: '13:40', fim: '17:20', turma: 't1', tipo: 'graduacao' },
-        { ag: 'ag1', escopo: 'b', ini: '13:40', fim: '17:20', turma: 't2', tipo: 'graduacao' },
-        { ag: 'ag3', escopo: 'a', ini: '13:40', fim: '17:20', turma: 't1', tipo: 'graduacao' },
-        { ag: 'ag4', escopo: 'a', ini: '14:00', fim: '16:00', turma: 't2', tipo: 'graduacao' },
-        { ag: 'ag3', escopo: 'b', ini: '07:40', fim: '11:20', turma: 't1', tipo: 'graduacao' },
-        { ag: 'ag4', escopo: 'b', ini: '08:00', fim: '10:00', turma: 't2', tipo: 'graduacao' }
+        { ag: 'ag2', escopo: 'ambas', ini: '11:00', fim: '21:00', disc: 'd4', tipo: 'pos', cad: faixa(29, 36) },
+        { ag: 'ag1', escopo: 'a', ini: '13:40', fim: '17:20', disc: 'd1', tipo: 'graduacao', cad: faixa(1, 4) },
+        { ag: 'ag1', escopo: 'b', ini: '13:40', fim: '17:20', disc: 'd2', tipo: 'graduacao', cad: faixa(15, 18) },
+        { ag: 'ag3', escopo: 'a', ini: '13:40', fim: '17:20', disc: 'd1', tipo: 'graduacao', cad: faixa(57, 60) },
+        { ag: 'ag4', escopo: 'a', ini: '14:00', fim: '16:00', disc: 'd2', tipo: 'graduacao', cad: faixa(85, 88) },
+        { ag: 'ag3', escopo: 'b', ini: '07:40', fim: '11:20', disc: 'd1', tipo: 'graduacao', cad: faixa(71, 74) },
+        { ag: 'ag4', escopo: 'b', ini: '08:00', fim: '10:00', disc: 'd2', tipo: 'graduacao', cad: faixa(99, 102) }
       ];
       densas.forEach(function (x, k) {
-        ocupacoes.push({
-          id: 'dn' + k, tipo: 'pontual', agrupamentoId: x.ag, escopo: x.escopo,
+        ocupacoes.push(pont('dn' + k, x.ag, x.escopo, {
           data: seg, inicio: x.ini, fim: x.fim, tipoAtividade: x.tipo,
-          descricao: 'Semana cheia de verificação.', turmaId: x.turma,
-          responsavelId: 'coord@teste.br', situacao: 'aprovada', excecoes: [],
-          criadoPor: 'coord@teste.br', criadoEm: C.carimbo()
-        });
+          descricao: 'Semana cheia de verificação.', disciplinaId: x.disc,
+          responsavelId: 'coord@teste.br', situacao: 'aprovada',
+          cadeirasPedidas: x.cad.length, cadeirasAlocadas: x.cad
+        }));
       });
     }
+
+    /* O índice da transação nasce com o que o acervo reserva — aprovado e
+       não excluído —, como o de produção. Vazio, a transação de mentira não
+       veria choque nenhum com o acervo e esconderia justamente a classe de
+       defeito que ela existe para pegar. */
+    global.__indices = {};
+    ocupacoes.forEach(function (o) {
+      if (o.excluidaEm || (o.tipo === 'pontual' && o.situacao && o.situacao !== 'aprovada')) return;
+      var l = global.__indices[o.agrupamentoId] || (global.__indices[o.agrupamentoId] = []);
+      l.push({
+        id: o.id, tipo: o.tipo, escopo: o.escopo, inicio: o.inicio, fim: o.fim,
+        dias: o.dias || null, data: o.data || null,
+        vigenciaInicio: o.vigenciaInicio || null, vigenciaFim: o.vigenciaFim || null,
+        encerradaEm: o.encerradaEm || null, excecoes: [],
+        cadeiras: o.cadeirasAlocadas ? o.cadeirasAlocadas.slice() : null
+      });
+    });
+
     return {
       config: { versao: s.versao, periodoLetivo: s.periodoLetivo, semestre: s.semestre, parametros: s.parametros },
       agrupamentos: s.agrupamentos, clinicas: s.clinicas, autorizados: AUTORIZADOS,
       disciplinas: disciplinas, turmas: turmas,
       alunos: [{ id: 'a1', nome: 'Ana Souza', matricula: '2021001', periodo: 8 },
                { id: 'a2', nome: 'Bruno Lima', matricula: '2021002', periodo: 8 }],
-      matriculas: [{ id: 't1__a1', turmaId: 't1', alunoId: 'a1' }, { id: 't1__a2', turmaId: 't1', alunoId: 'a2' }],
       ocupacoes: ocupacoes,
       manutencoes: [{ id: 'm1', protocolo: 'MAN-0001', clinicaId: 'cl1', cadeira: 3,
         categoria: 'equipamento', criticidade: 'alta', motivo: 'Refletor queimado',
@@ -154,12 +198,16 @@
     apagarVarios: function (c, ids) { log('apagarVarios ' + c + ' ' + ids.length); return ok(); },
     /* Reproduz a transação: roda o validador contra o índice em memória e
        recusa igual ao Firestore quando há choque. */
+    /* `validar` pode completar `dados` e `resumo` (as cadeiras escolhidas
+       dentro da transação) — por isso o resumo é empurrado DEPOIS dele,
+       como no `set` do Firestore. */
     gravarOcupacao: function (agId, id, dados, validar, resumo) {
       var itens = global.__indices[agId] || [];
       var choque = validar(itens);
       if (choque) return global.Promise.reject({ conflito: true, mensagem: choque });
       global.__indices[agId] = itens.filter(function (i) { return i.id !== id; }).concat([resumo]);
-      log('gravarOcupacao ' + agId + '/' + id + ' · índice com ' + global.__indices[agId].length);
+      log('gravarOcupacao ' + agId + '/' + id + ' · cadeiras ' + JSON.stringify(resumo.cadeiras) +
+        ' · índice com ' + global.__indices[agId].length);
       return ok(id);
     },
     /* Estas três mexem no índice DE VERDADE. Enquanto eram no-op, o dublê
@@ -222,6 +270,7 @@
 <script src="../app/js/ui.js"></script>
 <script src="../app/js/registro.js"></script>
 <script src="../app/js/manutencao.js"></script>
+<script src="../app/js/cadeiras.js"></script>
 <script src="../app/js/impressao.js"></script>
 <script src="../app/js/views/painel.js"></script>
 <script src="../app/js/views/agora.js"></script>
@@ -243,6 +292,7 @@
     var seg = global.Core.startOfWeek(global.Core.hojeISO());
     if (global.__autoImprimir === 'dia') global.Impressao.dia(global.Core.hojeISO());
     else if (global.__autoImprimir === 'recorrencias') global.Impressao.recorrencias();
+    else if (global.__autoImprimir === 'disciplina') global.Impressao.disciplina('d1');
     else global.Impressao.semana(seg);
   }, 100);
 })(window);

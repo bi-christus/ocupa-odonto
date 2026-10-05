@@ -150,14 +150,12 @@
     var seletorCadeira = C.el('div');
     var resumo = C.el('div', { class: 'preview' });
 
+    /* Só o nome e a faixa: a especialidade saiu de todos os seletores de
+       clínica em 05/10/2026 — ao lado do nome, ela passava por disciplina. */
     function opcoesClinica() {
       return S.clinicasDoAgrupamento(f.agrupamentoId).map(function (c) {
         var faixa = S.faixaCadeiras(c.id);
-        return {
-          valor: c.id,
-          rotulo: c.nome + (c.especialidade ? ' · ' + c.especialidade : '') +
-            ' (' + faixa[0] + '–' + faixa[1] + ')'
-        };
+        return { valor: c.id, rotulo: c.nome + ' (' + faixa[0] + '–' + faixa[1] + ')' };
       });
     }
 
@@ -344,7 +342,11 @@
           C.plural(S.totalCadeiras(), 'cadeira')),
         U.kv('Cadeiras operantes', totalOperantes() + ' de ' + S.totalCadeiras()),
         U.kv('Ocupação nas duas clínicas', pill('permitida', 'conjunta')),
-        U.kv('Sobreposição na clínica', pill(p.bloquearSobreposicao ? 'bloqueada' : 'permitida',
+        /* Desde 05/10/2026 a reserva é por quantidade: várias cabem na mesma
+           clínica e no mesmo horário. O que este parâmetro bloqueia é a MESMA
+           cadeira em duas reservas. */
+        U.kv('Reserva de cadeiras', pill('por quantidade', 'soft')),
+        U.kv('Mesma cadeira em duas reservas', pill(p.bloquearSobreposicao ? 'bloqueada' : 'permitida',
           p.bloquearSobreposicao ? 'neutral' : 'warn')),
         U.kv('Faixa mínima', pill(rotuloFaixa(p.faixaMinimaMin), 'soft')),
         U.kv('Cancelamento', pill(perfisCom('agenda.cancelarQualquer'), 'neutral')),
@@ -409,7 +411,7 @@
           U.campo('Faixa mínima', U.selecao([30, 60, 90, 120].map(function (m) {
             return { valor: String(m), rotulo: rotuloFaixa(m) };
           }), String(f.faixaMinimaMin), function (v) { f.faixaMinimaMin = Number(v); })),
-          U.campo('Sobreposição na clínica', U.selecao([
+          U.campo('Mesma cadeira em duas reservas', U.selecao([
             { valor: 'sim', rotulo: 'Bloqueada' }, { valor: 'nao', rotulo: 'Permitida' }
           ], f.bloquearSobreposicao ? 'sim' : 'nao', function (v) { f.bloquearSobreposicao = v === 'sim'; }))
         ]),

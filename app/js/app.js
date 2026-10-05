@@ -192,7 +192,7 @@
           C.el('h1', { text: 'Ocupação das clínicas de odontologia' }),
           C.el('p', {
             class: 'muted', style: 'font-size:14px;line-height:1.7;max-width:46ch;margin-top:18px',
-            text: 'Agenda das clínicas, cadeiras em tempo real, turmas do semestre e manutenção — com acesso por nível.'
+            text: 'Agenda das clínicas, cadeiras em tempo real, disciplinas do semestre e manutenção — com acesso por nível.'
           })
         ]),
         C.el('div', { class: 'row', style: 'gap:44px' }, [

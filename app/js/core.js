@@ -17,6 +17,11 @@
            monte nós com C.el e passe em children. */
         else if (k === 'html') node.textContent = String(v).replace(/<[^>]*>/g, '');
         else if (k === 'style') node.setAttribute('style', v);
+        /* <textarea> ignora o ATRIBUTO value: o texto dela é o conteúdo. Sem a
+           propriedade, todo redesenho do formulário devolvia a descrição em
+           branco na tela — enquanto o texto continuava guardado e seguia para
+           a gravação sem ninguém ver. */
+        else if (k === 'value' && tag === 'textarea') node.value = v;
         else if (k.slice(0, 2) === 'on' && typeof v === 'function') node.addEventListener(k.slice(2), v);
         else if (v === true) node.setAttribute(k, '');
         else node.setAttribute(k, v);
@@ -134,6 +139,21 @@
     return n + ' ' + s;
   }
 
+  /* [1,2,3,5,7,8] → "1–3, 5, 7–8". A reserva guarda as cadeiras uma a uma,
+     mas quem lê quer as faixas: "cadeiras 1–8" diz em um relance o que a
+     lista crua levaria uma linha inteira para dizer. */
+  function faixasNumeros(lista) {
+    var l = (lista || []).slice().sort(function (a, b) { return a - b; });
+    var partes = [], i = 0;
+    while (i < l.length) {
+      var j = i;
+      while (j + 1 < l.length && l[j + 1] === l[j] + 1) j++;
+      partes.push(j > i ? l[i] + '–' + l[j] : String(l[i]));
+      i = j + 1;
+    }
+    return partes.join(', ');
+  }
+
   /* ── Diversos ────────────────────────────────────────────────────── */
   function uid(prefixo) {
     return (prefixo || 'id') + '_' + Math.random().toString(36).slice(2, 9);
@@ -180,7 +200,7 @@
     DIAS_CURTO: DIAS_CURTO, DIAS_LONGO: DIAS_LONGO, MESES: MESES,
     toMin: toMin, fromMin: fromMin, duracaoH: duracaoH, fmtHoras: fmtHoras, sobrepoe: sobrepoe,
     agoraHHMM: agoraHHMM, hojeISO: hojeISO, pad: pad,
-    dataValida: dataValida, plural: plural,
+    dataValida: dataValida, plural: plural, faixasNumeros: faixasNumeros,
     carimbo: carimbo, fmtCarimbo: fmtCarimbo, decorrido: decorrido,
     uid: uid, iniciais: iniciais, primeiroNome: primeiroNome,
     toast: toast, baixarCSV: baixarCSV

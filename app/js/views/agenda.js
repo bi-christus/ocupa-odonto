@@ -1,7 +1,15 @@
-/* views/agenda.js — ocupações das clínicas: semana, dia e recorrências.
+/* views/agenda.js — ocupações das clínicas: semana, dia, recorrências e o
+   semestre de uma disciplina.
    A agenda é do AGRUPAMENTO: uma ocupação não aponta para uma clínica, e sim
    para um agrupamento mais um escopo ('a', 'b' ou 'ambas'). O rótulo e a cor
-   de cada bloco saem daí, nunca de um nome de clínica isolado. */
+   de cada bloco saem daí, nunca de um nome de clínica isolado.
+
+   MARCADORES (05/10/2026): cada bloco diz, sem texto, o tipo de AMBIENTE
+   reservado — pelo preenchimento: clínica de atendimento, as duas clínicas
+   do agrupamento, pré-clínica — e o tipo de RESERVA — pelo desenho:
+   recorrente ou pontual, e o capelo da pós. Os mesmos marcadores são os
+   botões do filtro, que fazem as vezes de legenda: clicar esconde ou mostra
+   aquele tipo. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI;
@@ -9,6 +17,69 @@
   var vista = 'semana';
   var refSemana = null;
   var diaSel = null;
+  var discSel = null;
+
+  /* Filtros da agenda. Valem para a semana, o dia, as recorrências e a
+     folha impressa — imprimir o que está na tela inclui o filtro. Ficam
+     entre redesenhos, como a semana escolhida. */
+  var filtros = novosFiltros();
+  function novosFiltros() {
+    return {
+      disciplinaId: '', professorId: '',
+      ambientes: { clinica: true, dupla: true, pre: true },
+      tipos: { recorrente: true, pontual: true },
+      niveis: { graduacao: true, pos: true }
+    };
+  }
+  function filtroAtivo() {
+    var f = filtros;
+    return !!(f.disciplinaId || f.professorId) ||
+      [f.ambientes, f.tipos, f.niveis].some(function (g) {
+        return Object.keys(g).some(function (k) { return !g[k]; });
+      });
+  }
+  /* Recebe OCORRÊNCIA — o nível, o ambiente, a disciplina e o professor já
+     vêm resolvidos nela, com o legado embutido. */
+  function casaFiltros(o) {
+    if (filtros.disciplinaId && o.disciplinaId !== filtros.disciplinaId) return false;
+    if (filtros.professorId && o.responsavelId !== filtros.professorId) return false;
+    if (!filtros.ambientes[o.ambiente]) return false;
+    if (!filtros.tipos[o.origem]) return false;
+    if (!filtros.niveis[o.nivel]) return false;
+    return true;
+  }
+  function doDia(data, filtro) {
+    return S.ocorrenciasDoDia(data, filtro).filter(casaFiltros);
+  }
+  /* O mesmo filtro sobre o DOCUMENTO da recorrência (a aba Recorrências
+     lista regras, não ocorrências), resolvido pelos mesmos leitores. */
+  function casaFiltrosRegra(r) {
+    return casaFiltros({
+      disciplinaId: S.disciplinaIdDe(r), responsavelId: S.responsavelDe(r),
+      ambiente: S.ambienteDe(r.agrupamentoId, r.escopo), origem: 'recorrente', nivel: S.nivelDe(r)
+    });
+  }
+  /* Uma frase com o que o filtro esconde, para o subtítulo da folha
+     impressa: papel filtrado que não diz que é filtrado mente. */
+  function descricaoFiltro() {
+    if (!filtroAtivo()) return '';
+    var partes = [];
+    if (filtros.disciplinaId) partes.push(S.rotuloDisciplina(S.disciplina(filtros.disciplinaId)));
+    if (filtros.professorId) partes.push(S.nomePessoa(filtros.professorId));
+    var rot = {
+      ambientes: { clinica: 'clínica', dupla: 'duas clínicas', pre: 'pré-clínica' },
+      tipos: { recorrente: 'recorrentes', pontual: 'pontuais' },
+      niveis: { graduacao: 'graduação', pos: 'pós' }
+    };
+    var nenhum = { ambientes: 'nenhum ambiente', tipos: 'nenhum tipo', niveis: 'nenhum nível' };
+    ['ambientes', 'tipos', 'niveis'].forEach(function (g) {
+      var ligados = Object.keys(filtros[g]).filter(function (k) { return filtros[g][k]; });
+      if (ligados.length < Object.keys(filtros[g]).length) {
+        partes.push(ligados.length ? ligados.map(function (k) { return rot[g][k]; }).join(' e ') : nenhum[g]);
+      }
+    });
+    return 'filtro: ' + partes.join(' · ');
+  }
 
   /* A régua de horas vem de S.janelaHoras: a versão impressa precisa montar
      a mesma grade, e uma cópia da derivação em cada lado divergiria. */
@@ -20,6 +91,8 @@
     if (!S.pode('agenda.ver')) { alvo.appendChild(U.semPermissao()); return; }
     if (!refSemana) refSemana = C.startOfWeek(C.hojeISO());
     if (params && params.vista) vista = params.vista;
+    /* Entrada pela tela de Disciplinas: "ver no semestre". */
+    if (params && params.disciplinaId) { vista = 'disciplina'; discSel = params.disciplinaId; }
     var fim = S.fimDaSemana(refSemana);
     if (!diaSel || diaSel < refSemana || diaSel > fim) {
       var hoje = C.hojeISO();
@@ -31,10 +104,82 @@
     if (vista === 'excluidas' && !S.pode('agenda.excluir')) vista = 'semana';
 
     alvo.appendChild(cabecalho());
+    if (vista === 'semana' || vista === 'dia' || vista === 'recorrencias') alvo.appendChild(barraFiltros());
     if (vista === 'semana') alvo.appendChild(gradeSemana());
     else if (vista === 'dia') alvo.appendChild(gantt());
     else if (vista === 'excluidas') alvo.appendChild(listaExcluidas());
+    else if (vista === 'disciplina') alvo.appendChild(visaoDisciplina());
     else alvo.appendChild(listaRecorrencias());
+  }
+
+  /* ── Filtros e marcadores ─────────────────────────────────────────────
+     Disciplina e professor por lista; ambiente, tipo de reserva e nível por
+     botão. O botão desenha o MESMO marcador do bloco — é ao mesmo tempo
+     legenda e filtro, então não existe legenda que diga uma coisa e filtro
+     que faça outra. */
+  function marcadorAmbiente(amb) {
+    return C.el('i', { class: 'sw amb-' + amb, 'aria-hidden': 'true' });
+  }
+  function botaoMarcador(grupo, chave, rotulo, marca) {
+    var on = !!filtros[grupo][chave];
+    return C.el('button', {
+      type: 'button', class: 'marcador' + (on ? ' on' : ''),
+      'aria-pressed': on ? 'true' : 'false',
+      title: on ? 'Mostrando — clique para esconder' : 'Escondido — clique para mostrar',
+      onclick: function () { filtros[grupo][chave] = !on; global.App.recarregar(); }
+    }, [marca, rotulo]);
+  }
+  function opcoesDeDisciplina(rotuloTodas) {
+    function op(d) { return { valor: d.id, rotulo: S.rotuloDisciplinaLongo(d) }; }
+    return [{ valor: '', rotulo: rotuloTodas }].concat([
+      { grupo: 'Graduação', itens: S.disciplinasDeGraduacao().map(op) },
+      { grupo: 'Pós-graduação', itens: S.especializacoes().map(op) }
+    ]);
+  }
+  function barraFiltros() {
+    var professores = S.estado.usuarios.filter(function (x) {
+      return x.perfil === 'professor' || x.perfil === 'coordenador';
+    }).sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
+    var eu = S.usuario();
+    return C.el('div', { class: 'filtros' }, [
+      C.el('div', { class: 'filtros-listas' }, [
+        U.selecao(opcoesDeDisciplina('Todas as disciplinas'), filtros.disciplinaId, function (v) {
+          filtros.disciplinaId = v; global.App.recarregar();
+        }, { 'aria-label': 'Filtrar por disciplina' }),
+        U.selecao([{ valor: '', rotulo: 'Todos os professores' }].concat(professores.map(function (p) {
+          return { valor: p.id, rotulo: p.nome + (eu && p.id === eu.id ? ' (eu)' : '') };
+        })), filtros.professorId, function (v) {
+          filtros.professorId = v; global.App.recarregar();
+        }, { 'aria-label': 'Filtrar por professor coordenador' })
+      ]),
+      C.el('div', { class: 'filtros-grupo' }, [
+        C.el('span', { class: 'eyebrow', text: 'Ambiente' }),
+        botaoMarcador('ambientes', 'clinica', 'Clínica', marcadorAmbiente('clinica')),
+        botaoMarcador('ambientes', 'dupla', 'Duas clínicas', marcadorAmbiente('dupla')),
+        botaoMarcador('ambientes', 'pre', 'Pré-clínica', marcadorAmbiente('pre'))
+      ]),
+      C.el('div', { class: 'filtros-grupo' }, [
+        C.el('span', { class: 'eyebrow', text: 'Reserva' }),
+        botaoMarcador('tipos', 'recorrente', 'Recorrente', U.icone('recorrente')),
+        botaoMarcador('tipos', 'pontual', 'Pontual', U.icone('pontual')),
+        botaoMarcador('niveis', 'graduacao', 'Graduação', C.el('i', { class: 'sw-vazio', 'aria-hidden': 'true' })),
+        botaoMarcador('niveis', 'pos', 'Pós', U.icone('pos'))
+      ]),
+      filtroAtivo() ? C.el('button', {
+        class: 'btn-ghost', type: 'button', text: 'Limpar filtros',
+        onclick: function () { filtros = novosFiltros(); global.App.recarregar(); }
+      }) : null
+    ]);
+  }
+
+  /* Os dois marcadores de tipo dentro do bloco: recorrente ou pontual, e o
+     capelo quando é pós. O ambiente não precisa de desenho — ele é o
+     preenchimento do próprio bloco. */
+  function marcasDoBloco(o) {
+    return C.el('span', { class: 'marcas' }, [
+      U.icone(o.origem === 'pontual' ? 'pontual' : 'recorrente'),
+      o.nivel === 'pos' ? U.icone('pos') : null
+    ]);
   }
 
   /* "17 a 22 de agosto" quando a semana não vira o mês, "28 de agosto a
@@ -54,11 +199,13 @@
       ? 'Recorrências · semestre ' + S.estado.periodoLetivo
       : vista === 'excluidas'
         ? 'Reservas excluídas'
-        : 'Ocupações · ' + rotuloSemana();
+        : vista === 'disciplina'
+          ? 'Disciplina no semestre ' + S.estado.periodoLetivo
+          : 'Ocupações · ' + rotuloSemana();
     return C.el('div', { class: 'page-head' }, [
       C.el('h2', { text: titulo }),
       C.el('div', { class: 'row', style: 'gap:10px' }, [
-        (vista !== 'recorrencias' && vista !== 'excluidas') ? C.el('div', { class: 'row', style: 'gap:4px' }, [
+        (vista === 'semana' || vista === 'dia') ? C.el('div', { class: 'row', style: 'gap:4px' }, [
           C.el('button', { class: 'chip-btn', text: '‹', 'aria-label': 'Semana anterior', title: 'Semana anterior',
             onclick: function () { refSemana = C.addDays(refSemana, -7); diaSel = null; global.App.recarregar(); } }),
           C.el('button', { class: 'chip-btn', text: 'Hoje',
@@ -68,6 +215,7 @@
         ]) : null,
         C.el('div', { class: 'seg' }, [
           aba('semana', 'Semana'), aba('dia', 'Dia'), aba('recorrencias', 'Recorrências'),
+          aba('disciplina', 'Por disciplina'),
           S.pode('agenda.excluir') ? abaExcluidas() : null
         ]),
         /* A lixeira é a única aba sem versão impressa: lista de reserva
@@ -85,12 +233,17 @@
     ]);
   }
 
-  /* Imprime o que está na tela, na mesma forma em que está: é o que a folha
-     promete ao sair da aba Agenda. */
+  /* Imprime o que está na tela, na mesma forma em que está — com o filtro
+     aplicado e dito no subtítulo: é o que a folha promete ao sair da aba
+     Agenda. */
   function imprimirVista() {
-    if (vista === 'dia') global.Impressao.dia(diaSel);
-    else if (vista === 'recorrencias') global.Impressao.recorrencias();
-    else global.Impressao.semana(refSemana);
+    var f = filtroAtivo() ? { aceita: casaFiltros, descricao: descricaoFiltro() } : null;
+    if (vista === 'dia') global.Impressao.dia(diaSel, f);
+    else if (vista === 'recorrencias') {
+      global.Impressao.recorrencias(f ? { aceita: casaFiltrosRegra, descricao: f.descricao } : null);
+    }
+    else if (vista === 'disciplina') { if (discSel) global.Impressao.disciplina(discSel); }
+    else global.Impressao.semana(refSemana, f);
   }
   function aba(id, rotulo) {
     return C.el('button', {
@@ -159,7 +312,10 @@
     /* A mensagem de choque, quando houver, vem do próprio store pelo toast:
        o horário pode ter sido ocupado enquanto a reserva estava excluída. */
     S.recuperarReserva(o.id).then(function (r) {
-      if (r && r.ok) C.toast('Reserva recuperada · ' + S.rotuloReserva(o) + '.');
+      if (r && r.ok) {
+        C.toast('Reserva recuperada · ' + S.rotuloReserva(o) + (r.realocada
+          ? ' · as cadeiras de antes foram tomadas, ficou com ' + S.textoCadeiras(S.cadeirasDe(o)) : '') + '.');
+      }
       global.App.recarregar();
     });
   }
@@ -184,7 +340,8 @@
           text: o.tipo === 'pontual' ? 'Pontual' : 'Recorrente'
         })),
         C.el('td', { text: S.rotuloReserva(o) }),
-        C.el('td', { text: S.rotuloEscopo(o.agrupamentoId, o.escopo) }),
+        C.el('td', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + ' · ' +
+          C.plural(S.quantidadeDe(o), 'cadeira', 'cadeiras') }),
         C.el('td', { style: 'font-size:12.5px', text: o.tipo === 'pontual'
           ? C.fmtDiaAno(o.data) + ' · ' + o.inicio + '–' + o.fim
           : C.listaDias(o.dias) + ' · ' + o.inicio + '–' + o.fim }),
@@ -205,9 +362,9 @@
     return C.el('div', {}, [
       C.el('div', {
         class: 'alert', style: 'margin-bottom:18px',
-        text: 'Reserva excluída não aparece na agenda e não bloqueia horário. ' +
-          'Recuperar devolve a reserva com os registros de cadeira que ela tinha — ' +
-          'mas passa pela checagem de sobreposição, e falha se o horário já estiver ocupado.'
+        text: 'Reserva excluída não aparece na agenda e não segura cadeira. ' +
+          'Recuperar devolve a reserva como ela era — mas passa pela checagem de cadeiras: ' +
+          'se as dela foram tomadas, ela fica com outras livres, e falha se não sobrar a quantidade.'
       }),
       C.el('div', { class: 'rolagem-x' }, tabela)
     ]);
@@ -254,11 +411,11 @@
   }
 
   /* ── Leituras de escopo compartilhadas ────────────────────────────── */
-  function ehConjunta(o) {
-    return S.idsDoEscopo(o.agrupamentoId, o.escopo).length > 1;
-  }
+  /* O preenchimento diz o AMBIENTE (amb-clinica, amb-dupla, amb-pre) e a
+     borda tracejada diz PONTUAL — os mesmos marcadores do filtro. */
   function classeEvento(o, base) {
-    return base + (o.origem === 'pontual' ? ' pontual' : '') + (ehConjunta(o) ? ' conjunta' : '');
+    return base + ' amb-' + o.ambiente + (o.origem === 'pontual' ? ' pontual' : '') +
+      (o.nivel === 'pos' ? ' nivel-pos' : '');
   }
 
   /* ── Semana ───────────────────────────────────────────────────────────
@@ -304,7 +461,7 @@
        pode ser feita lá dentro, depois que as trilhas já estão escritas. De
        quebra, colunaDoDia deixa de repetir a repartição. */
     var dias = datas.map(function (d) {
-      var itens = disporEmColunas(S.ocorrenciasDoDia(d));
+      var itens = disporEmColunas(doDia(d));
       var pico = 1;
       itens.forEach(function (x) { if (x.total > pico) pico = x.total; });
       total += itens.length;
@@ -361,8 +518,8 @@
     return C.el('div', {}, [
       C.el('div', { style: 'max-height:640px;overflow:auto' }, grade),
       total ? null : C.el('div', { class: 'muted', style: 'padding:14px 0;font-size:12.5px',
-        text: 'Nenhuma ocupação registrada nesta semana.' }),
-      legendaSemana()
+        text: filtroAtivo() ? 'Nenhuma ocupação desta semana passa pelo filtro.'
+          : 'Nenhuma ocupação registrada nesta semana.' })
     ]);
   }
 
@@ -551,30 +708,24 @@
 
   /* `estilo` traz posição e tamanho calculados pela coluna do dia: o bloco é
      absoluto dentro dela, com a altura proporcional à duração. */
+  /* Primeira linha: marcadores, lugar e quantas cadeiras — desde 05/10/2026
+     a clínica pode ter várias reservas ao mesmo tempo, e o número é o que
+     diz quanto dela cada uma toma. A descrição traz a turma, que deixou de
+     ser cadastro. */
   function evento(o, estilo) {
-    var rot = S.rotuloEscopo(o.agrupamentoId, o.escopo);
+    var rot = S.rotuloEscopoCurto(o.agrupamentoId, o.escopo);
     return C.el('button', {
       class: classeEvento(o, 'ev'),
       style: estilo,
-      title: rot + ' · ' + o.inicio + '–' + o.fim + ' · ' + o.titulo +
-        ' · ' + C.fmtHoras(C.duracaoH(o.inicio, o.fim)),
+      title: S.rotuloEscopo(o.agrupamentoId, o.escopo) + ' · ' + o.inicio + '–' + o.fim + ' · ' + o.titulo +
+        ' · ' + C.fmtHoras(C.duracaoH(o.inicio, o.fim)) +
+        ' · ' + C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' (' + S.textoCadeiras(o.cadeirasLista) + ')' +
+        (o.descricao ? ' · ' + o.descricao : ''),
       onclick: function () { detalhe(o); }
     }, [
-      C.el('b', { text: rot }),
-      C.el('span', { text: o.inicio + '–' + o.fim + ' · ' + o.titulo })
-    ]);
-  }
-
-  function legendaSemana() {
-    function item(estilo, rotulo) {
-      return C.el('span', { class: 'row', style: 'gap:8px' }, [
-        C.el('span', { style: 'width:14px;height:14px;flex:none;' + estilo }), rotulo
-      ]);
-    }
-    return C.el('div', { class: 'row', style: 'gap:22px;margin-top:16px;font-size:12.5px;flex-wrap:wrap' }, [
-      item('background:var(--fill-soft);border-left:3px solid var(--fill-strong)', 'Aula recorrente'),
-      item('background:var(--fill-soft);border-left:3px dashed var(--fill-strong)', 'Atividade pontual'),
-      item('background:var(--fill-tint);border-left:3px solid var(--fill-deep)', 'Ocupação nas duas clínicas')
+      C.el('b', {}, [marcasDoBloco(o), rot + ' · ' + o.cadeiras + ' cad.']),
+      C.el('span', { text: o.inicio + '–' + o.fim + ' · ' + o.titulo }),
+      o.descricao ? C.el('span', { class: 'ev-desc', text: o.descricao }) : null
     ]);
   }
 
@@ -607,10 +758,17 @@
     var marcas = C.el('div', { class: 'tl-hd' }, [C.el('div', { style: 'width:142px;flex:none' })]);
     for (var h = H0; h <= H1; h++) marcas.appendChild(C.el('i', { text: C.pad(h) }));
 
-    var corpo = agrupamentos.length
+    /* A pista de um agrupamento cujo ambiente o filtro esconde inteiro não
+       aparece: uma pré-clínica escondida não precisa de faixa vazia. */
+    var visiveis = agrupamentos.filter(function (g) {
+      var cls = S.clinicasDoAgrupamento(g.id);
+      if (cls.length === 1) return !!filtros.ambientes[S.ambienteDe(g.id, 'a')];
+      return filtros.ambientes.clinica || filtros.ambientes.dupla;
+    });
+    var corpo = visiveis.length
       ? C.el('div', { style: 'border-top:1px solid var(--color-divider)' },
-        agrupamentos.map(function (g) { return pistaAgrupamento(g, ini, fim, span); }))
-      : U.vazio('Nenhum agrupamento de clínicas cadastrado.');
+        visiveis.map(function (g) { return pistaAgrupamento(g, ini, fim, span); }))
+      : U.vazio(agrupamentos.length ? 'O filtro esconde todos os ambientes.' : 'Nenhum agrupamento de clínicas cadastrado.');
 
     return C.el('div', {}, [
       seletor,
@@ -662,7 +820,7 @@
       });
     }
 
-    var lista = S.ocorrenciasDoDia(diaSel, { agrupamentoId: g.id });
+    var lista = doDia(diaSel, { agrupamentoId: g.id });
     var niveis = lista.map(function (o, idx) { return nivel(lista, idx); });
     var divisor = 1;
     niveis.forEach(function (n) { if (n + 1 > divisor) divisor = n + 1; });
@@ -683,10 +841,14 @@
         class: classeEvento(o, 'tl-blk') + (st === 'em_andamento' ? ' agora' : ''),
         style: 'left:' + ((a - ini) / span * 100) + '%;width:' + ((b - a) / span * 100) +
           '%;top:' + (baseTopo + niveis[idx] * sub + 3) + 'px;height:' + Math.max(8, sub - 6) + 'px',
-        text: o.titulo + ' · ' + C.primeiroNome(S.nomePessoa(o.responsavelId)),
-        title: S.rotuloEscopo(o.agrupamentoId, o.escopo) + ' · ' + o.inicio + '–' + o.fim,
+        title: S.rotuloEscopo(o.agrupamentoId, o.escopo) + ' · ' + o.inicio + '–' + o.fim +
+          ' · ' + C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' (' + S.textoCadeiras(o.cadeirasLista) + ')' +
+          (o.descricao ? ' · ' + o.descricao : ''),
         onclick: function () { detalhe(o); }
-      }));
+      }, [
+        marcasDoBloco(o),
+        o.titulo + ' · ' + o.cadeiras + ' cad. · ' + C.primeiroNome(S.nomePessoa(o.responsavelId))
+      ]));
     });
 
     return C.el('div', { class: 'tl-row', style: 'min-height:' + (altura + 20) + 'px' }, [
@@ -743,14 +905,17 @@
 
   function listaRecorrencias() {
     var hoje = C.hojeISO();
-    var regras = S.recorrenciasAtivas().slice().sort(function (a, b) {
+    var todas = S.recorrenciasAtivas();
+    var regras = todas.filter(casaFiltrosRegra).sort(function (a, b) {
       return (a.dias[0] - b.dias[0]) || C.toMin(a.inicio) - C.toMin(b.inicio);
     });
-    if (!regras.length) return U.vazio('Nenhuma recorrência criada neste semestre.');
+    if (!regras.length) {
+      return U.vazio(todas.length ? 'Nenhuma recorrência passa pelo filtro.' : 'Nenhuma recorrência criada neste semestre.');
+    }
 
     var tabela = C.el('table', { class: 'table' }, [
       C.el('thead', {}, C.el('tr', {}, [
-        C.el('th', { text: 'Turma' }), C.el('th', { text: 'Onde' }),
+        C.el('th', { text: 'Disciplina' }), C.el('th', { text: 'Onde' }),
         C.el('th', { text: 'Dias' }), C.el('th', { text: 'Horário' }),
         C.el('th', { text: 'Cadeiras' }), C.el('th', { text: 'Vigência' }),
         C.el('th', { text: 'Restantes' }), C.el('th', { class: 'right', text: '' })
@@ -758,23 +923,29 @@
     ]);
     var corpo = C.el('tbody');
     regras.forEach(function (r) {
-      var t = S.turma(r.turmaId);
+      var d = S.disciplinaDe(r);
       var fimEfetivo = fimEfetivoDaRegra(r);
       var encerrada = regraEncerrada(r, hoje);
       var restantes = encerrada ? 0 : encontrosRestantes(r, hoje);
+      var descricao = S.descricaoDe(r);
       corpo.appendChild(C.el('tr', { style: encerrada ? 'opacity:.55' : '' }, [
         /* Rótulos do Store: a especialização da pós se chama pelo nome, e
            nenhum dos dois estoura quando a disciplina sumiu do banco. */
         C.el('td', {}, [
-          C.el('b', { text: S.rotuloTurma(t) }),
+          C.el('b', { text: d ? S.rotuloDisciplina(d) : 'Sem disciplina' }),
           C.el('div', { class: 'muted', style: 'font-size:12px',
-            text: S.subtituloTurma(t) + ' · ' + S.nomePessoa(t ? t.professorCoordenadorId : null) })
+            text: [S.subtituloDisciplina(d), S.nomePessoa(S.responsavelDe(r))].filter(Boolean).join(' · ') }),
+          descricao ? C.el('div', { class: 'muted', style: 'font-size:12px', text: descricao }) : null
         ]),
-        C.el('td', { text: S.rotuloEscopo(r.agrupamentoId, r.escopo) }),
+        C.el('td', {}, [marcadorAmbiente(S.ambienteDe(r.agrupamentoId, r.escopo)),
+          ' ' + S.rotuloEscopoCurto(r.agrupamentoId, r.escopo)]),
         C.el('td', { text: C.listaDias(r.dias) }),
         C.el('td', { class: 'num', text: r.inicio + '–' + r.fim }),
-        /* Derivado: `cadeiras` saiu do documento. */
-        C.el('td', { class: 'num', text: String(S.capacidadeEscopo(r.agrupamentoId, r.escopo)) }),
+        C.el('td', { class: 'num' }, [
+          C.el('div', { text: String(S.quantidadeDe(r)) }),
+          C.el('div', { class: 'muted', style: 'font-size:11.5px', text: S.ehIntegral(r)
+            ? 'clínica inteira' : S.textoCadeiras(S.cadeirasDe(r)) })
+        ]),
         C.el('td', { class: 'num', style: 'font-size:12.5px',
           text: C.fmtDia(r.vigenciaInicio) + ' – ' + C.fmtDia(fimEfetivo) }),
         C.el('td', {}, encerrada
@@ -784,6 +955,10 @@
           r.excecoes.length ? C.el('button', {
             class: 'btn-ghost', text: C.plural(r.excecoes.length, 'exceção', 'exceções'),
             onclick: function () { verExcecoes(r); }
+          }) : null,
+          !encerrada && S.podeGerirCadeiras(r) ? C.el('button', {
+            class: 'btn-ghost', style: 'margin-left:12px', text: 'Cadeiras',
+            onclick: function () { global.Cadeiras.escolher(r, function () { global.App.recarregar(); }); }
           }) : null,
           S.pode('agenda.criarRecorrente') && !encerrada ? C.el('button', {
             class: 'btn-danger', style: 'margin-left:12px', text: 'Encerrar',
@@ -803,9 +978,8 @@
   }
 
   function verExcecoes(r) {
-    var t = S.turma(r.turmaId);
     U.modal({
-      titulo: 'Exceções · ' + S.rotuloTurma(t),
+      titulo: 'Exceções · ' + S.rotuloReserva(r),
       subtitulo: 'Datas em que a recorrência não acontece',
       largura: '620px',
       conteudo: C.el('table', { class: 'table' }, C.el('tbody', {}, r.excecoes.map(function (ex) {
@@ -825,8 +999,14 @@
                   C.toast('Você não tem permissão para restaurar encontros.');
                   return;
                 }
-                S.restaurarExcecao(r.id, ex.data);
-                U.fecharModal(); C.toast('Encontro de ' + C.fmtDia(ex.data) + ' restaurado.');
+                /* Pode falhar: as cadeiras da recorrência podem ter sido
+                   reservadas por outra pessoa naquela data depois do
+                   cancelamento. O motivo vem do store pelo toast. */
+                U.fecharModal();
+                S.restaurarExcecao(r.id, ex.data).then(function (res) {
+                  if (res && res.ok) C.toast('Encontro de ' + C.fmtDia(ex.data) + ' restaurado.');
+                  global.App.recarregar();
+                });
                 global.App.recarregar();
               }
             }) : null)
@@ -840,10 +1020,9 @@
       C.toast('Você não tem permissão para encerrar recorrências.');
       return;
     }
-    var t = S.turma(r.turmaId);
     U.confirmar({
       titulo: 'Encerrar recorrência',
-      subtitulo: S.rotuloTurmaLongo(t),
+      subtitulo: S.rotuloReserva(r),
       rotulo: 'Encerrar a partir de hoje',
       perigo: true,
       conteudo: C.el('div', {}, [
@@ -865,31 +1044,205 @@
     });
   }
 
+  /* ── Disciplina no semestre ───────────────────────────────────────────
+     Todas as reservas de UMA disciplina, do primeiro ao último dia do
+     semestre, numa grade de semanas × dias: é a visão pedida para enxergar
+     a disciplina inteira de uma vez, sem folhear a agenda semana a semana.
+     Recorrente e pontual entram juntas, com os mesmos marcadores da grade da
+     semana. Pedido ainda não aprovado fica fora da grade — ele não reserva
+     nada — e aparece na lista de baixo, com a situação dele. */
+  function todasDisciplinas() {
+    return S.disciplinasDeGraduacao().concat(S.especializacoes());
+  }
+  function disciplinaPadrao() {
+    var eu = S.usuario();
+    var minhas = eu ? S.disciplinasDoProfessor(eu.id) : [];
+    if (minhas.length) return minhas[0].id;
+    var comReserva = todasDisciplinas().filter(function (d) { return S.reservasDaDisciplina(d.id).length; });
+    if (comReserva.length) return comReserva[0].id;
+    var todas = todasDisciplinas();
+    return todas.length ? todas[0].id : null;
+  }
+  function numero(rotulo, valor, apoio) {
+    return C.el('div', { class: 'kpi' }, [
+      C.el('div', { class: 'eyebrow', text: rotulo }),
+      C.el('b', {}, [String(valor), apoio ? C.el('small', { text: apoio }) : null])
+    ]);
+  }
+  function miniBloco(o) {
+    return C.el('button', {
+      class: classeEvento(o, 'mini'), type: 'button',
+      title: o.inicio + '–' + o.fim + ' · ' + S.rotuloEscopo(o.agrupamentoId, o.escopo) + ' · ' +
+        C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' (' + S.textoCadeiras(o.cadeirasLista) + ')' +
+        (o.descricao ? ' · ' + o.descricao : ''),
+      onclick: function () { detalhe(o); }
+    }, [
+      marcasDoBloco(o),
+      C.el('b', { text: o.inicio }),
+      ' ' + S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + ' · ' + o.cadeiras
+    ]);
+  }
+
+  function visaoDisciplina() {
+    if (!discSel || !S.disciplina(discSel)) discSel = disciplinaPadrao();
+    var caixa = C.el('div');
+    if (!discSel) {
+      caixa.appendChild(U.vazio('Nenhuma disciplina cadastrada. A coordenação cadastra em Disciplinas.'));
+      return caixa;
+    }
+    var d = S.disciplina(discSel);
+    var sem = S.estado.semestre || {};
+    var ini = C.dataValida(sem.inicio) ? sem.inicio : C.startOfWeek(C.hojeISO());
+    var fim = C.dataValida(sem.fim) && sem.fim >= ini ? sem.fim : C.addDays(ini, 18 * 7);
+    var hoje = C.hojeISO();
+    var occs = S.ocorrenciasIntervalo(ini, fim).filter(function (o) { return o.disciplinaId === d.id; });
+    var porData = {};
+    var horas = 0, realizados = 0, clinicas = {}, menor = null, maior = null;
+    occs.forEach(function (o) {
+      (porData[o.data] = porData[o.data] || []).push(o);
+      horas += C.duracaoH(o.inicio, o.fim);
+      if (o.data < hoje) realizados++;
+      S.clinicasDoEscopo(o.agrupamentoId, o.escopo).forEach(function (c) { clinicas[c.id] = c.nome; });
+      if (menor === null || o.cadeiras < menor) menor = o.cadeiras;
+      if (maior === null || o.cadeiras > maior) maior = o.cadeiras;
+    });
+    var nomesClinicas = Object.keys(clinicas).map(function (k) { return clinicas[k]; });
+
+    var opcoes = [
+      { grupo: 'Graduação', itens: S.disciplinasDeGraduacao().map(function (x) { return { valor: x.id, rotulo: S.rotuloDisciplinaLongo(x) }; }) },
+      { grupo: 'Pós-graduação', itens: S.especializacoes().map(function (x) { return { valor: x.id, rotulo: S.rotuloDisciplinaLongo(x) }; }) }
+    ];
+    caixa.appendChild(C.el('div', { class: 'filtros' }, [
+      C.el('div', { class: 'filtros-listas' }, [
+        U.selecao(opcoes, d.id, function (v) { discSel = v; global.App.recarregar(); }, { 'aria-label': 'Disciplina' })
+      ])
+    ]));
+
+    var profs = S.professoresDaDisciplina(d).map(S.nomePessoa);
+    caixa.appendChild(C.el('div', { class: 'card', style: 'margin-bottom:26px' }, [
+      C.el('h3', { text: d.nome }),
+      C.el('div', { class: 'muted', style: 'font-size:13px;margin-top:4px',
+        text: (S.ehEspecializacao(d) ? 'Pós-graduação' : (d.codigo || 'Graduação')) + ' · ' +
+          (profs.length ? 'professores: ' + profs.join(', ') : 'nenhum professor vinculado — vincule em Acessos') }),
+      C.el('div', { class: 'kpis', style: 'margin-top:18px' }, [
+        numero('Encontros no semestre', occs.length, realizados ? realizados + ' já realizados' : ''),
+        numero('Horas na agenda', C.fmtHoras(horas).replace(' h', ''), 'h'),
+        numero('Cadeiras por encontro', occs.length ? (menor === maior ? menor : menor + '–' + maior) : '—', ''),
+        numero('Clínicas', nomesClinicas.length, nomesClinicas.length <= 2 ? nomesClinicas.join(' e ') : '')
+      ])
+    ]));
+
+    /* A grade: uma linha por semana do semestre, seg a sáb. */
+    var grade = C.el('div', { class: 'sem-grade' });
+    grade.appendChild(C.el('div', { class: 'sem-linha sem-cab' }, [C.el('div', { class: 'sem-rot' })].concat(
+      [1, 2, 3, 4, 5, 6].map(function (dow) { return C.el('div', { class: 'sem-cel', text: C.nomeDia(dow) }); }))));
+    var semana = C.startOfWeek(ini), guarda = 0;
+    while (semana <= fim && guarda++ < 60) {
+      var linha = C.el('div', { class: 'sem-linha' }, C.el('div', { class: 'sem-rot', text: C.fmtDia(semana) }));
+      for (var i = 0; i < 6; i++) {
+        var dia = C.addDays(semana, i);
+        var fora = dia < ini || dia > fim;
+        var dt = C.parseISO(dia);
+        var cel = C.el('div', {
+          class: 'sem-cel' + (fora ? ' fora' : '') + (dia === hoje ? ' hoje' : '') +
+            (!fora && dia < hoje ? ' passado' : '')
+        }, C.el('span', { class: 'sem-num',
+          text: dt.getDate() === 1 || dia === ini ? dt.getDate() + ' ' + C.MESES[dt.getMonth()].slice(0, 3) : String(dt.getDate()) }));
+        (porData[dia] || []).forEach(function (o) { cel.appendChild(miniBloco(o)); });
+        linha.appendChild(cel);
+      }
+      grade.appendChild(linha);
+      semana = C.addDays(semana, 7);
+    }
+    caixa.appendChild(C.el('div', { class: 'rolagem-x' }, grade));
+    if (!occs.length) {
+      caixa.appendChild(C.el('div', { class: 'muted', style: 'padding:14px 0;font-size:12.5px',
+        text: 'Nenhuma ocupação desta disciplina no semestre.' }));
+    }
+
+    caixa.appendChild(listaDeReservas(d));
+    return caixa;
+  }
+
+  /* As reservas por trás da grade, uma linha por DOCUMENTO: a recorrente
+     aparece uma vez, com os dias; o pedido aparece com a situação dele. */
+  function listaDeReservas(d) {
+    var lista = S.reservasDaDisciplina(d.id).slice().sort(function (a, b) {
+      if (a.tipo !== b.tipo) return a.tipo === 'recorrente' ? -1 : 1;
+      return String(a.data || a.vigenciaInicio).localeCompare(String(b.data || b.vigenciaInicio)) ||
+        C.toMin(a.inicio) - C.toMin(b.inicio);
+    });
+    var caixa = C.el('div', { style: 'margin-top:30px' }, C.el('h5', { text: 'Reservas da disciplina', style: 'margin-bottom:12px' }));
+    if (!lista.length) { caixa.appendChild(U.vazio('Nenhuma reserva desta disciplina.')); return caixa; }
+    var corpo = C.el('tbody');
+    lista.forEach(function (o) {
+      var sit = S.situacaoDe(o);
+      var quando = o.tipo === 'pontual'
+        ? C.nomeDia(C.weekday(o.data)) + ', ' + C.fmtDiaAno(o.data)
+        : C.listaDias(o.dias) + ' · ' + C.fmtDia(o.vigenciaInicio) + ' a ' + C.fmtDia(fimEfetivoDaRegra(o));
+      corpo.appendChild(C.el('tr', { style: sit === 'recusada' ? 'opacity:.55' : '' }, [
+        C.el('td', {}, C.el('span', {
+          class: 'badge ' + (o.tipo === 'pontual' ? 'soft' : 'neutral'),
+          text: o.tipo === 'pontual' ? 'Pontual' : 'Recorrente'
+        })),
+        C.el('td', { style: 'font-size:12.5px', text: quando }),
+        C.el('td', { class: 'num', text: o.inicio + '–' + o.fim }),
+        C.el('td', {}, [marcadorAmbiente(S.ambienteDe(o.agrupamentoId, o.escopo)),
+          ' ' + S.rotuloEscopoCurto(o.agrupamentoId, o.escopo)]),
+        C.el('td', { class: 'num', text: S.ehIntegral(o) ? 'inteira'
+          : S.quantidadeDe(o) + (S.cadeirasDe(o).length ? ' · ' + S.textoCadeiras(S.cadeirasDe(o)) : '') }),
+        C.el('td', { style: 'font-size:12.5px' }, [
+          C.el('div', { text: S.nomePessoa(S.responsavelDe(o)) }),
+          S.descricaoDe(o) ? C.el('div', { class: 'muted', text: S.descricaoDe(o) }) : null
+        ]),
+        C.el('td', {}, sit === 'aprovada' ? null : C.el('span', {
+          class: 'badge ' + (sit === 'pendente' ? 'warn' : 'danger'),
+          text: sit === 'pendente' ? 'aguardando' : 'recusado'
+        }))
+      ]));
+    });
+    caixa.appendChild(C.el('div', { class: 'rolagem-x' }, C.el('table', { class: 'table' }, [
+      C.el('thead', {}, C.el('tr', {}, ['Tipo', 'Quando', 'Horário', 'Onde', 'Cadeiras', 'Professor · descrição', '']
+        .map(function (t) { return C.el('th', { text: t }); }))),
+      corpo
+    ])));
+    return caixa;
+  }
+
   /* ── Detalhe de uma ocorrência ────────────────────────────────────── */
   function detalhe(o) {
     var st = S.statusOcorrencia(o);
     var podeCancelar = podeCancelarOcorrencia(o) && st !== 'encerrada';
-    var faixa = S.faixaEscopo(o.agrupamentoId, o.escopo);
+    var bruta = S.reservaPorId(o.origemId);
+    var podeTrocar = !!bruta && st !== 'encerrada' && S.podeGerirCadeiras(bruta);
+    var d = S.disciplina(o.disciplinaId);
+    var ambientes = { clinica: 'Clínica de atendimento', dupla: 'As duas clínicas do agrupamento', pre: 'Pré-clínica' };
 
     var conteudo = C.el('div', { class: 'stack', style: 'gap:0' }, [
-      U.kv('Agrupamento', S.nomeAgrupamento(o.agrupamentoId)),
-      U.kv('Escopo', S.rotuloEscopo(o.agrupamentoId, o.escopo)),
-      U.kv('Faixa de cadeiras', faixa[1] >= faixa[0] ? C.pad(faixa[0]) + '–' + C.pad(faixa[1]) : '—'),
+      U.kv('Onde', C.el('span', {}, [marcadorAmbiente(o.ambiente), ' ' + S.rotuloEscopo(o.agrupamentoId, o.escopo)])),
+      U.kv('Ambiente', ambientes[o.ambiente] || '—'),
+      /* Quantas e QUAIS: desde 05/10/2026 a reserva não toma mais a clínica
+         inteira, e o número da cadeira é o que diz ao aluno onde sentar. */
+      U.kv('Cadeiras', o.integral
+        ? C.plural(o.cadeiras, 'cadeira') + ' · clínica inteira (reserva anterior à quantidade)'
+        : C.plural(o.cadeiras, 'cadeira') + ' · ' + S.textoCadeiras(o.cadeirasLista)),
       U.kv('Data', C.nomeDia(C.weekday(o.data), true) + ', ' + C.fmtDiaAno(o.data)),
       U.kv('Horário', o.inicio + '–' + o.fim + ' · ' + C.fmtHoras(C.duracaoH(o.inicio, o.fim))),
-      U.kv('Tipo', o.origem === 'recorrente'
-        ? 'Aula recorrente do semestre'
-        : S.rotuloTipoAtividade(o.tipoAtividade) + ' · ocorrência única'),
-      o.turmaId ? U.kv('Turma', S.rotuloTurmaLongo(S.turma(o.turmaId))) : null,
+      U.kv('Tipo', C.el('span', {}, [marcasDoBloco(o), ' ' + (o.origem === 'recorrente'
+        ? 'Aula recorrente do semestre · ' + S.rotuloTipoAtividade(o.nivel)
+        : S.rotuloTipoAtividade(o.tipoAtividade) + ' · ocorrência única')])),
+      U.kv(o.nivel === 'pos' ? 'Especialização' : 'Disciplina',
+        d ? S.rotuloDisciplinaLongo(d) : (o.disciplinaId ? 'Disciplina removida' : 'Outros')),
       U.kv('Professor coordenador', S.nomePessoa(o.responsavelId)),
-      U.kv('Cadeiras', C.plural(o.cadeiras, 'cadeira') + ' de ' +
-        S.cadeirasOperantesEscopo(o.agrupamentoId, o.escopo) + ' operantes'),
       U.kv('Situação', U.badgeStatus(st)),
       /* Ocupação gravada antes de 17/09/2026 tem título escrito à mão. O
-         nome exibido agora é derivado do tipo e da turma, então o texto
+         nome exibido agora é derivado do tipo e da disciplina, então o texto
          original só sobrevive aqui — some da tela se não for mostrado. */
       o.tituloOriginal ? U.kv('Título original', o.tituloOriginal) : null,
-      o.descricao ? C.el('div', { style: 'padding:16px 0 0;font-size:13.5px;line-height:1.6' }, o.descricao) : null
+      o.descricao ? C.el('div', { style: 'padding:16px 0 0' }, [
+        C.el('span', { class: 'eyebrow', style: 'display:block;margin-bottom:6px', text: 'Descrição/Turma' }),
+        C.el('div', { style: 'font-size:13.5px;line-height:1.6', text: o.descricao })
+      ]) : null
     ]);
 
     U.modal({
@@ -905,7 +1258,6 @@
           class: 'btn btn-danger', style: 'margin-right:auto',
           text: o.origem === 'recorrente' ? 'Excluir recorrência' : 'Excluir reserva',
           onclick: function () {
-            var bruta = S.reservaPorId(o.origemId);
             if (!bruta) { C.toast('Reserva não encontrada.'); return; }
             U.fecharModal();
             excluirReserva(bruta);
@@ -914,6 +1266,12 @@
         podeCancelar ? C.el('button', {
           class: 'btn btn-outline', text: 'Cancelar ocupação',
           onclick: function () { U.fecharModal(); cancelar(o, function () { global.App.recarregar(); }); }
+        }) : null,
+        /* Troca vale para a reserva inteira — todas as datas — porque a
+           alocação é uma só. O seletor diz isso. */
+        podeTrocar ? C.el('button', {
+          class: 'btn btn-outline', text: 'Alterar cadeiras',
+          onclick: function () { global.Cadeiras.escolher(bruta, function () { global.App.recarregar(); }); }
         }) : null,
         C.el('button', {
           class: 'btn btn-primary', text: 'Ver cadeiras',

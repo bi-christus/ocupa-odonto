@@ -73,11 +73,10 @@
         text: 'semestre ' + e.periodoLetivo + ' · semana de ' + C.fmtDia(seg) + ' a ' + C.fmtDia(fim) })
     ])));
 
-    var vinculos = e.turmas.reduce(function (s, t) { return s + t.alunos.length; }, 0);
-
     /* Quarto elemento: a permissão exigida. O pop() antigo só removia o
        último cartão — o técnico de manutenção continuava baixando o
-       cadastro nominal de todo o corpo discente.
+       cadastro nominal de todo o corpo discente. (O cadastro de alunos saiu
+       com a turma em 05/10/2026; o cartão dele virou o de disciplinas.)
        Quinto, quando existe: a versão impressa. CSV é o formato de quem vai
        recalcular; PDF é o de quem vai pendurar na parede da clínica ou levar
        para a reunião — e por isso ele sai desenhado como a aba Agenda, não
@@ -91,10 +90,10 @@
       ['Agenda da semana', C.plural(S.ocorrenciasIntervalo(seg, fim).length, 'registro'),
         function () { csvSemana(seg); }, 'relatorios.ver',
         function () { pdfSemana(seg); }],
-      ['Recorrências do semestre', C.plural(e.recorrencias.length, 'regra'),
+      ['Recorrências do semestre', C.plural(S.recorrenciasAtivas().length, 'regra'),
         csvRecorrencias, 'relatorios.ver', pdfRecorrencias],
-      ['Disciplinas e alunos', C.plural(vinculos, 'vínculo'),
-        csvAlunos, 'relatorios.pessoas'],
+      ['Disciplinas e professores', C.plural(e.disciplinas.length, 'disciplina'),
+        csvDisciplinas, 'relatorios.ver'],
       ['Manutenção', C.plural(e.manutencoes.length, 'registro'),
         csvManutencao, 'relatorios.ver'],
       ['Controle de acessos', C.plural(e.usuarios.length, 'pessoa'),
@@ -123,24 +122,32 @@
     }
 
     alvo.appendChild(C.el('section', { style: 'margin-top:44px' }, semanal(seg)));
-    alvo.appendChild(C.el('section', { style: 'margin-top:44px' }, horasPorTurma(seg)));
+    alvo.appendChild(C.el('section', { style: 'margin-top:44px' }, horasPorDisciplina(seg)));
     alvo.appendChild(C.el('section', { style: 'margin-top:44px' }, resumoManutencao()));
   }
 
   /* ── Matriz clínica × dia ─────────────────────────────────────────────
      Uma ocupação de escopo duplo conta as horas nas DUAS clínicas: o
      filtro por clínica do Store já devolve a ocorrência para cada uma
-     delas, porque o teste é de cobertura e não de igualdade. */
+     delas, porque o teste é de cobertura e não de igualdade.
+     Desde 05/10/2026 a clínica pode ter várias reservas ao mesmo tempo, e
+     as duas medidas se separam: HORAS de uso (a união dos horários, para a
+     mesma hora não contar duas vezes) e OCUPAÇÃO, em cadeira·hora sobre a
+     capacidade — uma turma de 7 numa clínica de 14 a manhã inteira usa a
+     manhã toda, mas ocupa metade. */
   function matrizSemanal(seg) {
-    var dias = diasDaSemana(seg);
+    var dias = diasDaSemana(seg), CAP = capacidadeSemanal();
+    var ch = {};
+    S.cadeirasHoraPorClinica(seg).forEach(function (x) { ch[x.clinica.id] = x.cadeirasHora; });
     return S.estado.clinicas.map(function (c) {
-      var porDia = dias.map(function (d) {
-        var h = 0;
-        S.ocorrenciasDoDia(d, c.id).forEach(function (o) { h += C.duracaoH(o.inicio, o.fim); });
-        return h;
-      });
+      var porDia = dias.map(function (d) { return S.horasDeUso(S.ocorrenciasDoDia(d, c.id)); });
       var total = porDia.reduce(function (a, b) { return a + b; }, 0);
-      return { clinica: c, dias: porDia, total: total, interditadas: numerosInterditados(c.id) };
+      var capCh = CAP * c.cadeiras;
+      return {
+        clinica: c, dias: porDia, total: total, cadeirasHora: ch[c.id] || 0,
+        ocupacao: capCh ? (ch[c.id] || 0) / capCh : 0,
+        interditadas: numerosInterditados(c.id)
+      };
     });
   }
 
@@ -158,6 +165,13 @@
 
   function textoInterditadas(nums) {
     return nums.map(function (n) { return C.pad(n); }).join(', ');
+  }
+
+  /* Cadeira·hora do polo sobre a capacidade somada de todas as cadeiras. */
+  function ocupacaoDoPolo(matriz, CAP) {
+    var ch = 0, cap = 0;
+    matriz.forEach(function (m) { ch += m.cadeirasHora; cap += CAP * m.clinica.cadeiras; });
+    return cap ? ch / cap : 0;
   }
 
   function semanal(seg) {
@@ -189,10 +203,10 @@
         }));
       });
       celulas.push(C.el('td', { class: 'num right', style: totTd, text: Math.round(m.total) + ' h' }));
-      /* 'Ocup.' é percentual da capacidade da clínica, não horas. */
+      /* 'Ocup.' é cadeira·hora sobre a capacidade da clínica, não horas. */
       celulas.push(C.el('td', {
         class: 'num right', style: 'color:var(--accent-ink)',
-        text: Math.round(m.total / CAP * 100) + '%'
+        text: Math.round(m.ocupacao * 100) + '%'
       }));
       celulas.push(C.el('td', {
         class: 'num right' + (m.interditadas.length ? '' : ' muted'),
@@ -206,7 +220,7 @@
     });
     var totalGeral = totaisDia.reduce(function (a, b) { return a + b; }, 0);
     var interditadasPolo = matriz.reduce(function (s, m) { return s + m.interditadas.length; }, 0);
-    var capPolo = CAP * (e.clinicas.length || 1);
+    var ocupacaoPolo = ocupacaoDoPolo(matriz, CAP);
 
     var linhaPolo = [C.el('td', { style: totTd, text: 'Polo' })];
     totaisDia.forEach(function (h) {
@@ -214,7 +228,7 @@
     });
     linhaPolo.push(C.el('td', { class: 'num right', style: totTd, text: Math.round(totalGeral) + ' h' }));
     linhaPolo.push(C.el('td', { class: 'num right', style: totTd,
-      text: Math.round(totalGeral / capPolo * 100) + '%' }));
+      text: Math.round(ocupacaoPolo * 100) + '%' }));
     linhaPolo.push(C.el('td', { class: 'num right', style: totTd,
       text: C.plural(interditadasPolo, 'cadeira') }));
     corpo.appendChild(C.el('tr', {}, linhaPolo));
@@ -231,7 +245,7 @@
         })
         : null,
       C.el('span', { class: 'muted', style: 'font-size:12px',
-        text: 'Horas por dia · capacidade de ' + CAP + ' h por clínica na semana (' +
+        text: 'Horas de uso por dia · ocupação em cadeira·hora sobre ' + CAP + ' h por cadeira na semana (' +
           janelaTexto() + ', seg a sáb)' })
     ]);
 
@@ -249,9 +263,9 @@
     ]);
   }
 
-  /* ── Horas por turma ──────────────────────────────────────────────── */
-  function horasPorTurma(seg) {
-    var dados = S.horasPorTurma(seg).filter(function (d) { return d.horas > 0; });
+  /* ── Horas por disciplina ─────────────────────────────────────────── */
+  function horasPorDisciplina(seg) {
+    var dados = S.horasPorDisciplina(seg).filter(function (d) { return d.horas > 0; });
     /* Escala absoluta: a capacidade semanal de uma clínica. Normalizar pelo
        maior valor da série fazia a disciplina mais ocupada parecer sempre
        lotada, qualquer que fosse a carga real. */
@@ -259,19 +273,18 @@
 
     var tabela = C.el('table', { class: 'table' }, [
       C.el('thead', {}, C.el('tr', {}, [
-        C.el('th', { text: 'Disciplina' }), C.el('th', { text: 'Professor coordenador' }),
-        C.el('th', { text: 'Horas' }), C.el('th', { text: 'Alunos' }), C.el('th', { text: '' })
+        C.el('th', { text: 'Disciplina' }), C.el('th', { text: 'Professores' }),
+        C.el('th', { text: 'Horas' }), C.el('th', { text: '' })
       ]))
     ]);
     var corpo = C.el('tbody');
-    dados.forEach(function (d) {
-      var t = d.turma;
+    dados.forEach(function (x) {
+      var d = x.disciplina;
       corpo.appendChild(C.el('tr', {}, [
-        C.el('td', { text: S.rotuloTurmaLongo(t) }),
-        C.el('td', { text: S.nomePessoa(t.professorCoordenadorId) }),
-        C.el('td', { class: 'num', style: 'width:78px', text: C.fmtHoras(d.horas) }),
-        C.el('td', { class: 'num', style: 'width:70px', text: String(t.alunos.length) }),
-        C.el('td', { style: 'width:190px' }, U.barra(d.horas, CAP))
+        C.el('td', { text: S.rotuloDisciplinaLongo(d) }),
+        C.el('td', { text: S.professoresDaDisciplina(d).map(S.nomePessoa).join(', ') || '—' }),
+        C.el('td', { class: 'num', style: 'width:78px', text: C.fmtHoras(x.horas) }),
+        C.el('td', { style: 'width:190px' }, U.barra(x.horas, CAP))
       ]));
     });
     tabela.appendChild(corpo);
@@ -346,7 +359,7 @@
 
     var cab = ['Agrupamento', 'Clínica', 'Especialidade', 'Faixa de cadeiras'];
     dias.forEach(function (d) { cab.push(C.nomeDia(C.weekday(d)) + ' ' + C.fmtDia(d)); });
-    cab = cab.concat(['Total h', 'Ocupação %', 'Cadeiras em manutenção', 'Números em manutenção']);
+    cab = cab.concat(['Horas de uso', 'Cadeiras·hora', 'Ocupação %', 'Cadeiras em manutenção', 'Números em manutenção']);
 
     var linhas = [cab];
     matriz.forEach(function (m) {
@@ -355,7 +368,8 @@
         S.faixaCadeiras(c.id).join('–')];
       m.dias.forEach(function (h) { linha.push(decimal(h)); });
       linha.push(decimal(m.total));
-      linha.push(Math.round(m.total / CAP * 100) + '%');
+      linha.push(decimal(m.cadeirasHora));
+      linha.push(Math.round(m.ocupacao * 100) + '%');
       linha.push(m.interditadas.length);
       linha.push(textoInterditadas(m.interditadas));
       linhas.push(linha);
@@ -365,13 +379,13 @@
       return matriz.reduce(function (s, m) { return s + m.dias[i]; }, 0);
     });
     var totalGeral = totaisDia.reduce(function (a, b) { return a + b; }, 0);
-    var capPolo = CAP * (S.estado.clinicas.length || 1);
     /* Sem faixa na linha do polo: a numeração não é mais contínua de ponta a
        ponta — cada pré-clínica recomeça no 1. A faixa vive na linha da clínica. */
     var totais = ['Polo', '', '', ''];
     totaisDia.forEach(function (h) { totais.push(decimal(h)); });
     totais.push(decimal(totalGeral));
-    totais.push(Math.round(totalGeral / capPolo * 100) + '%');
+    totais.push(decimal(matriz.reduce(function (s, m) { return s + m.cadeirasHora; }, 0)));
+    totais.push(Math.round(ocupacaoDoPolo(matriz, CAP) * 100) + '%');
     totais.push(matriz.reduce(function (s, m) { return s + m.interditadas.length; }, 0));
     totais.push('');
     linhas.push(totais);
@@ -383,27 +397,33 @@
   function csvClinicas(seg) {
     if (barrado('relatorios.consolidado')) return;
     var fim = S.fimDaSemana(seg);
+    var CAP = capacidadeSemanal();
     var linhas = [['Agrupamento', 'Clínica', 'Especialidade', 'Faixa de cadeiras', 'Cadeiras',
-      'Operantes', 'Em manutenção', 'Números em manutenção', 'Horas na semana',
-      'Ocupações na semana']];
-    var somaHoras = 0, somaOcup = 0, somaCadeiras = 0, somaOperantes = 0, somaManut = 0;
+      'Operantes', 'Em manutenção', 'Números em manutenção', 'Horas de uso na semana',
+      'Cadeiras·hora reservadas', 'Ocupação das cadeiras %', 'Ocupações na semana']];
+    var somaHoras = 0, somaOcup = 0, somaCadeiras = 0, somaOperantes = 0, somaManut = 0, somaCh = 0;
+    var ch = {};
+    S.cadeirasHoraPorClinica(seg).forEach(function (x) { ch[x.clinica.id] = x.cadeirasHora; });
 
     S.horasPorClinica(seg).forEach(function (d) {
       var c = d.clinica;
       var nums = numerosInterditados(c.id);
       var ocupacoes = S.ocorrenciasIntervalo(seg, fim, c.id).length;
-      somaHoras += d.horas; somaOcup += ocupacoes;
+      var cadh = ch[c.id] || 0;
+      somaHoras += d.horas; somaOcup += ocupacoes; somaCh += cadh;
       somaCadeiras += c.cadeiras; somaOperantes += S.cadeirasOperantes(c.id); somaManut += nums.length;
       linhas.push([
         S.nomeAgrupamento(c.agrupamentoId), c.nome, c.especialidade,
         S.faixaCadeiras(c.id).join('–'), c.cadeiras, S.cadeirasOperantes(c.id),
-        nums.length, textoInterditadas(nums), decimal(d.horas), ocupacoes
+        nums.length, textoInterditadas(nums), decimal(d.horas),
+        decimal(cadh), Math.round(c.cadeiras ? cadh / (CAP * c.cadeiras) * 100 : 0) + '%', ocupacoes
       ]);
     });
     /* A soma de ocupações do polo conta a ocupação conjunta duas vezes —
        uma por clínica — porque a linha da clínica também conta. */
     linhas.push(['Polo', '', '', '',
-      somaCadeiras, somaOperantes, somaManut, '', decimal(somaHoras), somaOcup]);
+      somaCadeiras, somaOperantes, somaManut, '', decimal(somaHoras), decimal(somaCh),
+      Math.round(somaCadeiras ? somaCh / (CAP * somaCadeiras) * 100 : 0) + '%', somaOcup]);
 
     C.baixarCSV('ocupacao-por-clinica.csv', linhas);
     C.toast('Relatório exportado.');
@@ -411,20 +431,25 @@
 
   function csvSemana(seg) {
     if (barrado('relatorios.ver')) return;
-    /* Duas colunas de cadeira, e a diferença importa: "Cadeiras reservadas" é
-       o escopo inteiro, porque reserva virou integral; "Cadeiras em uso" é
-       quanto o professor registrou de fato. É a segunda que mede ocupação —
-       a primeira é sempre 14 ou 28 e não diz nada sozinha. */
-    var linhas = [['Data', 'Dia', 'Agrupamento', 'Escopo', 'Início', 'Fim', 'Horas', 'Tipo',
-      'Título', 'Turma', 'Professor coordenador', 'Cadeiras reservadas', 'Cadeiras em uso']];
+    /* "Cadeiras" é a quantidade que a reserva segura — desde 05/10/2026 é
+       ela que mede ocupação, porque a alocação já marca as cadeiras em uso —
+       e "Números" diz quais. Na reserva anterior à quantidade, a clínica
+       inteira. A turma vem dentro da descrição, que é onde ela é escrita. */
+    var linhas = [['Data', 'Dia', 'Agrupamento', 'Escopo', 'Ambiente', 'Início', 'Fim', 'Horas', 'Tipo',
+      'Nível', 'Título', 'Disciplina', 'Descrição/Turma', 'Professor coordenador', 'Cadeiras', 'Números das cadeiras']];
+    var ambientes = { clinica: 'Clínica', dupla: 'Duas clínicas', pre: 'Pré-clínica' };
     S.ocorrenciasIntervalo(seg, S.fimDaSemana(seg)).forEach(function (o) {
+      var d = S.disciplina(o.disciplinaId);
       linhas.push([
         C.fmtDiaAno(o.data), C.nomeDia(C.weekday(o.data), true),
         S.nomeAgrupamento(o.agrupamentoId), S.rotuloEscopo(o.agrupamentoId, o.escopo),
+        ambientes[o.ambiente] || '',
         o.inicio, o.fim, decimal(C.duracaoH(o.inicio, o.fim)),
         o.origem === 'recorrente' ? 'Recorrente' : 'Pontual',
-        o.titulo, o.turmaId ? S.rotuloTurma(S.turma(o.turmaId)) : '',
-        S.nomePessoa(o.responsavelId), o.cadeiras, S.atribuicoesDa(o.chave).length
+        S.rotuloTipoAtividade(o.nivel),
+        o.titulo, d ? S.rotuloDisciplinaLongo(d) : '', o.descricao,
+        S.nomePessoa(o.responsavelId), o.cadeiras,
+        o.integral ? 'clínica inteira' : S.textoCadeiras(o.cadeirasLista)
       ]);
     });
     C.baixarCSV('agenda-da-semana.csv', linhas);
@@ -453,10 +478,11 @@
 
   function csvRecorrencias() {
     if (barrado('relatorios.ver')) return;
-    var linhas = [['Turma', 'Disciplina', 'Professor coordenador', 'Agrupamento', 'Escopo', 'Dias',
-      'Início', 'Fim', 'Cadeiras reservadas', 'Vigência início', 'Vigência fim', 'Encontros', 'Exceções']];
+    var linhas = [['Código', 'Disciplina', 'Nível', 'Descrição/Turma', 'Professor coordenador', 'Agrupamento',
+      'Escopo', 'Dias', 'Início', 'Fim', 'Cadeiras', 'Números das cadeiras', 'Vigência início',
+      'Vigência fim', 'Encontros', 'Exceções']];
     S.recorrenciasAtivas().forEach(function (r) {
-      var t = S.turma(r.turmaId), d = S.disciplinaDaTurma(t);
+      var d = S.disciplinaDe(r);
       var fim = fimEfetivoDaRegra(r);
       /* Só conta a exceção que cai dentro da vigência efetiva: subtrair o
          total de exceções da contagem podia devolver negativo em regra
@@ -467,11 +493,14 @@
           return true;
         })
         : [];
+      /* Pela guarda de `d`: disciplina apagada por fora não pode derrubar a
+         exportação inteira. */
       linhas.push([
-        d.codigo + ' ' + t.codigo, d.nome, S.nomePessoa(t.professorCoordenadorId),
+        d ? (d.codigo || '') : '', d ? d.nome : 'Sem disciplina', S.rotuloTipoAtividade(S.nivelDe(r)),
+        S.descricaoDe(r), S.nomePessoa(S.responsavelDe(r)),
         S.nomeAgrupamento(r.agrupamentoId), S.rotuloEscopo(r.agrupamentoId, r.escopo),
         C.listaDias(r.dias), r.inicio, r.fim,
-        S.capacidadeEscopo(r.agrupamentoId, r.escopo),
+        S.quantidadeDe(r), S.ehIntegral(r) ? 'clínica inteira' : S.textoCadeiras(S.cadeirasDe(r)),
         C.fmtDiaAno(r.vigenciaInicio), C.fmtDiaAno(fim),
         datas.length,
         r.excecoes.length
@@ -481,17 +510,35 @@
     C.toast('Relatório exportado.');
   }
 
-  function csvAlunos() {
-    if (barrado('relatorios.pessoas')) return;
-    var linhas = [['Disciplina', 'Código', 'Turma', 'Professor coordenador', 'Aluno', 'Matrícula', 'Período']];
-    S.estado.turmas.forEach(function (t) {
-      var d = S.disciplinaDaTurma(t);
-      t.alunos.map(S.aluno).filter(Boolean).forEach(function (a) {
-        linhas.push([d.nome, d.codigo, t.codigo, S.nomePessoa(t.professorCoordenadorId),
-          a.nome, a.matricula, a.periodo + 'º']);
+  /* Substituiu "Disciplinas e alunos" em 05/10/2026: o vínculo de alunos
+     saiu com a turma. Uma linha por disciplina, com quem responde por ela e
+     o quanto ela ocupa no semestre. */
+  function csvDisciplinas() {
+    if (barrado('relatorios.ver')) return;
+    var s = S.estado.semestre || {};
+    var uso = {};
+    if (C.dataValida(s.inicio) && C.dataValida(s.fim)) {
+      S.ocorrenciasIntervalo(s.inicio, s.fim).forEach(function (o) {
+        if (!o.disciplinaId) return;
+        var u = uso[o.disciplinaId] || (uso[o.disciplinaId] = { encontros: 0, horas: 0 });
+        u.encontros++;
+        u.horas += C.duracaoH(o.inicio, o.fim);
       });
+    }
+    var linhas = [['Nível', 'Código', 'Nome', 'Professores', 'Recorrências', 'Pontuais',
+      'Encontros no semestre', 'Horas no semestre']];
+    S.disciplinasDeGraduacao().concat(S.especializacoes()).forEach(function (d) {
+      var reservas = S.reservasDaDisciplina(d.id);
+      var u = uso[d.id] || { encontros: 0, horas: 0 };
+      linhas.push([
+        S.ehEspecializacao(d) ? 'Pós-graduação' : 'Graduação', d.codigo || '', d.nome,
+        S.professoresDaDisciplina(d).map(S.nomePessoa).join(', '),
+        reservas.filter(function (o) { return o.tipo === 'recorrente'; }).length,
+        reservas.filter(function (o) { return o.tipo === 'pontual'; }).length,
+        u.encontros, decimal(u.horas)
+      ]);
     });
-    C.baixarCSV('disciplinas-e-alunos.csv', linhas);
+    C.baixarCSV('disciplinas-e-professores.csv', linhas);
     C.toast('Relatório exportado.');
   }
 
@@ -530,10 +577,11 @@
 
   function csvAcessos() {
     if (barrado('acessos.ver')) return;
-    var linhas = [['Nome', 'E-mail', 'Nível de acesso', 'Situação', 'Turmas', 'Último acesso', 'Permissões']];
+    var linhas = [['Nome', 'E-mail', 'Nível de acesso', 'Situação', 'Disciplinas', 'Último acesso', 'Permissões']];
     S.estado.usuarios.forEach(function (u) {
       linhas.push([u.nome, u.email, A.nomePerfil(u.perfil), u.ativo ? 'ativo' : 'suspenso',
-        S.turmasDoProfessor(u.id).length, u.ultimoAcesso ? C.fmtCarimbo(u.ultimoAcesso) : '',
+        S.disciplinasDoProfessor(u.id).map(S.rotuloDisciplina).join(', '),
+        u.ultimoAcesso ? C.fmtCarimbo(u.ultimoAcesso) : '',
         A.permissoesDe(u.perfil).length]);
     });
     C.baixarCSV('controle-de-acessos.csv', linhas);

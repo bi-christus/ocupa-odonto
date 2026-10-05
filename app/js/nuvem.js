@@ -23,16 +23,24 @@
     appId: '1:771816455765:web:42339758c221bea6ee1edc'
   };
 
-  /* Coleções carregadas inteiras no boot. O volume é pequeno — 4
-     agrupamentos, 8 clínicas, um semestre de ocupações — então cabe tudo em
-     memória e as leituras do store seguem síncronas. */
+  /* Coleções carregadas inteiras no boot. O volume é pequeno — 6
+     agrupamentos, 10 clínicas, um semestre de ocupações — então cabe tudo em
+     memória e as leituras do store seguem síncronas.
+     `turmas` e `alunos` não têm mais tela desde 05/10/2026, mas continuam
+     sendo lidas: a reserva gravada antes disso aponta para a TURMA, e é dela
+     que sai a disciplina e o professor até a limpeza do cadastro gravar os
+     dois na própria reserva; o nome de aluno das atribuições antigas sai de
+     `alunos`. `matriculas` saiu da leitura junto com o vínculo de alunos. */
   var COLECOES = [
     'agrupamentos', 'clinicas', 'autorizados', 'disciplinas', 'turmas',
-    'alunos', 'matriculas', 'ocupacoes', 'manutencoes', 'atribuicoes'
+    'alunos', 'ocupacoes', 'manutencoes', 'atribuicoes'
   ];
 
-  /* Coleções que mudam pela mão de outras pessoas e por isso são assinadas. */
-  var VIVAS = ['ocupacoes', 'manutencoes', 'autorizados', 'atribuicoes', 'matriculas'];
+  /* Coleções que mudam pela mão de outras pessoas e por isso são assinadas.
+     `disciplinas` entrou em 05/10/2026: é nela que mora o vínculo do
+     professor, e um professor recém-vinculado precisa ver a disciplina no
+     formulário sem recarregar a página. */
+  var VIVAS = ['ocupacoes', 'manutencoes', 'autorizados', 'atribuicoes', 'disciplinas'];
 
   var auth = null, db = null, pronto = false;
   var cancelamentos = [];
@@ -154,7 +162,12 @@
      centenas de linhas de {id, escopo, dias, inicio, fim, vigencia}.
 
      `validar(indice)` é do store e devolve null quando pode gravar, ou a
-     mensagem do choque quando não pode. */
+     mensagem do choque quando não pode. Ele também pode COMPLETAR `dados` e
+     `resumoParaIndice` antes da gravação — é assim que as cadeiras da
+     reserva são escolhidas dentro da transação, contra o índice que acabou
+     de ser lido, e não contra o cache, que pode estar atrasado. Se o
+     Firestore repetir a transação por disputa, validar roda de novo e
+     escolhe de novo. */
   function gravarOcupacao(agrupamentoId, ocupacaoId, dados, validar, resumoParaIndice) {
     var refIndice = db.collection('indices').doc(String(agrupamentoId));
     var refOcup = db.collection('ocupacoes').doc(String(ocupacaoId));

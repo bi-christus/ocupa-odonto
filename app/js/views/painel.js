@@ -1,9 +1,9 @@
 /* views/painel.js — visão geral do dia e registro de ocupações.
-   O polo tem 4 agrupamentos de 2 clínicas: 8 clínicas e 112 cadeiras, com
-   numeração própria por clínica — contínua de 1 a 112 nas de atendimento,
-   do 1 em cada pré-clínica. Uma ocupação pertence a um agrupamento e
-   tem escopo 'a', 'b' ou 'ambas' — por isso a lista do dia rotula pelo
-   escopo, e não pelo nome de uma clínica só. */
+   O polo tem 6 agrupamentos: quatro de 2 clínicas de atendimento e as duas
+   pré-clínicas, com numeração própria por clínica — contínua de 1 a 112 nas
+   de atendimento, do 1 em cada pré-clínica. Uma ocupação pertence a um
+   agrupamento e tem escopo 'a', 'b' ou 'ambas' — por isso a lista do dia
+   rotula pelo escopo, e não pelo nome de uma clínica só. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI;
@@ -74,9 +74,19 @@
       var sit = S.situacaoDe(p);
       corpo.appendChild(C.el('tr', { style: sit === 'recusada' ? 'opacity:.6' : '' }, [
         C.el('td', { style: 'white-space:nowrap', text: C.fmtDiaAno(p.data) + ' · ' + p.inicio + '–' + p.fim }),
-        C.el('td', { text: S.rotuloEscopo(p.agrupamentoId, p.escopo) }),
+        /* A quantidade vai junto do lugar: é ela que a aprovação vai tentar
+           alocar, e é por ela que dois pedidos no mesmo horário podem caber
+           os dois — ou não. */
+        C.el('td', {}, [
+          C.el('div', { text: S.rotuloEscopoCurto(p.agrupamentoId, p.escopo) }),
+          C.el('small', { class: 'muted', style: 'display:block', text: S.ehIntegral(p)
+            ? 'clínica inteira' : C.plural(S.quantidadeDe(p), 'cadeira', 'cadeiras') })
+        ]),
         C.el('td', {}, [
           C.el('div', { text: S.rotuloPedido(p) }),
+          S.descricaoDe(p)
+            ? C.el('small', { class: 'muted', style: 'display:block', text: S.descricaoDe(p) })
+            : null,
           p.motivoRecusa
             ? C.el('small', { class: 'muted', style: 'display:block', text: 'Motivo: ' + p.motivoRecusa })
             : null
@@ -120,7 +130,9 @@
      mensagem do choque vem do próprio store pelo toast. */
   function aprovarPedido(p) {
     S.aprovarPedido(p.id).then(function (r) {
-      if (r && r.ok) C.toast('Pedido aprovado · ' + S.rotuloPedido(p) + '.');
+      if (r && r.ok) {
+        C.toast('Pedido aprovado · ' + S.rotuloPedido(p) + ' · cadeiras ' + S.textoCadeiras(S.cadeirasDe(p)) + '.');
+      }
       global.App.recarregar();
     });
   }
@@ -231,8 +243,11 @@
     ]));
     secao.appendChild(lista);
 
-    /* Select com as 4 opções de agrupamento e, dentro de cada uma, as duas
-       clínicas. Montado à mão porque UI.selecao não faz optgroup. */
+    /* Select com os agrupamentos e, dentro de cada um, as clínicas. Só o
+       NOME da clínica: a especialidade ao lado do nome passava por nome de
+       disciplina, e saiu de todos os seletores de clínica em 05/10/2026. O
+       agrupamento de uma clínica só (as pré-clínicas) não ganha a opção
+       "as duas", que ali não existe. */
     function seletorLocal(aoMudar) {
       var s = C.el('select', {
         class: 'input',
@@ -241,16 +256,18 @@
       });
       s.appendChild(C.el('option', { value: '', text: 'Todas as clínicas', selected: true }));
       (S.estado.agrupamentos || []).forEach(function (g) {
+        var cls = S.clinicasDoAgrupamento(g.id);
+        if (cls.length === 1) {
+          s.appendChild(C.el('option', { value: 'cl:' + cls[0].id, text: cls[0].nome }));
+          return;
+        }
         var grupo = C.el('optgroup', { label: g.nome });
         grupo.appendChild(C.el('option', {
           value: 'ag:' + g.id,
           text: g.nome + ' · as duas'
         }));
-        S.clinicasDoAgrupamento(g.id).forEach(function (c) {
-          grupo.appendChild(C.el('option', {
-            value: 'cl:' + c.id,
-            text: c.nome + ' · ' + c.especialidade
-          }));
+        cls.forEach(function (c) {
+          grupo.appendChild(C.el('option', { value: 'cl:' + c.id, text: c.nome }));
         });
         s.appendChild(grupo);
       });
@@ -305,10 +322,13 @@
           (st === 'encerrada' ? 'opacity:.6' : '')
       }, [
         C.el('div', { style: 'min-width:0;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap' }, [
+          /* O mesmo marcador de ambiente da agenda, e o nome curto: o longo
+             traz a capacidade do escopo entre parênteses, que ao lado das
+             cadeiras DA RESERVA leria como se fosse a quantidade dela. */
           C.el('span', {
-            style: 'font:600 14px var(--font-heading);letter-spacing:.02em;min-width:150px',
-            text: S.rotuloEscopo(o.agrupamentoId, o.escopo)
-          }),
+            style: 'font:600 14px var(--font-heading);letter-spacing:.02em;min-width:150px'
+          }, [C.el('i', { class: 'sw amb-' + o.ambiente, 'aria-hidden': 'true' }), ' ' +
+            S.rotuloEscopoCurto(o.agrupamentoId, o.escopo)]),
           C.el('span', {
             class: 'num', style: 'font-size:13px;color:var(--accent-ink);min-width:96px',
             text: o.inicio + '–' + o.fim
@@ -321,7 +341,9 @@
                  pontual sem turma — sem a guarda sobraria um ' · ' solto. */
               text: (o.subtitulo ? ' · ' + o.subtitulo : '') +
                 ' · ' + S.nomePessoa(o.responsavelId) +
-                ' · ' + C.plural(o.cadeiras, 'cadeira', 'cadeiras')
+                ' · ' + C.plural(o.cadeiras, 'cadeira', 'cadeiras') +
+                (o.integral ? '' : ' (' + S.textoCadeiras(o.cadeirasLista) + ')') +
+                (o.descricao ? ' · ' + o.descricao : '')
             })
           ]),
           C.el('span', {
@@ -329,6 +351,7 @@
             text: o.origem === 'recorrente' ? 'Recorrente' : 'Pontual'
           }),
           conjunta ? C.el('span', { class: 'badge conjunta', text: 'Conjunta' }) : null,
+          o.nivel === 'pos' ? C.el('span', { class: 'badge soft', text: 'Pós' }) : null,
           U.badgeStatus(st)
         ]),
         C.el('div', { style: 'display:flex;gap:6px;flex:none' }, [
@@ -349,10 +372,11 @@
   }
 
   /* ── Horas por clínica ──────────────────────────────────────────────
-     São as 8 clínicas, como no mockup. A barra é medida contra a
+     Todas as clínicas, pré-clínicas incluídas. A barra é medida contra a
      capacidade real da semana (parametros.capacidadeSemanalH), e não
      contra o maior valor da série — normalizar pelo maior fazia a clínica
-     mais ocupada parecer sempre lotada. */
+     mais ocupada parecer sempre lotada. As horas são de USO da clínica: duas
+     reservas ao mesmo tempo contam a hora uma vez só. */
   function horasPorClinica(seg) {
     var dados = S.horasPorClinica(seg);
     var cap = (S.estado.parametros && S.estado.parametros.capacidadeSemanalH) || 60;

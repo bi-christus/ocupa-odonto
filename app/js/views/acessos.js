@@ -6,7 +6,12 @@
    Com a lista no Firestore isso mudou — o que é gravado aqui vale para todo
    mundo, imediatamente. A concessão voltou. Quem garante que só o
    coordenador escreve são as Security Rules: a interface esconde o botão,
-   mas é o servidor que recusa. */
+   mas é o servidor que recusa.
+
+   Desde 05/10/2026 é também aqui que o professor é ligado às DISCIPLINAS
+   dele — o vínculo que antes passava pela turma com código. Ele é gravado
+   na disciplina (`professores`), não no documento de `autorizados`: a regra
+   de `autorizados` é por campo, e a de `disciplinas` já é da coordenação. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI, A = global.Acesso;
@@ -75,16 +80,17 @@
     }
 
     if (!lista.length) {
-      caixa.appendChild(U.vazio('Nenhuma pessoa autorizada. O sistema esta inacessivel.'));
+      caixa.appendChild(U.vazio('Nenhuma pessoa autorizada. O sistema está inacessível.'));
       return caixa;
     }
 
     var tabela = C.el('table', { class: 'table' }, [
       C.el('thead', {}, C.el('tr', {}, [
         C.el('th', { text: 'Pessoa' }),
-        C.el('th', { text: 'Nivel de acesso' }),
-        C.el('th', { text: 'Situacao' }),
-        C.el('th', { text: 'Ultimo acesso' }),
+        C.el('th', { text: 'Nível de acesso' }),
+        C.el('th', { text: 'Disciplinas' }),
+        C.el('th', { text: 'Situação' }),
+        C.el('th', { text: 'Último acesso' }),
         C.el('th', { class: 'right', text: '' })
       ]))
     ]);
@@ -101,13 +107,14 @@
             text: C.iniciais(nome)
           }),
           C.el('span', {}, [
-            C.el('div', { style: 'font-weight:600', text: nome + (souEu ? ' - voce' : '') }),
+            C.el('div', { style: 'font-weight:600', text: nome + (souEu ? ' · você' : '') }),
             C.el('div', { class: 'muted', style: 'font-size:12px', text: a.email })
           ])
         ])),
         C.el('td', {}, ordem[a.perfil] === undefined
-          ? C.el('span', { class: 'badge danger', text: 'nivel invalido: ' + a.perfil })
+          ? C.el('span', { class: 'badge danger', text: 'nível inválido: ' + a.perfil })
           : C.el('span', { class: 'badge soft', text: A.nomePerfil(a.perfil) })),
+        C.el('td', { style: 'font-size:12.5px;max-width:280px' }, textoDisciplinas(a)),
         C.el('td', {}, C.el('span', {
           class: 'badge ' + (a.ativo ? 'ok' : 'neutral'),
           text: a.ativo ? 'ativo' : 'suspenso'
@@ -130,14 +137,71 @@
 
     caixa.appendChild(C.el('div', { class: 'alert', style: 'margin-top:22px' }, [
       C.el('b', { text: 'O acesso vale para todo mundo.' }),
-      ' A lista fica no servidor, entao conceder, suspender ou revogar aqui ' +
+      ' A lista fica no servidor, então conceder, suspender ou revogar aqui ' +
       'tem efeito imediato para a pessoa, em qualquer computador. Suspender ' +
-      'nao apaga historico: o que a pessoa registrou continua na agenda e nos ' +
-      'relatorios.'
+      'não apaga histórico: o que a pessoa registrou continua na agenda e nos ' +
+      'relatórios. As disciplinas de cada professor também são escolhidas aqui, ' +
+      'em "Editar": é por elas que ele pede ocupação e troca as cadeiras das reservas.'
     ]));
 
     return caixa;
-    return caixa;
+  }
+
+  /* Técnico não responde por disciplina: a coluna fica vazia para ele. */
+  function textoDisciplinas(a) {
+    if (a.perfil === 'tecnico') return C.el('span', { class: 'muted', text: '—' });
+    var l = S.disciplinasDoProfessor(a.email);
+    if (!l.length) return C.el('span', { class: 'muted', text: a.perfil === 'professor' ? 'nenhuma' : '—' });
+    var nomes = l.map(function (d) { return S.rotuloDisciplina(d); });
+    return C.el('span', { title: l.map(function (d) { return S.rotuloDisciplinaLongo(d); }).join('\n'),
+      text: nomes.length > 3 ? nomes.slice(0, 3).join(', ') + ' e mais ' + (nomes.length - 3) : nomes.join(', ') });
+  }
+
+  /* Lista marcável das disciplinas, em dois grupos, com busca: são dezenas
+     de disciplinas, e achar a certa rolando seria o gargalo do vínculo. */
+  function escolhaDeDisciplinas(marcadas) {
+    var busca = '';
+    var lista = C.el('div', { class: 'escolha-disc' });
+    function desenhar() {
+      C.clear(lista);
+      var termo = busca.trim().toLowerCase();
+      [['Graduação', S.disciplinasDeGraduacao()], ['Pós-graduação', S.especializacoes()]].forEach(function (par) {
+        var itens = par[1].filter(function (d) {
+          return !termo || (String(d.codigo || '') + ' ' + d.nome).toLowerCase().indexOf(termo) !== -1;
+        });
+        if (!itens.length) return;
+        lista.appendChild(C.el('span', { class: 'eyebrow', style: 'display:block;margin:8px 0 4px', text: par[0] }));
+        itens.forEach(function (d) {
+          lista.appendChild(C.el('label', { class: 'limpeza-item' }, [
+            C.el('input', {
+              type: 'checkbox', checked: marcadas[d.id] ? true : null,
+              onchange: function (ev) { marcadas[d.id] = ev.target.checked; contador(); }
+            }),
+            C.el('span', { text: S.rotuloDisciplinaLongo(d) })
+          ]));
+        });
+      });
+      if (!lista.childNodes.length) {
+        lista.appendChild(C.el('div', { class: 'muted', style: 'font-size:12.5px;padding:8px 0',
+          text: S.estado.disciplinas.length ? 'Nenhuma disciplina com esse nome.' : 'Nenhuma disciplina cadastrada ainda.' }));
+      }
+    }
+    var rotulo = C.el('span');
+    function contador() {
+      var n = Object.keys(marcadas).filter(function (k) { return marcadas[k]; }).length;
+      rotulo.textContent = 'Disciplinas · ' + n + (n === 1 ? ' marcada' : ' marcadas');
+    }
+    desenhar(); contador();
+    return C.el('div', { class: 'fld' }, [
+      C.el('span', {}, rotulo),
+      C.el('input', {
+        class: 'input', type: 'search', placeholder: 'Buscar por código ou nome',
+        oninput: function (ev) { busca = ev.target.value; desenhar(); }
+      }),
+      lista,
+      C.el('small', { class: 'muted', style: 'font-size:11.5px',
+        text: 'O professor pede ocupação para estas disciplinas e troca as cadeiras das reservas delas.' })
+    ]);
   }
 
   /* ── Conceder, alterar e revogar ──────────────────────────────────────
@@ -172,11 +236,21 @@
       ativo: a ? a.ativo : true
     };
     var erro = C.el('div');
+    /* Disciplinas: só para quem responde por elas — professor e
+       coordenação. O técnico não pede ocupação. */
+    var marcadas = {};
+    if (a) S.disciplinasDoProfessor(a.email).forEach(function (d) { marcadas[d.id] = true; });
+    var blocoDisc = C.el('div');
+    function desenharDisc() {
+      C.clear(blocoDisc);
+      if (f.perfil === 'professor' || f.perfil === 'coordenador') blocoDisc.appendChild(escolhaDeDisciplinas(marcadas));
+    }
+    desenharDisc();
 
     return U.modal({
       titulo: novo ? 'Conceder acesso' : 'Editar acesso',
       subtitulo: novo ? 'A pessoa entra com a conta Google deste e-mail.' : f.email,
-      largura: '560px',
+      largura: '620px',
       conteudo: C.el('div', { class: 'stack' }, [
         erro,
         C.el('div', { class: 'grid-fields' }, [
@@ -191,8 +265,9 @@
           }), 'Em branco, usa o nome da conta Google.'),
           U.campo('Nível de acesso', U.selecao(A.PERFIS.map(function (p) {
             return { valor: p.id, rotulo: p.nome };
-          }), f.perfil, function (v) { f.perfil = v; }))
-        ])
+          }), f.perfil, function (v) { f.perfil = v; desenharDisc(); }))
+        ]),
+        blocoDisc
       ]),
       acoes: [
         C.el('button', { class: 'btn btn-outline', text: 'Voltar', onclick: function () { U.fecharModal(); } }),
@@ -210,9 +285,20 @@
               return;
             }
             U.fecharModal();
+            /* Técnico não fica vinculado a nada: trocar alguém para técnico
+               desfaz os vínculos que ele tinha. */
+            var ids = (f.perfil === 'professor' || f.perfil === 'coordenador')
+              ? Object.keys(marcadas).filter(function (k) { return marcadas[k]; }) : [];
             S.salvarAutorizado(email, { nome: f.nome, nivel: f.perfil, ativo: f.ativo })
               .then(function (r) {
-                if (r.ok) C.toast(novo ? 'Acesso concedido.' : 'Acesso atualizado.');
+                if (!r.ok) return r;
+                return S.vincularDisciplinas(email, ids).then(function (v) {
+                  if (v.ok) {
+                    C.toast((novo ? 'Acesso concedido' : 'Acesso atualizado') +
+                      (ids.length ? ' · ' + C.plural(ids.length, 'disciplina', 'disciplinas') : '') + '.');
+                  }
+                  global.App.recarregar();
+                });
               });
           }
         })

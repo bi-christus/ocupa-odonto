@@ -124,12 +124,26 @@
     ]);
   }
 
+  /* Uma opção é { valor, rotulo }; um GRUPO é { grupo, itens: [opções] } e
+     vira <optgroup> — é o que separa graduação de pós na lista de
+     disciplinas sem precisar de prefixo em cada linha. Grupo vazio não é
+     desenhado: cabeçalho sem nada embaixo parece opção quebrada. */
   function selecao(opcoes, valor, aoMudar, atributos) {
     var s = C.el('select', mesclar({ class: 'input' }, atributos));
     var achou = false;
-    opcoes.forEach(function (o) {
+    function opcao(o, pai) {
       if (o.valor === valor) achou = true;
-      s.appendChild(C.el('option', { value: o.valor, text: o.rotulo, selected: o.valor === valor }));
+      pai.appendChild(C.el('option', { value: o.valor, text: o.rotulo, selected: o.valor === valor }));
+    }
+    opcoes.forEach(function (o) {
+      if (o.grupo) {
+        if (!o.itens || !o.itens.length) return;
+        var g = C.el('optgroup', { label: o.grupo });
+        o.itens.forEach(function (x) { opcao(x, g); });
+        s.appendChild(g);
+      } else {
+        opcao(o, s);
+      }
     });
     /* Sem esta opção de resgate, um valor fora da lista deixaria o select
        visualmente em branco enquanto o formulário seguia com ele guardado. */
@@ -177,6 +191,51 @@
     return caixa;
   }
 
+  /* ── Ícones ───────────────────────────────────────────────────────────
+     Traço fino de 1,5, como o design system pede (Lucide). São os
+     MARCADORES do tipo de reserva na agenda: recorrente, pontual e pós. A cor
+     não carrega esse sinal sozinha — o Industry é monocromático, e a folha
+     impressa nem tem cor —, por isso o tipo vai em desenho.
+     C.el monta nós no namespace do HTML, onde SVG não renderiza: estes são
+     criados à parte, com createElementNS. */
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  var ICONES = {
+    recorrente: ['m17 2 4 4-4 4', 'M3 11v-1a4 4 0 0 1 4-4h14', 'm7 22-4-4 4-4', 'M21 13v1a4 4 0 0 1-4 4H3'],
+    pontual: ['M8 2v4', 'M16 2v4', 'M3 10h18', 'M11 14h1v4', { x: 3, y: 4, w: 18, h: 18, rx: 2 }],
+    pos: ['M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z',
+      'M22 10v6', 'M6 12.5V16a6 3 0 0 0 12 0v-3.5']
+  };
+  function icone(nome, rotulo) {
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    var atrs = {
+      viewBox: '0 0 24 24', 'class': 'ico ico-' + nome, fill: 'none', stroke: 'currentColor',
+      'stroke-width': '1.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+    };
+    Object.keys(atrs).forEach(function (k) { svg.setAttribute(k, atrs[k]); });
+    if (rotulo) {
+      svg.setAttribute('role', 'img');
+      svg.setAttribute('aria-label', rotulo);
+      var t = document.createElementNS(SVG_NS, 'title');
+      t.textContent = rotulo;
+      svg.appendChild(t);
+    } else {
+      svg.setAttribute('aria-hidden', 'true');
+    }
+    (ICONES[nome] || []).forEach(function (p) {
+      var no;
+      if (typeof p === 'string') {
+        no = document.createElementNS(SVG_NS, 'path');
+        no.setAttribute('d', p);
+      } else {
+        no = document.createElementNS(SVG_NS, 'rect');
+        no.setAttribute('x', p.x); no.setAttribute('y', p.y);
+        no.setAttribute('width', p.w); no.setAttribute('height', p.h); no.setAttribute('rx', p.rx);
+      }
+      svg.appendChild(no);
+    });
+    return svg;
+  }
+
   /* ── Blocos de exibição ───────────────────────────────────────────── */
   function kv(rotulo, valor) {
     return C.el('div', { class: 'kv' }, [
@@ -221,7 +280,7 @@
 
   global.UI = {
     modal: modal, fecharModal: fecharModal, confirmar: confirmar,
-    campo: campo, selecao: selecao, hora: hora, seletorDias: seletorDias,
+    campo: campo, selecao: selecao, hora: hora, seletorDias: seletorDias, icone: icone,
     kv: kv, badgeStatus: badgeStatus, badgeCriticidade: badgeCriticidade,
     barra: barra, vazio: vazio, semPermissao: semPermissao
   };
