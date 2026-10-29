@@ -640,8 +640,10 @@
       cadeiras: lista.length, cadeirasLista: lista, integral: ehIntegral(o),
       semCadeiras: escopoSemCadeiras(o.agrupamentoId, o.escopo),
       /* Só a disciplina, sem o tipo na frente: é o que a agenda e as folhas
-         mostram desde 29/10/2026 ("a clínica e a disciplina", e nada mais). */
-      disciplinaRotulo: d ? rotuloDisciplina(d) : did ? 'Disciplina removida'
+         mostram desde 29/10/2026 ("a clínica e a disciplina", e nada mais).
+         Pelo NOME, não pelo código: "ODO-402" sozinho no bloco não diz a
+         ninguém qual disciplina ocupa a clínica. */
+      disciplinaRotulo: d ? (d.nome || rotuloDisciplina(d)) : did ? 'Disciplina removida'
         : o.tipo === 'pontual' ? 'Outros · ' + nomePessoa(responsavelDe(o)) : 'Sem disciplina',
       responsavelId: responsavelDe(o), nivel: nivelDe(o), descricao: descricaoDe(o),
       ambiente: ambienteDe(o.agrupamentoId, o.escopo)
