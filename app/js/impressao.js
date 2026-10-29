@@ -298,7 +298,7 @@
       var d = S.disciplinaDe(r);
       corpo.appendChild(C.el('tr', {}, [
         C.el('td', { text: S.rotuloEscopoCurto(r.agrupamentoId, r.escopo) }),
-        C.el('td', {}, C.el('b', { text: d ? S.rotuloDisciplina(d) : 'Sem disciplina' })),
+        C.el('td', {}, C.el('b', { text: d ? (d.nome || S.rotuloDisciplina(d)) : 'Sem disciplina' })),
         C.el('td', { text: C.listaDias(r.dias) }),
         C.el('td', { class: 'h', text: r.inicio + '–' + r.fim })
       ]));
