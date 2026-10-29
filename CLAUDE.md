@@ -100,12 +100,13 @@ hora, pelo snapshot de `autorizados`.
 | `config` | `sistema` (doc único) | `versao`, `periodoLetivo`, `semestre{inicio,fim}`, `parametros{faixaMinimaMin, capacidadeSemanalH, bloquearSobreposicao, exigirMotivoManutencao, exigirAprovacaoProfessor, aberturaPadrao, fechamentoPadrao}` |
 | `autorizados` | e-mail em minúsculas | `nome`, `nivel`, `ativo`, `ultimoAcesso` |
 | `agrupamentos` | `ag1`–`ag6` | `nome`, `clinicas[]` |
-| `clinicas` | `cl1`–`cl10` | `nome`, `agrupamentoId`, `especialidade`, `cadeiras`, `primeiraCadeira`, `abertura`, `fechamento` |
+| `agrupamentos` | `ag7`–`ag9` | os três ambientes sem cadeira (29/10/2026), um por agrupamento |
+| `clinicas` | `cl1`–`cl13` | `nome`, `agrupamentoId`, `especialidade`, `cadeiras`, `primeiraCadeira`, `abertura`, `fechamento`, `semCadeiras` (só `cl11`–`cl13`) |
 | `disciplinas` | auto | `codigo`, `nome`, `nivel` (`graduacao` \| `pos`), `professores[]` (e-mails; desde 05/10/2026) |
 | `turmas` | auto | **legado, sem tela desde 05/10/2026** — `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo`; lida só para as reservas antigas acharem disciplina e professor |
 | `alunos` | auto | **legado, sem tela** — `nome`, `matricula`, `periodo`; lida só para o nome das atribuições antigas |
 | `matriculas` | `{turmaId}__{alunoId}` | **não é mais lida** (o vínculo de alunos saiu com a turma) |
-| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `disciplinaId`, `responsavelId`, `tipoAtividade`, `descricao`, `cadeirasPedidas`, `cadeirasAlocadas[]`, `criadoPor`, `criadoEm`, `excecoes[]`, `excluidaEm`, `excluidaPor`, `motivoExclusao` · recorrente: `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm` · pontual: `data`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` · **legado**: `turmaId` e `observacao` (antes de 05/10/2026), `titulo` (antes de 17/09/2026), `cadeiras` (antes de 17/09/2026, ignorado) |
+| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `disciplinaId`, `responsavelId`, `tipoAtividade`, `descricao`, `cadeirasPedidas`, `cadeirasAlocadas[]`, `criadoPor`, `criadoEm`, `editadoPor`, `editadoEm`, `excecoes[]`, `excluidaEm`, `excluidaPor`, `motivoExclusao` · recorrente: `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm` · pontual: `data`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` · **legado**: `turmaId` e `observacao` (antes de 05/10/2026), `titulo` (antes de 17/09/2026), `cadeiras` (antes de 17/09/2026, ignorado) |
 | `manutencoes` | auto | `protocolo`, `clinicaId`, `cadeira`, `categoria`, `criticidade`, `motivo`, `abertoPor`, `abertoEm`, `previsaoRetorno`, `status`, `fechadoPor`, `fechadoEm`, `laudo`, `impacto{}` |
 | `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `nome`, `alunoId` (nulo nos registros novos), `data`, `registradoPor`, `registradoEm` — desde 05/10/2026 é só o NOME anotado na cadeira |
 | `indices` | `ag1`–`ag6` | `agrupamentoId`, `itens[]` — cada item com `cadeiras[]` (ou `null`/ausente = integral) |
@@ -245,6 +246,54 @@ número global. Trocar tamanho exige remapear esses registros; não é campo de
 formulário. Clínica nova entra pela semente (provisionamento) ou, num banco já
 provisionado, gravando `agrupamentos` e `clinicas` direto — foi assim que as
 duas pré-clínicas entraram em produção.
+
+### Ambientes sem cadeira (29/10/2026)
+
+**Laboratório de radiologia** (`ag7`/`cl11`), **Espaço de promoção da
+saúde** (`ag8`/`cl12`) e **Sala de situação** (`ag9`/`cl13`). Cada um é um
+agrupamento de um ambiente só, como as pré-clínicas, com `cadeiras: 0` e
+`semCadeiras: true` (`S.semCadeiras(c)`, `S.escopoSemCadeiras(ag, esc)`).
+
+- A reserva é do **ambiente inteiro**: o formulário não pede quantidade
+  (o campo vira "ambiente inteiro"), o documento grava `cadeirasPedidas` e
+  `cadeirasAlocadas` como `null` — o mesmo estado da reserva integral antiga.
+- A conferência por cadeira passaria sempre (o escopo não tem cadeira), então
+  `gravarOcupacaoNaNuvem` tem um ramo próprio: **qualquer cruzamento de
+  horário** com outra reserva do ambiente recusa. `S.disponibilidade` devolve
+  `ocupado` e `semCadeiras`; o seletor de clínica mostra "livre"/"ocupado".
+- Marcador da agenda: `amb-espaco`, **contorno sem preenchimento** — o único
+  dos quatro que não é chapado. Filtro "Outros ambientes".
+- Ficam fora de manutenção (que é de cadeira), do "Alterar cadeiras" e da
+  ocupação em cadeira·hora dos relatórios (aparece "—"). Em Ocupação agora
+  mostram "livre"/"em uso" e a linha do dia, sem grade.
+- **Entrada em produção:** `S.completarEstrutura`, chamado por `app.js` no
+  login de quem tem `estrutura.editar`, grava só os agrupamentos e clínicas
+  da semente que faltam no banco (por id; nada existente é tocado). Professor
+  e técnico só os veem depois que um coordenador entrar. Harness:
+  `?semambientes=1` simula o banco sem eles.
+
+### Edição de reservas pela coordenação (29/10/2026)
+
+Permissão nova `agenda.editar` (só coordenador — agora são **19**). Botão
+"Editar" no detalhe da ocorrência, na aba Recorrências e na lista "Por
+disciplina". Abre o mesmo formulário (`Registro.montar(alvo, { editar: doc })`)
+preenchido pelos leitores do legado, e grava por `S.editarReserva(id, dados)`.
+
+- Vale para **qualquer data** — passada, em curso, futura, encerrada — e para
+  pedido pendente (que continua pedido, sem indexar). Na edição o formulário
+  não limita data ao semestre nem a hoje, e não reencaixa o horário gravado.
+- Muda lugar, horário, data/dias/vigência, quantidade, disciplina, professor
+  e descrição. **Não muda o tipo** (recorrente ↔ pontual), as exceções, o
+  encerramento, a situação nem os nomes anotados nas cadeiras.
+- Passa pela transação: as cadeiras que a reserva tinha entram como
+  preferência (completadas pelas menores livres), e a transação reescolhe se
+  alguma foi tomada. Mudou de agrupamento, `Nuvem.gravarOcupacao(...,
+  agrupamentoAnterior)` tira a entrada do índice antigo **na mesma
+  transação**.
+- `cadeirasAlocadas` é zerada antes de alocar: com a lista antiga no
+  documento, `quantidadeDe` lia o tamanho velho e pedir 10 numa reserva de 8
+  continuava alocando 8.
+- Grava `turmaId: null`, `editadoPor`, `editadoEm`.
 
 ### Disciplina sem turma (05/10/2026)
 
@@ -464,6 +513,19 @@ duas horas, e a coluna não dizia nada sobre ocupação real da clínica.
 - A primeira linha do bloco diz quantas cadeiras a reserva toma ("Clínica 1 ·
   8 cad.") — com várias reservas por clínica é o número que distingue uma da
   outra — e a descrição (onde a turma é escrita) vem numa terceira linha.
+
+## Agenda e folhas objetivas (29/10/2026)
+
+O texto de cada bloco (Semana, Dia, Por disciplina) e de cada folha impressa
+diz **só a clínica ocupada e a disciplina que a ocupa** — `o.disciplinaRotulo`
+(na ocorrência; "Outros · nome" na pontual sem disciplina). Horário é a
+posição do bloco/barra; nas tabelas impressas é coluna. Cadeiras, professor,
+descrição e tipo saíram do bloco e do papel: estão na dica (`dicaDoBloco`),
+no detalhe e nos **CSV de Relatórios, que continuam completos**.
+
+Folhas: semana (barra "Clínica · Disciplina"), dia (Horário · Clínica ·
+Disciplina), recorrências (Clínica · Disciplina · Dias · Horário), disciplina
+(Data · Horário · Clínica).
 
 ## Marcadores e filtros da agenda (05/10/2026)
 
@@ -699,10 +761,10 @@ o índice se divide por mês.
 
 ## Acesso
 
-Três níveis — `coordenador`, `professor`, `tecnico` — e **18 permissões** em
-`acesso.js` (eram 19 até 05/10/2026: `alunos.vincular` saiu junto com a turma,
-e `cadeira.ocupar` passou a significar trocar as cadeiras das próprias
-reservas). "Técnico de manutenção" é só rótulo de tela. Não existe perfil
+Três níveis — `coordenador`, `professor`, `tecnico` — e **19 permissões** em
+`acesso.js` (`alunos.vincular` saiu em 05/10/2026 junto com a turma, e
+`agenda.editar` entrou em 29/10/2026; `cadeira.ocupar` significa trocar as
+cadeiras das próprias reservas). "Técnico de manutenção" é só rótulo de tela. Não existe perfil
 "administrador"; coordenador cumpre esse papel.
 
 A tela Acessos também vincula o professor às disciplinas (gravado em
@@ -848,7 +910,15 @@ disciplina sem turma, com a turma na "Descrição/Turma"; vínculo professor ↔
 disciplina pela tela Acessos; limpeza do cadastro; marcadores e filtros da
 agenda; aba "Por disciplina"; e a especialidade fora dos seletores de clínica.
 
+Em 29/10/2026 entraram, verificados no harness nos três perfis: os três
+ambientes sem cadeira, a agenda e as folhas objetivas (clínica + disciplina)
+e a edição de qualquer reserva pela coordenação.
+
 ### Pendências
+
+- **Os três ambientes entram no banco no primeiro login de um coordenador**
+  depois do deploy (`S.completarEstrutura`); conferir que apareceram em
+  Estrutura
 
 - **Rodar a limpeza do cadastro em produção** (Disciplinas → "Revisar e
   limpar", coordenação): junta "… T1/T2" no nome, grava disciplina/professor

@@ -9,7 +9,12 @@
    do agrupamento, pré-clínica — e o tipo de RESERVA — pelo desenho:
    recorrente ou pontual, e o capelo da pós. Os mesmos marcadores são os
    botões do filtro, que fazem as vezes de legenda: clicar esconde ou mostra
-   aquele tipo. */
+   aquele tipo.
+
+   TEXTO DO BLOCO (29/10/2026): só a clínica ocupada e a disciplina que a
+   ocupa. Horário, cadeiras, professor e descrição saíram de dentro do bloco
+   — o horário já é a posição dele na grade, e o resto está no detalhe, a
+   um clique, e na dica ao passar o mouse. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store, U = global.UI;
@@ -26,7 +31,7 @@
   function novosFiltros() {
     return {
       disciplinaId: '', professorId: '',
-      ambientes: { clinica: true, dupla: true, pre: true },
+      ambientes: { clinica: true, dupla: true, pre: true, espaco: true },
       tipos: { recorrente: true, pontual: true },
       niveis: { graduacao: true, pos: true }
     };
@@ -67,7 +72,7 @@
     if (filtros.disciplinaId) partes.push(S.rotuloDisciplina(S.disciplina(filtros.disciplinaId)));
     if (filtros.professorId) partes.push(S.nomePessoa(filtros.professorId));
     var rot = {
-      ambientes: { clinica: 'clínica', dupla: 'duas clínicas', pre: 'pré-clínica' },
+      ambientes: { clinica: 'clínica', dupla: 'duas clínicas', pre: 'pré-clínica', espaco: 'outros ambientes' },
       tipos: { recorrente: 'recorrentes', pontual: 'pontuais' },
       niveis: { graduacao: 'graduação', pos: 'pós' }
     };
@@ -156,7 +161,8 @@
         C.el('span', { class: 'eyebrow', text: 'Ambiente' }),
         botaoMarcador('ambientes', 'clinica', 'Clínica', marcadorAmbiente('clinica')),
         botaoMarcador('ambientes', 'dupla', 'Duas clínicas', marcadorAmbiente('dupla')),
-        botaoMarcador('ambientes', 'pre', 'Pré-clínica', marcadorAmbiente('pre'))
+        botaoMarcador('ambientes', 'pre', 'Pré-clínica', marcadorAmbiente('pre')),
+        botaoMarcador('ambientes', 'espaco', 'Outros ambientes', marcadorAmbiente('espaco'))
       ]),
       C.el('div', { class: 'filtros-grupo' }, [
         C.el('span', { class: 'eyebrow', text: 'Reserva' }),
@@ -406,6 +412,27 @@
          é assim que se lê o gesto. Trocar para recorrente continua a um
          clique, e leva junto o horário e o dia da semana apontados. */
       modo: pre && pre.data ? 'pontual' : null,
+      aoRegistrar: function () { U.fecharModal(); global.App.recarregar(); }
+    });
+  }
+
+  /* Edição da coordenação: o mesmo formulário, aberto com a reserva. Recebe
+     o DOCUMENTO — a ocorrência é derivada, e numa recorrente a edição vale
+     para o semestre inteiro dela. */
+  function editarOcupacao(doc) {
+    if (!S.pode('agenda.editar')) { C.toast('Somente a coordenação edita reservas.'); return; }
+    if (!doc) { C.toast('Reserva não encontrada.'); return; }
+    var slot = C.el('div');
+    U.modal({
+      titulo: doc.tipo === 'pontual' ? 'Editar ocupação' : 'Editar recorrência',
+      subtitulo: S.rotuloReserva(doc) + ' · ' + S.rotuloEscopoCurto(doc.agrupamentoId, doc.escopo) +
+        (doc.tipo === 'pontual' ? ' · ' + C.fmtDiaAno(doc.data) : ' · ' + C.listaDias(doc.dias) + ' · vale para todos os encontros'),
+      largura: '840px',
+      conteudo: slot
+    });
+    global.Registro.montar(slot, {
+      compacto: true,
+      editar: doc,
       aoRegistrar: function () { U.fecharModal(); global.App.recarregar(); }
     });
   }
@@ -708,24 +735,26 @@
 
   /* `estilo` traz posição e tamanho calculados pela coluna do dia: o bloco é
      absoluto dentro dela, com a altura proporcional à duração. */
-  /* Primeira linha: marcadores, lugar e quantas cadeiras — desde 05/10/2026
-     a clínica pode ter várias reservas ao mesmo tempo, e o número é o que
-     diz quanto dela cada uma toma. A descrição traz a turma, que deixou de
-     ser cadastro. */
+  /* Duas linhas e nada mais: a clínica ocupada e a disciplina que a ocupa
+     (29/10/2026, "um formato mais objetivo"). O resto vai na dica — que
+     diz também as cadeiras, porque com várias reservas na mesma clínica é
+     o que distingue uma da outra. */
+  function dicaDoBloco(o) {
+    return S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + ' · ' + o.disciplinaRotulo +
+      ' · ' + o.inicio + '–' + o.fim +
+      (o.semCadeiras ? '' : ' · ' + C.plural(o.cadeiras, 'cadeira', 'cadeiras') +
+        (o.integral ? ' (clínica inteira)' : ' (' + S.textoCadeiras(o.cadeirasLista) + ')')) +
+      (o.descricao ? ' · ' + o.descricao : '');
+  }
   function evento(o, estilo) {
-    var rot = S.rotuloEscopoCurto(o.agrupamentoId, o.escopo);
     return C.el('button', {
       class: classeEvento(o, 'ev'),
       style: estilo,
-      title: S.rotuloEscopo(o.agrupamentoId, o.escopo) + ' · ' + o.inicio + '–' + o.fim + ' · ' + o.titulo +
-        ' · ' + C.fmtHoras(C.duracaoH(o.inicio, o.fim)) +
-        ' · ' + C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' (' + S.textoCadeiras(o.cadeirasLista) + ')' +
-        (o.descricao ? ' · ' + o.descricao : ''),
+      title: dicaDoBloco(o),
       onclick: function () { detalhe(o); }
     }, [
-      C.el('b', {}, [marcasDoBloco(o), rot + ' · ' + o.cadeiras + ' cad.']),
-      C.el('span', { text: o.inicio + '–' + o.fim + ' · ' + o.titulo }),
-      o.descricao ? C.el('span', { class: 'ev-desc', text: o.descricao }) : null
+      C.el('b', {}, [marcasDoBloco(o), S.rotuloEscopoCurto(o.agrupamentoId, o.escopo)]),
+      C.el('span', { text: o.disciplinaRotulo })
     ]);
   }
 
@@ -841,13 +870,13 @@
         class: classeEvento(o, 'tl-blk') + (st === 'em_andamento' ? ' agora' : ''),
         style: 'left:' + ((a - ini) / span * 100) + '%;width:' + ((b - a) / span * 100) +
           '%;top:' + (baseTopo + niveis[idx] * sub + 3) + 'px;height:' + Math.max(8, sub - 6) + 'px',
-        title: S.rotuloEscopo(o.agrupamentoId, o.escopo) + ' · ' + o.inicio + '–' + o.fim +
-          ' · ' + C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' (' + S.textoCadeiras(o.cadeirasLista) + ')' +
-          (o.descricao ? ' · ' + o.descricao : ''),
+        title: dicaDoBloco(o),
         onclick: function () { detalhe(o); }
       }, [
         marcasDoBloco(o),
-        o.titulo + ' · ' + o.cadeiras + ' cad. · ' + C.primeiroNome(S.nomePessoa(o.responsavelId))
+        /* A pista já diz o agrupamento e a faixa diz a clínica; na reserva
+           das duas o nome vai junto, porque a barra cobre as duas faixas. */
+        (dupla ? S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + ' · ' : '') + o.disciplinaRotulo
       ]));
     });
 
@@ -942,9 +971,9 @@
         C.el('td', { text: C.listaDias(r.dias) }),
         C.el('td', { class: 'num', text: r.inicio + '–' + r.fim }),
         C.el('td', { class: 'num' }, [
-          C.el('div', { text: String(S.quantidadeDe(r)) }),
-          C.el('div', { class: 'muted', style: 'font-size:11.5px', text: S.ehIntegral(r)
-            ? 'clínica inteira' : S.textoCadeiras(S.cadeirasDe(r)) })
+          C.el('div', { text: S.escopoSemCadeiras(r.agrupamentoId, r.escopo) ? '—' : String(S.quantidadeDe(r)) }),
+          C.el('div', { class: 'muted', style: 'font-size:11.5px', text: S.escopoSemCadeiras(r.agrupamentoId, r.escopo)
+            ? 'ambiente' : S.ehIntegral(r) ? 'clínica inteira' : S.textoCadeiras(S.cadeirasDe(r)) })
         ]),
         C.el('td', { class: 'num', style: 'font-size:12.5px',
           text: C.fmtDia(r.vigenciaInicio) + ' – ' + C.fmtDia(fimEfetivo) }),
@@ -955,6 +984,12 @@
           r.excecoes.length ? C.el('button', {
             class: 'btn-ghost', text: C.plural(r.excecoes.length, 'exceção', 'exceções'),
             onclick: function () { verExcecoes(r); }
+          }) : null,
+          /* Editar vale até para a recorrência encerrada: corrigir o que
+             ficou registrado errado também é "em qualquer momento". */
+          S.pode('agenda.editar') ? C.el('button', {
+            class: 'btn-ghost', style: 'margin-left:12px', text: 'Editar',
+            onclick: function () { editarOcupacao(r); }
           }) : null,
           !encerrada && S.podeGerirCadeiras(r) ? C.el('button', {
             class: 'btn-ghost', style: 'margin-left:12px', text: 'Cadeiras',
@@ -1072,14 +1107,12 @@
   function miniBloco(o) {
     return C.el('button', {
       class: classeEvento(o, 'mini'), type: 'button',
-      title: o.inicio + '–' + o.fim + ' · ' + S.rotuloEscopo(o.agrupamentoId, o.escopo) + ' · ' +
-        C.plural(o.cadeiras, 'cadeira', 'cadeiras') + ' (' + S.textoCadeiras(o.cadeirasLista) + ')' +
-        (o.descricao ? ' · ' + o.descricao : ''),
+      title: dicaDoBloco(o),
       onclick: function () { detalhe(o); }
     }, [
       marcasDoBloco(o),
       C.el('b', { text: o.inicio }),
-      ' ' + S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + ' · ' + o.cadeiras
+      ' ' + S.rotuloEscopoCurto(o.agrupamentoId, o.escopo)
     ]);
   }
 
@@ -1103,6 +1136,7 @@
       horas += C.duracaoH(o.inicio, o.fim);
       if (o.data < hoje) realizados++;
       S.clinicasDoEscopo(o.agrupamentoId, o.escopo).forEach(function (c) { clinicas[c.id] = c.nome; });
+      if (o.semCadeiras) return;
       if (menor === null || o.cadeiras < menor) menor = o.cadeiras;
       if (maior === null || o.cadeiras > maior) maior = o.cadeiras;
     });
@@ -1127,7 +1161,7 @@
       C.el('div', { class: 'kpis', style: 'margin-top:18px' }, [
         numero('Encontros no semestre', occs.length, realizados ? realizados + ' já realizados' : ''),
         numero('Horas na agenda', C.fmtHoras(horas).replace(' h', ''), 'h'),
-        numero('Cadeiras por encontro', occs.length ? (menor === maior ? menor : menor + '–' + maior) : '—', ''),
+        numero('Cadeiras por encontro', menor !== null ? (menor === maior ? menor : menor + '–' + maior) : '—', ''),
         numero('Clínicas', nomesClinicas.length, nomesClinicas.length <= 2 ? nomesClinicas.join(' e ') : '')
       ])
     ]));
@@ -1189,16 +1223,22 @@
         C.el('td', { class: 'num', text: o.inicio + '–' + o.fim }),
         C.el('td', {}, [marcadorAmbiente(S.ambienteDe(o.agrupamentoId, o.escopo)),
           ' ' + S.rotuloEscopoCurto(o.agrupamentoId, o.escopo)]),
-        C.el('td', { class: 'num', text: S.ehIntegral(o) ? 'inteira'
+        C.el('td', { class: 'num', text: S.escopoSemCadeiras(o.agrupamentoId, o.escopo) ? '—' : S.ehIntegral(o) ? 'inteira'
           : S.quantidadeDe(o) + (S.cadeirasDe(o).length ? ' · ' + S.textoCadeiras(S.cadeirasDe(o)) : '') }),
         C.el('td', { style: 'font-size:12.5px' }, [
           C.el('div', { text: S.nomePessoa(S.responsavelDe(o)) }),
           S.descricaoDe(o) ? C.el('div', { class: 'muted', text: S.descricaoDe(o) }) : null
         ]),
-        C.el('td', {}, sit === 'aprovada' ? null : C.el('span', {
-          class: 'badge ' + (sit === 'pendente' ? 'warn' : 'danger'),
-          text: sit === 'pendente' ? 'aguardando' : 'recusado'
-        }))
+        C.el('td', { class: 'right', style: 'white-space:nowrap' }, [
+          sit === 'aprovada' ? null : C.el('span', {
+            class: 'badge ' + (sit === 'pendente' ? 'warn' : 'danger'),
+            text: sit === 'pendente' ? 'aguardando' : 'recusado'
+          }),
+          S.pode('agenda.editar') ? C.el('button', {
+            class: 'btn-ghost', style: 'margin-left:10px', text: 'Editar',
+            onclick: function () { editarOcupacao(o); }
+          }) : null
+        ])
       ]));
     });
     caixa.appendChild(C.el('div', { class: 'rolagem-x' }, C.el('table', { class: 'table' }, [
@@ -1216,14 +1256,15 @@
     var bruta = S.reservaPorId(o.origemId);
     var podeTrocar = !!bruta && st !== 'encerrada' && S.podeGerirCadeiras(bruta);
     var d = S.disciplina(o.disciplinaId);
-    var ambientes = { clinica: 'Clínica de atendimento', dupla: 'As duas clínicas do agrupamento', pre: 'Pré-clínica' };
+    var ambientes = { clinica: 'Clínica de atendimento', dupla: 'As duas clínicas do agrupamento', pre: 'Pré-clínica',
+      espaco: 'Ambiente sem cadeiras — reservado inteiro' };
 
     var conteudo = C.el('div', { class: 'stack', style: 'gap:0' }, [
       U.kv('Onde', C.el('span', {}, [marcadorAmbiente(o.ambiente), ' ' + S.rotuloEscopo(o.agrupamentoId, o.escopo)])),
       U.kv('Ambiente', ambientes[o.ambiente] || '—'),
       /* Quantas e QUAIS: desde 05/10/2026 a reserva não toma mais a clínica
          inteira, e o número da cadeira é o que diz ao aluno onde sentar. */
-      U.kv('Cadeiras', o.integral
+      o.semCadeiras ? null : U.kv('Cadeiras', o.integral
         ? C.plural(o.cadeiras, 'cadeira') + ' · clínica inteira (reserva anterior à quantidade)'
         : C.plural(o.cadeiras, 'cadeira') + ' · ' + S.textoCadeiras(o.cadeirasLista)),
       U.kv('Data', C.nomeDia(C.weekday(o.data), true) + ', ' + C.fmtDiaAno(o.data)),
@@ -1273,7 +1314,13 @@
           class: 'btn btn-outline', text: 'Alterar cadeiras',
           onclick: function () { global.Cadeiras.escolher(bruta, function () { global.App.recarregar(); }); }
         }) : null,
-        C.el('button', {
+        /* Editar age na RESERVA inteira (numa recorrente, todos os
+           encontros), e em qualquer data — passada inclusive. */
+        S.pode('agenda.editar') && bruta ? C.el('button', {
+          class: 'btn btn-outline', text: o.origem === 'recorrente' ? 'Editar recorrência' : 'Editar',
+          onclick: function () { U.fecharModal(); editarOcupacao(bruta); }
+        }) : null,
+        o.semCadeiras ? null : C.el('button', {
           class: 'btn btn-primary', text: 'Ver cadeiras',
           onclick: function () { U.fecharModal(); global.App.ir('agora', { agrupamentoId: o.agrupamentoId }); }
         })
@@ -1396,5 +1443,5 @@
   }
 
   global.ViewAgenda = { render: render };
-  global.Agenda = { detalhe: detalhe, cancelar: cancelar, podeCancelar: podeCancelarOcorrencia };
+  global.Agenda = { detalhe: detalhe, cancelar: cancelar, podeCancelar: podeCancelarOcorrencia, editar: editarOcupacao };
 })(window);

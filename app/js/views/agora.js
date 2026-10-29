@@ -151,6 +151,23 @@
       var capacidade = S.capacidadeEscopo(g.id, 'ambas');
       var emUso = emUsoNoAgrupamento(g.id, hoje);
       var pct = capacidade ? Math.round((emUso / capacidade) * 100) : 0;
+      /* Ambiente sem cadeira: ou está em uso agora, ou está livre. */
+      if (S.escopoSemCadeiras(g.id, 'ambas')) {
+        var usado = S.ocorrenciasDoDia(hoje, { agrupamentoId: g.id }).some(function (o) {
+          return S.statusOcorrencia(o) === 'em_andamento';
+        });
+        caixa.appendChild(C.el('button', {
+          class: 'list-btn' + (sel.agrupamentoId === g.id ? ' on' : ''),
+          onclick: function () { sel.agrupamentoId = g.id; sel.cadeira = null; global.App.recarregar(); }
+        }, [
+          C.el('div', { style: 'display:flex;justify-content:space-between;gap:10px' }, [
+            C.el('b', { text: g.nome }),
+            C.el('span', { style: 'font-size:12.5px', text: usado ? 'em uso' : 'livre' })
+          ]),
+          C.el('small', { text: 'ambiente sem cadeiras' })
+        ]));
+        return;
+      }
       caixa.appendChild(C.el('button', {
         class: 'list-btn' + (sel.agrupamentoId === g.id ? ' on' : ''),
         onclick: function () { sel.agrupamentoId = g.id; sel.cadeira = null; global.App.recarregar(); }
@@ -193,6 +210,24 @@
     /* O déficit precisa aparecer: cadeira interditada some da conta sem que
        ninguém veja. */
     if (interditadas) resumo += ' · ' + C.plural(interditadas, 'cadeira', 'cadeiras') + ' em manutenção';
+
+    /* Ambiente sem cadeira: nada de grade. Quem ocupa e quando está na
+       linha do dia, logo abaixo. */
+    if (S.escopoSemCadeiras(g.id, 'ambas')) {
+      var agoraNele = S.ocorrenciasDoDia(hoje, { agrupamentoId: g.id }).filter(function (o) {
+        return S.statusOcorrencia(o) === 'em_andamento';
+      });
+      caixa.appendChild(C.el('div', {
+        style: 'display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px'
+      }, [
+        C.el('h2', { text: g.nome }),
+        C.el('span', { class: 'muted', style: 'font-size:13px',
+          text: agoraNele.length ? 'em uso agora · ' + agoraNele[0].disciplinaRotulo : 'livre agora' })
+      ]));
+      caixa.appendChild(U.vazio('Ambiente sem cadeiras: a reserva é do ambiente inteiro. A linha do dia mostra quem ocupa e quando.'));
+      caixa.appendChild(C.el('div', { style: 'margin-top:34px' }, linhaDoDia(hoje)));
+      return caixa;
+    }
 
     caixa.appendChild(C.el('div', {
       style: 'display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px'

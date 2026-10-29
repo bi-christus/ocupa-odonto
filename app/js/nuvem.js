@@ -167,13 +167,20 @@
      reserva são escolhidas dentro da transação, contra o índice que acabou
      de ser lido, e não contra o cache, que pode estar atrasado. Se o
      Firestore repetir a transação por disputa, validar roda de novo e
-     escolhe de novo. */
-  function gravarOcupacao(agrupamentoId, ocupacaoId, dados, validar, resumoParaIndice) {
+     escolhe de novo.
+
+     `agrupamentoAnterior` é da edição que muda a reserva de agrupamento: a
+     entrada dela sai do índice antigo NA MESMA transação. Toda leitura vem
+     antes de toda escrita, que é a regra da transação do Firestore. */
+  function gravarOcupacao(agrupamentoId, ocupacaoId, dados, validar, resumoParaIndice, agrupamentoAnterior) {
     var refIndice = db.collection('indices').doc(String(agrupamentoId));
     var refOcup = db.collection('ocupacoes').doc(String(ocupacaoId));
+    var refAntigo = agrupamentoAnterior && agrupamentoAnterior !== agrupamentoId
+      ? db.collection('indices').doc(String(agrupamentoAnterior)) : null;
 
     return db.runTransaction(function (t) {
-      return t.get(refIndice).then(function (d) {
+      return global.Promise.all([t.get(refIndice), refAntigo ? t.get(refAntigo) : null]).then(function (lidos) {
+        var d = lidos[0], dAntigo = lidos[1];
         var indice = d.exists ? (d.data() || {}) : { agrupamentoId: agrupamentoId, itens: [] };
         if (!indice.itens) indice.itens = [];
 
@@ -185,6 +192,13 @@
 
         t.set(refOcup, dados, { merge: true });
         t.set(refIndice, { agrupamentoId: agrupamentoId, itens: itens }, { merge: true });
+        if (refAntigo) {
+          var antigos = (dAntigo && dAntigo.exists && dAntigo.data() && dAntigo.data().itens) ? dAntigo.data().itens : [];
+          t.set(refAntigo, {
+            agrupamentoId: agrupamentoAnterior,
+            itens: antigos.filter(function (i) { return i.id !== ocupacaoId; })
+          }, { merge: true });
+        }
         return ocupacaoId;
       });
     });

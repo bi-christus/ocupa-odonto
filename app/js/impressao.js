@@ -14,7 +14,13 @@
    A régua de horas é a mesma da tela (S.janelaHoras), mas a FORMA não é: a
    semana sai como gantt de uma linha por dia, porque a grade da tela reserva
    a altura de todas as horas em todas as seis colunas e gastaria a folha
-   inteira em espaço vazio. Ver o comentário de `semana()`. */
+   inteira em espaço vazio. Ver o comentário de `semana()`.
+
+   CONTEÚDO OBJETIVO (29/10/2026): toda folha diz, de cada ocupação, a
+   CLÍNICA ocupada e a DISCIPLINA que a ocupa — mais o quando, que nas
+   listas é coluna e no gantt é a posição da barra. Cadeiras, professor,
+   descrição e tipo saíram do papel; continuam no detalhe da agenda e nos
+   CSV completos de Relatórios. */
 (function (global) {
   'use strict';
   var C = global.Core, S = global.Store;
@@ -98,8 +104,7 @@
     return C.el('div', { class: 'imp-leg' }, [
       C.el('span', {}, [C.el('i', { class: 'am-rec' }), 'Aula recorrente']),
       C.el('span', {}, [C.el('i', { class: 'am-pont' }), 'Atividade pontual']),
-      C.el('span', { text: '"2 clínicas" = ocupação das duas clínicas do agrupamento' }),
-      C.el('span', { text: '"N cad." = cadeiras que a reserva usa' })
+      C.el('span', { text: '"2 clínicas" = ocupação das duas clínicas do agrupamento' })
     ]);
   }
 
@@ -156,12 +161,8 @@
       style: 'left:' + ((a - ini) / span * 100) + '%;width:' + ((b - a) / span * 100) + '%;' +
         'top:' + (d.faixa * ALTURA_FAIXA) + 'pt'
     }, [
-      C.el('b', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + (dupla ? ' · 2 clínicas' : '') +
-        ' · ' + o.cadeiras + ' cad.' }),
-      C.el('span', { text: ' ' + o.inicio + '–' + o.fim + ' · ' + o.titulo +
-        (o.nivel === 'pos' ? ' (pós)' : '') +
-        ' · ' + C.primeiroNome(S.nomePessoa(o.responsavelId)) +
-        (o.descricao ? ' · ' + o.descricao : '') })
+      C.el('b', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + (dupla ? ' · 2 clínicas' : '') }),
+      C.el('span', { text: ' · ' + o.disciplinaRotulo })
     ]);
   }
 
@@ -240,35 +241,25 @@
       var corpo = C.el('tbody');
       if (!lista.length) {
         corpo.appendChild(C.el('tr', {}, C.el('td', {
-          colspan: '6', class: 'vazio', text: 'Sem ocupação registrada.'
+          colspan: '3', class: 'vazio', text: 'Sem ocupação registrada.'
         })));
       }
       lista.forEach(function (o) {
         corpo.appendChild(C.el('tr', {}, [
           C.el('td', { class: 'h', text: o.inicio + '–' + o.fim }),
           C.el('td', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) }),
-          /* Quais cadeiras: no papel pendurado na clínica é o número que
-             diz ao aluno onde sentar. */
-          C.el('td', { class: 'h', text: o.integral ? 'todas'
-            : o.cadeiras + ' · ' + S.textoCadeiras(o.cadeirasLista) }),
-          C.el('td', {}, [
-            C.el('b', { text: o.titulo }),
-            o.subtitulo ? C.el('small', { text: o.subtitulo }) : null,
-            o.descricao ? C.el('small', { text: o.descricao }) : null
-          ]),
-          C.el('td', { text: S.nomePessoa(o.responsavelId) }),
-          C.el('td', { text: o.origem === 'pontual' ? 'Pontual' : 'Recorrente' })
+          C.el('td', {}, C.el('b', { text: o.disciplinaRotulo }))
         ]));
       });
+      /* Agrupamento de uma clínica só (pré-clínica, ambiente sem cadeira)
+         se chama como ela: o título não repete o nome. */
+      var sub = S.subtituloAgrupamento(g.id);
       caixa.appendChild(C.el('div', { class: 'imp-sec' }, [
-        C.el('h2', { text: g.nome + ' · ' +
-          S.clinicasDoAgrupamento(g.id).map(function (c) { return c.nome; }).join(' e ') }),
+        C.el('h2', { text: g.nome + (sub ? ' · ' + sub.replace(' · ', ' e ') : '') }),
         C.el('table', { class: 'imp-lista' }, [
           C.el('thead', {}, C.el('tr', {}, [
-            C.el('th', { class: 'h', text: 'Horário' }), C.el('th', { text: 'Onde' }),
-            C.el('th', { class: 'h', text: 'Cadeiras' }),
-            C.el('th', { text: 'Atividade' }), C.el('th', { text: 'Professor coordenador' }),
-            C.el('th', { text: 'Tipo' })
+            C.el('th', { class: 'h', text: 'Horário' }), C.el('th', { text: 'Clínica' }),
+            C.el('th', { text: 'Disciplina' })
           ])),
           corpo
         ])
@@ -300,23 +291,16 @@
     var corpo = C.el('tbody');
     if (!regras.length) {
       corpo.appendChild(C.el('tr', {}, C.el('td', {
-        colspan: '6', class: 'vazio', text: 'Nenhuma recorrência criada neste semestre.'
+        colspan: '4', class: 'vazio', text: 'Nenhuma recorrência criada neste semestre.'
       })));
     }
     regras.forEach(function (r) {
       var d = S.disciplinaDe(r);
-      var desc = S.descricaoDe(r);
       corpo.appendChild(C.el('tr', {}, [
-        C.el('td', {}, [
-          C.el('b', { text: d ? S.rotuloDisciplina(d) : 'Sem disciplina' }),
-          C.el('small', { text: S.nomePessoa(S.responsavelDe(r)) + (desc ? ' · ' + desc : '') })
-        ]),
         C.el('td', { text: S.rotuloEscopoCurto(r.agrupamentoId, r.escopo) }),
+        C.el('td', {}, C.el('b', { text: d ? S.rotuloDisciplina(d) : 'Sem disciplina' })),
         C.el('td', { text: C.listaDias(r.dias) }),
-        C.el('td', { class: 'h', text: r.inicio + '–' + r.fim }),
-        C.el('td', { class: 'h', text: C.fmtDia(r.vigenciaInicio) + ' – ' + C.fmtDia(fimEfetivo(r)) }),
-        C.el('td', { class: 'h', text: S.ehIntegral(r)
-          ? 'todas' : S.quantidadeDe(r) + ' · ' + S.textoCadeiras(S.cadeirasDe(r)) })
+        C.el('td', { class: 'h', text: r.inicio + '–' + r.fim })
       ]));
     });
 
@@ -325,9 +309,8 @@
       subtituloPadrao(comFiltro(C.plural(regras.length, 'recorrência ativa', 'recorrências ativas'), filtro)),
       C.el('table', { class: 'imp-lista' }, [
         C.el('thead', {}, C.el('tr', {}, [
-          C.el('th', { text: 'Disciplina' }), C.el('th', { text: 'Onde' }),
-          C.el('th', { text: 'Dias' }), C.el('th', { class: 'h', text: 'Horário' }),
-          C.el('th', { class: 'h', text: 'Vigência' }), C.el('th', { class: 'h', text: 'Cadeiras' })
+          C.el('th', { text: 'Clínica' }), C.el('th', { text: 'Disciplina' }),
+          C.el('th', { text: 'Dias' }), C.el('th', { class: 'h', text: 'Horário' })
         ])),
         corpo
       ]));
@@ -362,8 +345,7 @@
         C.el('table', { class: 'imp-lista' }, [
           C.el('thead', {}, C.el('tr', {}, [
             C.el('th', { class: 'h', text: 'Data' }), C.el('th', { class: 'h', text: 'Horário' }),
-            C.el('th', { text: 'Onde' }), C.el('th', { class: 'h', text: 'Cadeiras' }),
-            C.el('th', { text: 'Descrição/Turma' }), C.el('th', { text: 'Tipo' })
+            C.el('th', { text: 'Clínica' })
           ])),
           corpo
         ])
@@ -375,10 +357,7 @@
       corpo.appendChild(C.el('tr', {}, [
         C.el('td', { class: 'h', text: C.nomeDia(C.weekday(o.data)) + ' ' + C.fmtDia(o.data) }),
         C.el('td', { class: 'h', text: o.inicio + '–' + o.fim }),
-        C.el('td', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) }),
-        C.el('td', { class: 'h', text: o.integral ? 'todas' : o.cadeiras + ' · ' + S.textoCadeiras(o.cadeirasLista) }),
-        C.el('td', { text: o.descricao || '' }),
-        C.el('td', { text: o.origem === 'pontual' ? 'Pontual' : 'Recorrente' })
+        C.el('td', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) })
       ]));
     });
     if (!occs.length) caixa.appendChild(C.el('p', { class: 'vazio', text: 'Nenhuma ocupação desta disciplina no semestre.' }));

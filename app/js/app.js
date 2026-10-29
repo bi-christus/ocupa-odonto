@@ -48,6 +48,7 @@
         if (!r.ok && r.motivo !== 'cancelado') erroLogin = r.mensagem;
         if (r.ok) rota = 'painel';
         desenhar();
+        if (r.ok) completarEstrutura();
       }, function (e) {
         boot = false;
         erroLogin = 'Falha ao carregar o sistema: ' + ((e && e.message) || 'erro desconhecido');
@@ -80,6 +81,25 @@
       conteudo()
     ]));
     trocouDeTela = false;
+  }
+
+  /* Banco provisionado a que falta algo da semente — os três ambientes sem
+     cadeira, em 29/10/2026. Quem grava é a coordenação, a única que as
+     Security Rules deixam escrever em `agrupamentos` e `clinicas`; os
+     demais perfis só passam a ver depois que um coordenador entrar. Uma
+     tentativa por sessão: se falhar, o toast do store avisa e a próxima
+     entrada tenta de novo. */
+  var estruturaConferida = false;
+  function completarEstrutura() {
+    if (estruturaConferida || !S.pode('estrutura.editar') || S.estruturaPendente()) return;
+    estruturaConferida = true;
+    var f = S.estruturaFaltando();
+    if (!f.agrupamentos.length && !f.clinicas.length) return;
+    S.completarEstrutura().then(function (r) {
+      if (r && r.ok && r.valor && r.valor.length) {
+        C.toast('Entraram na estrutura: ' + r.valor.join(', ') + '.');
+      }
+    });
   }
 
   function rotaValida() {
@@ -170,11 +190,15 @@
   /* Os números da estrutura saem da semente, nunca de literais na tela: eles
      já mentiram uma vez — ficaram presos em "8 clínicas · 112 cadeiras"
      quando as duas pré-clínicas entraram, em 22/09/2026. */
+  /* Desde 29/10/2026 a semente também traz ambientes sem cadeira, que não
+     são clínica: contam à parte. */
   function numerosDaEstrutura() {
     var b = global.Dados.semente();
+    var clinicas = b.clinicas.filter(function (c) { return !c.semCadeiras; });
     return {
       agrupamentos: b.agrupamentos.length,
-      clinicas: b.clinicas.length,
+      clinicas: clinicas.length,
+      ambientes: b.clinicas.length - clinicas.length,
       cadeiras: b.clinicas.reduce(function (s, c) { return s + c.cadeiras; }, 0)
     };
   }
@@ -196,8 +220,8 @@
           })
         ]),
         C.el('div', { class: 'row', style: 'gap:44px' }, [
-          [String(n.agrupamentos), 'agrupamentos'],
           [String(n.clinicas), 'clínicas'],
+          [String(n.ambientes), 'ambientes'],
           [String(n.cadeiras), 'cadeiras']
         ].map(function (par) {
           return C.el('div', {}, [
@@ -223,7 +247,7 @@
         class: 'muted', style: 'font-size:14px;line-height:1.7;margin-top:14px',
         text: podeFazer
           ? 'O banco está vazio. Vou gravar os ' + n.agrupamentos + ' agrupamentos, as ' +
-            n.clinicas + ' clínicas e as ' + n.cadeiras + ' cadeiras, junto com a configuração ' +
+            n.clinicas + ' clínicas, os ' + n.ambientes + ' ambientes e as ' + n.cadeiras + ' cadeiras, junto com a configuração ' +
             'inicial do semestre. Isso é feito uma única vez; nenhuma pessoa ou atividade é criada.'
           : 'O sistema ainda não foi configurado pela coordenação. Assim que a estrutura das clínicas for cadastrada, esta tela dá lugar ao painel.'
       })
