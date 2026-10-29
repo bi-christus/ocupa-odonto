@@ -201,9 +201,10 @@
       });
       celulas.push(C.el('td', { class: 'num right', style: totTd, text: Math.round(m.total) + ' h' }));
       /* 'Ocup.' é cadeira·hora sobre a capacidade da clínica, não horas. */
+      /* Ambiente sem cadeira não tem cadeira·hora: só as horas de uso. */
       celulas.push(C.el('td', {
-        class: 'num right', style: 'color:var(--accent-ink)',
-        text: Math.round(m.ocupacao * 100) + '%'
+        class: 'num right' + (S.semCadeiras(m.clinica) ? ' muted' : ''), style: 'color:var(--accent-ink)',
+        text: S.semCadeiras(m.clinica) ? '—' : Math.round(m.ocupacao * 100) + '%'
       }));
       celulas.push(C.el('td', {
         class: 'num right' + (m.interditadas.length ? '' : ' muted'),
@@ -361,12 +362,13 @@
     var linhas = [cab];
     matriz.forEach(function (m) {
       var c = m.clinica;
+      var semCad = S.semCadeiras(c);
       var linha = [S.nomeAgrupamento(c.agrupamentoId), c.nome, c.especialidade,
-        S.faixaCadeiras(c.id).join('–')];
+        semCad ? 'sem cadeiras' : S.faixaCadeiras(c.id).join('–')];
       m.dias.forEach(function (h) { linha.push(decimal(h)); });
       linha.push(decimal(m.total));
       linha.push(decimal(m.cadeirasHora));
-      linha.push(Math.round(m.ocupacao * 100) + '%');
+      linha.push(semCad ? '' : Math.round(m.ocupacao * 100) + '%');
       linha.push(m.interditadas.length);
       linha.push(textoInterditadas(m.interditadas));
       linhas.push(linha);
@@ -411,9 +413,9 @@
       somaCadeiras += c.cadeiras; somaOperantes += S.cadeirasOperantes(c.id); somaManut += nums.length;
       linhas.push([
         S.nomeAgrupamento(c.agrupamentoId), c.nome, c.especialidade,
-        S.faixaCadeiras(c.id).join('–'), c.cadeiras, S.cadeirasOperantes(c.id),
+        S.semCadeiras(c) ? 'sem cadeiras' : S.faixaCadeiras(c.id).join('–'), c.cadeiras, S.cadeirasOperantes(c.id),
         nums.length, textoInterditadas(nums), decimal(d.horas),
-        decimal(cadh), Math.round(c.cadeiras ? cadh / (CAP * c.cadeiras) * 100 : 0) + '%', ocupacoes
+        decimal(cadh), S.semCadeiras(c) ? '' : Math.round(c.cadeiras ? cadh / (CAP * c.cadeiras) * 100 : 0) + '%', ocupacoes
       ]);
     });
     /* A soma de ocupações do polo conta a ocupação conjunta duas vezes —
@@ -434,7 +436,7 @@
        inteira. A turma vem dentro da descrição, que é onde ela é escrita. */
     var linhas = [['Data', 'Dia', 'Agrupamento', 'Escopo', 'Ambiente', 'Início', 'Fim', 'Horas', 'Tipo',
       'Nível', 'Título', 'Disciplina', 'Descrição/Turma', 'Professor coordenador', 'Cadeiras', 'Números das cadeiras']];
-    var ambientes = { clinica: 'Clínica', dupla: 'Duas clínicas', pre: 'Pré-clínica' };
+    var ambientes = { clinica: 'Clínica', dupla: 'Duas clínicas', pre: 'Pré-clínica', espaco: 'Ambiente sem cadeiras' };
     S.ocorrenciasIntervalo(seg, S.fimDaSemana(seg)).forEach(function (o) {
       var d = S.disciplina(o.disciplinaId);
       linhas.push([
@@ -445,8 +447,8 @@
         o.origem === 'recorrente' ? 'Recorrente' : 'Pontual',
         S.rotuloTipoAtividade(o.nivel),
         o.titulo, d ? S.rotuloDisciplinaLongo(d) : '', o.descricao,
-        S.nomePessoa(o.responsavelId), o.cadeiras,
-        o.integral ? 'clínica inteira' : S.textoCadeiras(o.cadeirasLista)
+        S.nomePessoa(o.responsavelId), o.semCadeiras ? '' : o.cadeiras,
+        o.semCadeiras ? 'ambiente inteiro' : o.integral ? 'clínica inteira' : S.textoCadeiras(o.cadeirasLista)
       ]);
     });
     C.baixarCSV('agenda-da-semana.csv', linhas);

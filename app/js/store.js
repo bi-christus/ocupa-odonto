@@ -338,9 +338,20 @@
   function ehPreClinica(c) {
     return !!c && /pr[ée]-?\s*cl[íi]nica/i.test(String(c.especialidade || '') + ' ' + String(c.nome || ''));
   }
+  /* Ambiente SEM CADEIRA (29/10/2026) — radiologia, promoção da saúde, sala
+     de situação: a reserva é do ambiente inteiro. A marca é `semCadeiras`;
+     `cadeiras` zerado vale igual, para o documento gravado à mão. */
+  function semCadeiras(c) {
+    return !!c && (c.semCadeiras === true || !(Number(c.cadeiras) > 0));
+  }
+  function escopoSemCadeiras(agrupamentoId, escopo) {
+    var l = clinicasDoEscopo(agrupamentoId, escopo);
+    return l.length > 0 && l.every(semCadeiras);
+  }
   function ambienteDe(agrupamentoId, escopo) {
     var l = clinicasDoEscopo(agrupamentoId, escopo);
     if (l.length > 1) return 'dupla';
+    if (semCadeiras(l[0])) return 'espaco';
     return ehPreClinica(l[0]) ? 'pre' : 'clinica';
   }
   /* O número da cadeira NÃO É MAIS ÚNICO NO POLO. As oito clínicas de
@@ -627,6 +638,11 @@
     return {
       d: d, disciplinaId: did,
       cadeiras: lista.length, cadeirasLista: lista, integral: ehIntegral(o),
+      semCadeiras: escopoSemCadeiras(o.agrupamentoId, o.escopo),
+      /* Só a disciplina, sem o tipo na frente: é o que a agenda e as folhas
+         mostram desde 29/10/2026 ("a clínica e a disciplina", e nada mais). */
+      disciplinaRotulo: d ? rotuloDisciplina(d) : did ? 'Disciplina removida'
+        : o.tipo === 'pontual' ? 'Outros · ' + nomePessoa(responsavelDe(o)) : 'Sem disciplina',
       responsavelId: responsavelDe(o), nivel: nivelDe(o), descricao: descricaoDe(o),
       ambiente: ambienteDe(o.agrupamentoId, o.escopo)
     };
@@ -642,6 +658,7 @@
       /* Quantas e quais cadeiras a reserva segura; na reserva anterior a
          05/10/2026 é o escopo inteiro, e `integral` diz isso. */
       cadeiras: b.cadeiras, cadeirasLista: b.cadeirasLista, integral: b.integral,
+      semCadeiras: b.semCadeiras, disciplinaRotulo: b.disciplinaRotulo,
       /* Pelo rótulo do Store: é o único que sabe que a pós se chama pelo nome
          da especialização — e o único que não estoura quando a disciplina
          foi apagada por fora, no console. */
@@ -673,6 +690,7 @@
       data: p.data, inicio: p.inicio, fim: p.fim,
       disciplinaId: b.disciplinaId,
       cadeiras: b.cadeiras, cadeirasLista: b.cadeirasLista, integral: b.integral,
+      semCadeiras: b.semCadeiras, disciplinaRotulo: b.disciplinaRotulo,
       titulo: tituloPontual(p),
       subtitulo: subtituloDisciplina(b.d),
       /* Só existe em ocupação gravada antes da mudança. O detalhe da agenda
@@ -939,8 +957,13 @@
     var qtd = Number(q.quantidade) || 0;
     return {
       pool: pool, livres: livres, livresNaData: livresNaData, disputas: lista,
+      /* No ambiente sem cadeira não há o que contar: ou o horário está
+         livre, ou alguém já reservou o ambiente. */
+      semCadeiras: escopoSemCadeiras(ag, q.escopo), ocupado: lista.length > 0,
       sugestao: qtd > 0 && livres.length >= qtd ? menores(ag, livres, qtd) : null,
-      datasSemVaga: qtd > 0 ? q.datas.filter(function (d) { return livresNaData[d] < qtd; }) : []
+      datasSemVaga: escopoSemCadeiras(ag, q.escopo)
+        ? q.datas.filter(function (d) { return lista.some(function (x) { return x.datas.indexOf(d) !== -1; }); })
+        : qtd > 0 ? q.datas.filter(function (d) { return livresNaData[d] < qtd; }) : []
     };
   }
 
@@ -1089,7 +1112,16 @@
     var checar = estado.parametros.bloquearSobreposicao !== false;
     var integral = ehIntegral(o);
     var quantidade = quantidadeDe(o);
+    var semCad = escopoSemCadeiras(o.agrupamentoId, o.escopo);
     return N.gravarOcupacao(o.agrupamentoId, o.id, o, function (itens) {
+      /* Ambiente sem cadeira: o escopo não tem cadeira nenhuma, então a
+         conferência por cadeira passaria sempre. Quem decide é o horário —
+         qualquer reserva cruzando nele toma o ambiente. */
+      if (semCad) {
+        if (!checar || !disputas(o.agrupamentoId, resumo, itens).length) return null;
+        return rotuloEscopoCurto(o.agrupamentoId, o.escopo) + ' já está ocupado neste horário. ' +
+          'Se a agenda parecia livre, alguém gravou enquanto você preenchia — reveja o horário.';
+      }
       if (integral) {
         if (!checar) return null;
         var todas = alocar(o.agrupamentoId, resumo, itens, {
@@ -1108,7 +1140,7 @@
       o.cadeirasAlocadas = res.cadeiras;
       resumo.cadeiras = res.cadeiras.slice();
       return null;
-    }, resumo);
+    }, resumo, opcoes.agrupamentoAnterior || null);
   }
 
   /* A mesma escolha, feita no cache, para a tela já mostrar as cadeiras no
@@ -1160,7 +1192,7 @@
       responsavelId: dados.responsavelId || euId(),
       tipoAtividade: dados.tipoAtividade === 'pos' ? 'pos' : 'graduacao',
       dias: dados.dias.slice().sort(), inicio: dados.inicio, fim: dados.fim,
-      cadeirasPedidas: quantidadeValida(dados),
+      cadeirasPedidas: escopoSemCadeiras(dados.agrupamentoId, dados.escopo || 'a') ? null : quantidadeValida(dados),
       /* A vigência nunca escapa do semestre: fora dele a agenda geraria
          encontros que nenhuma tela consegue mostrar. */
       vigenciaInicio: maiorISO(dados.vigenciaInicio, estado.semestre.inicio),
@@ -1178,7 +1210,7 @@
     };
     /* As cadeiras são escolhidas já com as datas puladas fora: é contra as
        datas que de fato acontecem que elas precisam estar livres. */
-    r.cadeirasAlocadas = alocarLocal(r);
+    r.cadeirasAlocadas = r.cadeirasPedidas ? alocarLocal(r) : null;
     estado.recorrencias.push(r);
     commit();
     persistir(gravarOcupacaoNaNuvem(r), function () {
@@ -1196,14 +1228,14 @@
       tipoAtividade: dados.tipoAtividade,
       descricao: String(dados.descricao || '').trim(),
       disciplinaId: dados.disciplinaId || null, responsavelId: dados.responsavelId,
-      cadeirasPedidas: quantidadeValida(dados),
+      cadeirasPedidas: escopoSemCadeiras(dados.agrupamentoId, dados.escopo || 'a') ? null : quantidadeValida(dados),
       excecoes: [],
       situacao: soPedido ? 'pendente' : 'aprovada',
       criadoPor: euId(), criadoEm: C.carimbo()
     };
     /* Pedido não segura cadeira, como não segura horário: as cadeiras dele
        são escolhidas na aprovação, contra a agenda daquele momento. */
-    if (!soPedido) p.cadeirasAlocadas = alocarLocal(p);
+    if (!soPedido && p.cadeirasPedidas) p.cadeirasAlocadas = alocarLocal(p);
     estado.pontuais.push(p);
     commit();
     /* Pedido é gravação simples: não reserva nada, logo não passa pela
@@ -1336,6 +1368,99 @@
     commit();
     return persistir(gravarOcupacaoNaNuvem(o, { fixo: true }), function () {
       Object.keys(antes).forEach(function (k) {
+        if (antes[k] === undefined) delete o[k]; else o[k] = antes[k];
+      });
+    });
+  }
+
+  /* ── Edição pela coordenação (29/10/2026) ─────────────────────────────
+     `agenda.editar`: a coordenação corrige QUALQUER reserva — recorrente ou
+     pontual, passada, em curso ou futura, pedido ainda pendente incluído.
+     Muda onde, quando, quantas cadeiras, disciplina, professor e
+     descrição; o tipo (recorrente/pontual) fica, porque trocar de tipo é
+     outra reserva.
+
+     Passa pela MESMA transação da criação: as cadeiras que a reserva já
+     tinha entram como preferência e ficam se continuarem livres no novo
+     horário; senão a transação escolhe outras, e recusa só quando falta
+     quantidade (ou, no ambiente sem cadeira, quando o horário está tomado).
+     Mudou de agrupamento, a entrada do índice antigo sai na mesma transação
+     (`agrupamentoAnterior`) — sem isso ela ficaria lá segurando o horário
+     de antes, o fantasma de `removerOcupacao`.
+
+     `turmaId` é zerado: o formulário já traz a disciplina, o professor e a
+     turma (na descrição) resolvidos pelo legado, e o que se grava passa a
+     ser a forma nova. Exceções, encerramento, situação e os nomes anotados
+     nas cadeiras não mudam. */
+  var CAMPOS_EDITAVEIS = ['agrupamentoId', 'escopo', 'disciplinaId', 'responsavelId', 'tipoAtividade',
+    'descricao', 'inicio', 'fim', 'data', 'dias', 'vigenciaInicio', 'vigenciaFim',
+    'cadeirasPedidas', 'cadeirasAlocadas', 'turmaId', 'editadoPor', 'editadoEm'];
+  function editarReserva(id, dados) {
+    if (!pode('agenda.editar')) {
+      return global.Promise.resolve({ ok: false, mensagem: 'Somente a coordenação edita reservas.' });
+    }
+    var o = reservaPorId(id);
+    if (!o) return global.Promise.resolve({ ok: false, mensagem: 'Reserva não encontrada.' });
+    var antes = {};
+    CAMPOS_EDITAVEIS.forEach(function (k) { antes[k] = o[k]; });
+    var agAntes = o.agrupamentoId, escAntes = o.escopo;
+
+    o.agrupamentoId = dados.agrupamentoId;
+    o.escopo = dados.escopo || 'a';
+    o.disciplinaId = dados.disciplinaId || null;
+    o.responsavelId = dados.responsavelId || responsavelDe(o) || euId();
+    o.tipoAtividade = dados.tipoAtividade === 'pos' ? 'pos' : 'graduacao';
+    o.descricao = String(dados.descricao || '').trim();
+    o.inicio = dados.inicio;
+    o.fim = dados.fim;
+    if (o.tipo === 'pontual') {
+      o.data = dados.data;
+    } else {
+      o.dias = (dados.dias || []).slice().sort();
+      o.vigenciaInicio = dados.vigenciaInicio;
+      o.vigenciaFim = dados.vigenciaFim;
+    }
+    o.turmaId = null;
+    o.editadoPor = euId();
+    o.editadoEm = C.carimbo();
+
+    var pedido = o.tipo === 'pontual' && situacaoDe(o) !== 'aprovada';
+    if (escopoSemCadeiras(o.agrupamentoId, o.escopo)) {
+      /* null, e não ausente: a gravação é `merge`, e o campo antigo ficaria. */
+      o.cadeirasPedidas = null;
+      o.cadeirasAlocadas = null;
+    } else {
+      var qtd = quantidadeValida(dados);
+      o.cadeirasPedidas = qtd;
+      /* Sem lista ainda: com ela, `quantidadeDe` leria o tamanho da lista
+         ANTIGA, e pedir 10 numa reserva de 8 continuava alocando 8. */
+      o.cadeirasAlocadas = null;
+      if (!pedido) {
+        /* As que ela já tinha vêm primeiro, completadas pelas menores
+           livres; `alocar` confere e, se alguma foi tomada no novo
+           horário, escolhe de novo da menor para a maior. */
+        var mesmoLugar = agAntes === o.agrupamentoId && escAntes === o.escopo;
+        var tinha = mesmoLugar && Array.isArray(antes.cadeirasAlocadas) ? antes.cadeirasAlocadas.slice() : [];
+        var opc = { checar: estado.parametros.bloquearSobreposicao !== false, quantidade: qtd };
+        var itens = itensLocais(o.agrupamentoId, o.id), resumo = resumoDaOcupacao(o);
+        var base = alocar(o.agrupamentoId, resumo, itens, opc);
+        var pref = tinha.slice(0, qtd);
+        (base.ok ? base.cadeiras : []).forEach(function (n) {
+          if (pref.length < qtd && pref.indexOf(n) === -1) pref.push(n);
+        });
+        opc.preferidas = pref;
+        var res = alocar(o.agrupamentoId, resumo, itens, opc);
+        o.cadeirasAlocadas = res.ok ? res.cadeiras : poolDoEscopo(o.agrupamentoId, o.escopo).slice(0, qtd);
+      }
+    }
+    commit();
+
+    var indexavel = !estaExcluida(o) && !pedido;
+    var promessa = indexavel
+      ? gravarOcupacaoNaNuvem(o, { agrupamentoAnterior: agAntes !== o.agrupamentoId ? agAntes : null })
+      : N.gravar('ocupacoes', o.id, o);
+    return persistir(promessa, function () {
+      CAMPOS_EDITAVEIS.forEach(function (k) {
         if (antes[k] === undefined) delete o[k]; else o[k] = antes[k];
       });
     });
@@ -1947,6 +2072,7 @@
       passos.push(N.gravar('clinicas', c.id, {
         nome: c.nome, agrupamentoId: c.agrupamentoId, especialidade: c.especialidade,
         cadeiras: c.cadeiras, primeiraCadeira: c.primeiraCadeira,
+        semCadeiras: !!c.semCadeiras,
         abertura: c.abertura, fechamento: c.fechamento
       }));
     });
@@ -1956,6 +2082,43 @@
     }));
     return persistir(global.Promise.all(passos).then(function () { return carregar(); })
       .then(function () { commit(); return true; }));
+  }
+
+  /* Banco JÁ provisionado que não tem algum agrupamento ou clínica da
+     semente — foi o caso dos três ambientes sem cadeira, em 29/10/2026. A
+     semente só alcança banco vazio, e antes disso cada estrutura nova
+     entrava gravada à mão no console (as pré-clínicas, em 22/09/2026).
+     Agora ela entra no primeiro login da coordenação (app.js), pelo mesmo
+     caminho das Security Rules. Só CRIA o que falta, pelo id: nada que já
+     está no banco é tocado — nem nome, nem horário, nem tamanho. */
+  function estruturaFaltando() {
+    if (!estado || !estado.agrupamentos.length) return { agrupamentos: [], clinicas: [] };
+    var base = D.semente();
+    return {
+      agrupamentos: base.agrupamentos.filter(function (g) { return !agrupamento(g.id); }),
+      clinicas: base.clinicas.filter(function (c) { return !clinica(c.id); })
+    };
+  }
+  function completarEstrutura() {
+    var f = estruturaFaltando();
+    if (!f.agrupamentos.length && !f.clinicas.length) return global.Promise.resolve({ ok: true, valor: [] });
+    var passos = [];
+    f.clinicas.forEach(function (c) {
+      passos.push(N.gravar('clinicas', c.id, {
+        nome: c.nome, agrupamentoId: c.agrupamentoId, especialidade: c.especialidade,
+        cadeiras: c.cadeiras, primeiraCadeira: c.primeiraCadeira,
+        semCadeiras: !!c.semCadeiras,
+        abertura: c.abertura, fechamento: c.fechamento
+      }));
+    });
+    f.agrupamentos.forEach(function (g) {
+      passos.push(N.gravar('agrupamentos', g.id, { nome: g.nome, clinicas: g.clinicas }));
+    });
+    return persistir(global.Promise.all(passos).then(function () { return carregar(); })
+      .then(function () {
+        commit();
+        return f.agrupamentos.map(function (g) { return g.nome; });
+      }));
   }
 
   /* ── Métricas ─────────────────────────────────────────────────────────
@@ -2063,6 +2226,8 @@
      resolvedores. */
   function podeGerirCadeiras(o) {
     if (!o || !usuarioAtual || !pode('cadeira.ocupar')) return false;
+    /* Ambiente sem cadeira: não há cadeira para trocar. */
+    if (escopoSemCadeiras(o.agrupamentoId, o.escopo)) return false;
     if (usuarioAtual.perfil === 'coordenador') return true;
     var doc = o.origemId ? reservaPorId(o.origemId) : o;
     if (!doc) return false;
@@ -2119,6 +2284,7 @@
     cadeirasInterditadas: cadeirasInterditadas,
     poolDoEscopo: poolDoEscopo, rotuloEscopoCurto: rotuloEscopoCurto,
     ehPreClinica: ehPreClinica, ambienteDe: ambienteDe,
+    semCadeiras: semCadeiras, escopoSemCadeiras: escopoSemCadeiras,
     disciplina: disciplina,
     aluno: aluno, pessoa: pessoa, nomePessoa: nomePessoa,
     subtituloAgrupamento: subtituloAgrupamento,
@@ -2143,7 +2309,7 @@
     textoCadeiras: textoCadeiras,
     disponibilidade: disponibilidade, mapaDeCadeiras: mapaDeCadeiras,
     podeGerirCadeiras: podeGerirCadeiras, limiteDeCadeiras: limiteDeCadeiras,
-    alterarCadeiras: alterarCadeiras,
+    alterarCadeiras: alterarCadeiras, editarReserva: editarReserva,
     nomeNaCadeira: nomeNaCadeira, registrarNomeNaCadeira: registrarNomeNaCadeira,
     criarRecorrencia: criarRecorrencia, criarPontual: criarPontual,
     exigirAprovacao: exigirAprovacao, situacaoDe: situacaoDe,
@@ -2164,6 +2330,7 @@
     atualizarClinica: atualizarClinica, atualizarParametros: atualizarParametros,
     atualizarSemestre: atualizarSemestre,
     estruturaPendente: estruturaPendente, provisionarEstrutura: provisionarEstrutura,
+    estruturaFaltando: estruturaFaltando, completarEstrutura: completarEstrutura,
     horasSemana: horasSemana, horasPorClinica: horasPorClinica,
     horasPorAgrupamento: horasPorAgrupamento, horasPorDisciplina: horasPorDisciplina,
     cadeirasHoraPorClinica: cadeirasHoraPorClinica, horasDeUso: horasDeUso,

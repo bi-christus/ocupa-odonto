@@ -35,12 +35,19 @@
      opcoes.aoRegistrar   callback(resultado) após gravar
      opcoes.compacto      true no painel (esconde o título interno)
      opcoes.inicial       pré-preenchimento vindo do clique na agenda —
-                          { data, inicio, fim, agrupamentoId, escopo } */
+                          { data, inicio, fim, agrupamentoId, escopo }
+     opcoes.editar        o DOCUMENTO de uma reserva já gravada: o formulário
+                          abre preenchido com ela e grava por
+                          S.editarReserva. Só da coordenação
+                          (`agenda.editar`), e vale para qualquer data —
+                          passada inclusive: é correção, não lançamento. */
   function montar(alvo, opcoes) {
     opcoes = opcoes || {};
     var u = S.usuario();
-    var podeRec = S.pode('agenda.criarRecorrente');
-    var podePont = S.pode('agenda.criarPontual');
+    var doc = opcoes.editar || null;
+    var editando = !!doc;
+    var podeRec = editando ? S.pode('agenda.editar') : S.pode('agenda.criarRecorrente');
+    var podePont = editando ? S.pode('agenda.editar') : S.pode('agenda.criarPontual');
     if (!podeRec && !podePont) {
       C.clear(alvo).appendChild(U.semPermissao(
         'Seu perfil consulta a agenda, mas não registra ocupações. Peça à coordenação para lançar o horário.'));
@@ -63,6 +70,9 @@
     var modo = opcoes.modo || (podeRec ? 'recorrente' : 'pontual');
     if (modo === 'recorrente' && !podeRec) modo = 'pontual';
     if (modo === 'pontual' && !podePont) modo = 'recorrente';
+    /* A edição não troca o tipo da reserva: recorrente virar pontual é outra
+       reserva, e o seletor de modo nem aparece. */
+    if (editando) modo = doc.tipo === 'pontual' ? 'pontual' : 'recorrente';
 
     var lim = limitesSemestre();
     var inicioUtil = menorData(maiorData(lim.inicio, C.hojeISO()), lim.fim);
@@ -100,11 +110,17 @@
       vigenciaFim: lim.fim,
       linhas: [novaLinha()]
     };
-    aplicarInicial(opcoes.inicial);
-    form.linhas.forEach(encaixarNaJanela);
+    if (editando) aplicarReserva(doc);
+    else aplicarInicial(opcoes.inicial);
+    /* Na edição o horário gravado vale como está: encaixá-lo na janela de
+       hoje mudaria a reserva sem ninguém pedir. */
+    if (!editando) form.linhas.forEach(encaixarNaJanela);
     /* A disciplina nasce preenchida: a primeira do tipo, ou "Outros" na
-       pontual quando não há nenhuma. Nunca em branco. */
+       pontual quando não há nenhuma. Nunca em branco. Na edição o professor
+       gravado é mantido, mesmo que a disciplina sugira outro. */
+    var responsavelGravado = form.responsavelId;
     ajustarDisciplina();
+    if (editando && S.pessoa(responsavelGravado)) form.responsavelId = responsavelGravado;
 
     var raiz = C.clear(alvo);
     var corpo = C.el('div');
@@ -135,8 +151,8 @@
       return b;
     }
 
-    if (!opcoes.compacto) raiz.appendChild(C.el('h5', { text: 'Nova ocupação', style: 'margin-bottom:16px' }));
-    raiz.appendChild(seg);
+    if (!opcoes.compacto) raiz.appendChild(C.el('h5', { text: editando ? 'Editar ocupação' : 'Nova ocupação', style: 'margin-bottom:16px' }));
+    if (!editando) raiz.appendChild(seg);
     raiz.appendChild(corpo);
     raiz.appendChild(C.el('div', { style: 'display:flex;flex-direction:column;gap:14px;margin-top:20px' }, [
       painelPre, avisos,
@@ -223,6 +239,31 @@
        padrões. Nada entra sem ser conferido: o clique devolve coordenada de
        tela, não garantia de que o agrupamento ainda existe ou de que a data
        cabe no semestre. */
+    /* ── Pré-preenchimento da edição ───────────────────────────────────
+       Tudo pelos leitores do Store, com o legado embutido: a reserva antiga
+       aponta para turma, e o formulário precisa abrir com a disciplina, o
+       professor e a turma (na descrição) já resolvidos. A quantidade é a que
+       a reserva segura — na integral antiga, a clínica inteira. */
+    function aplicarReserva(r) {
+      var l = form.linhas[0];
+      l.agrupamentoId = r.agrupamentoId;
+      l.escopo = r.escopo || 'a';
+      l.inicio = r.inicio;
+      l.fim = r.fim;
+      if (r.tipo === 'pontual') l.data = r.data;
+      l.cadeiras = S.escopoSemCadeiras(r.agrupamentoId, r.escopo) ? '' : String(S.quantidadeDe(r) || '');
+      form.tipo = S.nivelDe(r);
+      var did = S.disciplinaIdDe(r);
+      form.disciplinaId = did || (r.tipo === 'pontual' ? SEM_VINCULO : '');
+      form.responsavelId = S.responsavelDe(r) || u.id;
+      form.descricao = S.descricaoDe(r);
+      if (r.tipo !== 'pontual') {
+        form.dias = (r.dias || []).slice();
+        form.vigenciaInicio = r.vigenciaInicio;
+        form.vigenciaFim = r.vigenciaFim;
+      }
+    }
+
     function aplicarInicial(ini) {
       if (!ini) return;
       var l = form.linhas[0];
@@ -478,25 +519,36 @@
       var cap = S.capacidadeEscopo(l.agrupamentoId, l.escopo);
       l._sel = U.selecao(opcoesEscopo(), valorEscopo(l.agrupamentoId, l.escopo), function (v) { aplicarEscopo(l, v); });
       l._dica = C.el('small', { class: 'muted', style: 'font-size:11.5px' });
-      var qtd = C.el('input', {
-        class: 'input', type: 'number', min: '1', max: String(cap), step: '1',
-        inputmode: 'numeric', placeholder: 'quantas?', value: String(l.cadeiras),
-        'aria-label': 'Quantidade de cadeiras',
-        oninput: function (ev) { l.cadeiras = ev.target.value; atualizar(); }
-      });
       var multi = modo === 'pontual' && form.linhas.length > 1;
+      /* Ambiente sem cadeira (radiologia, promoção da saúde, sala de
+         situação): a reserva é do ambiente inteiro, então o campo de
+         quantidade não existe — fica só a dica dizendo se está livre. */
+      var campoCadeiras;
+      if (S.escopoSemCadeiras(l.agrupamentoId, l.escopo)) {
+        campoCadeiras = campoComDica('Cadeiras', C.el('div', { class: 'input', style: 'display:flex;align-items:center;color:var(--color-text-muted, inherit)',
+          text: 'ambiente inteiro' }), l._dica);
+      } else {
+        campoCadeiras = campoComDica('Cadeiras', C.el('input', {
+          class: 'input', type: 'number', min: '1', max: String(cap), step: '1',
+          inputmode: 'numeric', placeholder: 'quantas?', value: String(l.cadeiras),
+          'aria-label': 'Quantidade de cadeiras',
+          oninput: function (ev) { l.cadeiras = ev.target.value; atualizar(); }
+        }), l._dica);
+      }
       var campos = [
-        U.campo('Clínica', l._sel),
-        campoComDica('Cadeiras', qtd, l._dica)
+        U.campo('Clínica / ambiente', l._sel),
+        campoCadeiras
       ];
       if (modo === 'pontual') {
         var l0 = limitesSemestre();
         var minPontual = maiorData(l0.inicio, C.hojeISO());
         if (minPontual > l0.fim) minPontual = l0.inicio;
-        campos.push(U.campo('Data', C.el('input', {
-          class: 'input', type: 'date', value: l.data, min: minPontual, max: l0.fim,
-          oninput: function (ev) { l.data = ev.target.value; atualizar(); }
-        })));
+        campos.push(U.campo('Data', C.el('input', editando
+          ? { class: 'input', type: 'date', value: l.data, oninput: function (ev) { l.data = ev.target.value; atualizar(); } }
+          : {
+            class: 'input', type: 'date', value: l.data, min: minPontual, max: l0.fim,
+            oninput: function (ev) { l.data = ev.target.value; atualizar(); }
+          })));
       }
       var jan = janela(l);
       return C.el('div', { class: modo === 'pontual' ? 'linha-ocup' : '' }, [
@@ -571,22 +623,25 @@
         var l = limitesSemestre();
         corpo.appendChild(C.el('div', { class: 'grid-fields', style: 'margin-top:16px' }, [
           U.campo('Repete de', C.el('input', {
-            class: 'input', type: 'date', value: form.vigenciaInicio, min: l.inicio, max: l.fim,
+            class: 'input', type: 'date', value: form.vigenciaInicio,
+            min: editando ? null : l.inicio, max: editando ? null : l.fim,
             oninput: function (ev) { form.vigenciaInicio = ev.target.value; atualizar(); }
           }), 'primeira semana'),
           U.campo('Repete até', C.el('input', {
-            class: 'input', type: 'date', value: form.vigenciaFim, min: l.inicio, max: l.fim,
+            class: 'input', type: 'date', value: form.vigenciaFim,
+            min: editando ? null : l.inicio, max: editando ? null : l.fim,
             oninput: function (ev) { form.vigenciaFim = ev.target.value; atualizar(); }
           }), 'fim do semestre ' + e.periodoLetivo)
         ]));
-        acao.textContent = 'Criar recorrência';
+        acao.textContent = editando ? 'Salvar alterações' : 'Criar recorrência';
       } else {
         var lista = C.el('div', { class: 'stack', style: 'gap:12px;margin-top:18px' });
         form.linhas.forEach(function (ln, i) { lista.appendChild(blocoLinha(ln, i)); });
         corpo.appendChild(lista);
         /* A nova ocupação nasce igual à última: o caso comum é repetir a
-           atividade noutro dia ou noutra clínica, e só o que muda é editado. */
-        corpo.appendChild(C.el('div', { class: 'row', style: 'gap:12px;margin-top:10px' }, [
+           atividade noutro dia ou noutra clínica, e só o que muda é editado.
+           Na edição não há linha nova: edita-se uma reserva. */
+        if (!editando) corpo.appendChild(C.el('div', { class: 'row', style: 'gap:12px;margin-top:10px' }, [
           C.el('button', {
             class: 'btn btn-outline', type: 'button', text: '+ Adicionar ocupação',
             onclick: function () {
@@ -612,7 +667,7 @@
         var n = form.linhas.length;
         /* O botão não pode prometer "registrar" quando o que vai acontecer é
            um pedido esperando a coordenação. */
-        acao.textContent = souPedido()
+        acao.textContent = editando ? 'Salvar alterações' : souPedido()
           ? (n > 1 ? 'Solicitar ' + n + ' ocupações' : 'Solicitar ocupação')
           : (n > 1 ? 'Registrar ' + n + ' atividades' : 'Registrar atividade');
       }
@@ -688,7 +743,7 @@
           gerais.push('Informe o período de vigência.');
         } else if (form.vigenciaFim < form.vigenciaInicio) {
           gerais.push('"Repete até" precisa ser depois de "Repete de".');
-        } else if (form.vigenciaInicio < l0.inicio || form.vigenciaFim > l0.fim) {
+        } else if (!editando && (form.vigenciaInicio < l0.inicio || form.vigenciaFim > l0.fim)) {
           gerais.push('A vigência precisa ficar dentro do semestre — de ' +
             C.fmtDiaAno(l0.inicio) + ' a ' + C.fmtDiaAno(l0.fim) + '.');
         } else if (!datasRecorrencia().length) {
@@ -700,12 +755,15 @@
       var linhas = (modo === 'recorrente' ? form.linhas.slice(0, 1) : form.linhas).map(function (l, i) {
         var erros = errosDoHorario(l);
         var cap = S.capacidadeEscopo(l.agrupamentoId, l.escopo);
-        var qtd = inteiro(l.cadeiras);
+        var semCad = S.escopoSemCadeiras(l.agrupamentoId, l.escopo);
+        var qtd = semCad ? null : inteiro(l.cadeiras);
         /* Vazia trava o envio, mas não vira alerta vermelho: formulário
            recém-aberto que acusa erro antes de a pessoa digitar ensina a
            ignorar alerta. Quem avisa é a dica do próprio campo. */
-        var semQuantidade = String(l.cadeiras).trim() === '';
-        if (!semQuantidade && (qtd === null || qtd < 1)) {
+        var semQuantidade = !semCad && String(l.cadeiras).trim() === '';
+        if (semCad) {
+          /* O ambiente inteiro: não há quantidade a conferir. */
+        } else if (!semQuantidade && (qtd === null || qtd < 1)) {
           erros.push('A quantidade de cadeiras precisa ser um número inteiro a partir de 1.');
         } else if (!semQuantidade && qtd > cap) {
           erros.push(S.rotuloEscopoCurto(l.agrupamentoId, l.escopo) + ' tem ' + C.plural(cap, 'cadeira') + ' — peça até ' + cap + '.');
@@ -713,7 +771,7 @@
         if (modo === 'pontual') {
           if (!C.dataValida(l.data)) erros.push('Informe a data.');
           else if (C.weekday(l.data) === 0) erros.push('Domingo não entra na grade da semana — escolha de segunda a sábado.');
-          else if (l.data < minPontual || l.data > l0.fim) {
+          else if (!editando && (l.data < minPontual || l.data > l0.fim)) {
             erros.push('A data precisa ficar entre ' + C.fmtDiaAno(minPontual) + ' e ' + C.fmtDiaAno(l0.fim) + '.');
           }
         }
@@ -722,20 +780,23 @@
           ? S.disponibilidade({
             agrupamentoId: l.agrupamentoId, escopo: l.escopo, datas: datas,
             inicio: l.inicio, fim: l.fim, quantidade: qtd || 0,
+            ignorarId: editando ? doc.id : undefined,
             extras: extras.filter(function (x) { return x.agrupamentoId === l.agrupamentoId; })
               .map(function (x) { return x.item; })
           })
           : null;
-        var falta = !!disp && qtd > 0 && qtd <= cap && disp.livres.length < qtd;
+        var falta = semCad ? !!disp && disp.ocupado
+          : !!disp && qtd > 0 && qtd <= cap && disp.livres.length < qtd;
         var resultado = {
           l: l, i: i, erros: erros, datas: datas, disp: disp, qtd: qtd, cap: cap, falta: falta,
-          semQuantidade: semQuantidade
+          semQuantidade: semQuantidade, semCad: semCad
         };
         /* A linha entra como item virtual para as seguintes — com as
-           cadeiras que ela levaria, ou com as que sobram, se faltar. */
-        if (disp && qtd > 0) {
-          var cad = disp.sugestao || disp.livres.slice(0, qtd);
-          if (cad.length) {
+           cadeiras que ela levaria, ou com as que sobram, se faltar. A do
+           ambiente sem cadeira entra sem cadeira nenhuma: o horário basta. */
+        if (disp && (qtd > 0 || semCad)) {
+          var cad = semCad ? [] : disp.sugestao || disp.livres.slice(0, qtd);
+          if (cad.length || semCad) {
             extras.push({
               agrupamentoId: l.agrupamentoId,
               item: {
@@ -765,7 +826,11 @@
       an.linhas.forEach(function (r) {
         var l = r.l;
         sincronizarTurnos(l);
-        if (l._dica) {
+        if (l._dica && r.semCad) {
+          l._dica.textContent = 'sem cadeiras — a reserva é do ambiente' +
+            (r.disp ? (r.disp.ocupado ? ' · já ocupado neste horário' : ' · livre neste horário') : '');
+          l._dica.style.color = r.falta ? 'var(--danger)' : '';
+        } else if (l._dica) {
           var txt = (r.semQuantidade ? 'obrigatório · ' : '') + 'de ' + r.cap;
           if (r.disp) {
             txt += ' · ' + C.plural(r.disp.livres.length, 'livre', 'livres') + ' neste horário';
@@ -783,17 +848,20 @@
             if (!S.agrupamento(p[0])) return;
             var d = S.disponibilidade({
               agrupamentoId: p[0], escopo: p[1], datas: r.datas, inicio: l.inicio, fim: l.fim,
+              ignorarId: editando ? doc.id : undefined,
               extras: an.linhas.filter(function (o) { return o.i < r.i && o.l.agrupamentoId === p[0] && o.disp; })
                 .map(function (o) {
                   return {
                     id: '__linha' + o.l.id, tipo: 'pontual', escopo: o.l.escopo, inicio: o.l.inicio, fim: o.l.fim,
                     data: modo === 'pontual' ? o.l.data : null, dias: null, excecoes: [],
-                    cadeiras: o.disp.sugestao || o.disp.livres.slice(0, o.qtd || 0)
+                    cadeiras: o.semCad ? [] : o.disp.sugestao || o.disp.livres.slice(0, o.qtd || 0),
+                    semCad: o.semCad
                   };
-                }).filter(function (it) { return it.cadeiras.length; })
+                }).filter(function (it) { return it.cadeiras.length || it.semCad; })
             });
             var base = rotuloBaseEscopo(op.value);
-            var novo = base + ' · ' + C.plural(d.livres.length, 'livre', 'livres');
+            var novo = base + ' · ' + (d.semCadeiras ? (d.ocupado ? 'ocupado' : 'livre')
+              : C.plural(d.livres.length, 'livre', 'livres'));
             if (op.textContent !== novo) op.textContent = novo;
           });
         }
@@ -824,7 +892,7 @@
         ]));
         painelPre.appendChild(C.el('div', { class: 'muted' }, [
           rotuloDisc + ' · ' + S.rotuloEscopoCurto(l0.agrupamentoId, l0.escopo) + ' · ' +
-          (r0.qtd ? C.plural(r0.qtd, 'cadeira', 'cadeiras') +
+          (r0.semCad ? 'ambiente inteiro' : r0.qtd ? C.plural(r0.qtd, 'cadeira', 'cadeiras') +
             (r0.disp && r0.disp.sugestao ? ' (' + C.faixasNumeros(r0.disp.sugestao) + ')' : '') : 'cadeiras a informar') +
           ' · professor coordenador: ' + S.nomePessoa(form.responsavelId)
         ]));
@@ -842,7 +910,7 @@
             (C.dataValida(l.data) ? C.nomeDia(C.weekday(l.data)) + ', ' + C.fmtDiaAno(l.data) : '—') +
             ' · ' + l.inicio + '–' + l.fim + ' (' + C.fmtHoras(dur) + ') · ' +
             S.rotuloEscopoCurto(l.agrupamentoId, l.escopo) + ' · ' +
-            (r.qtd ? C.plural(r.qtd, 'cadeira', 'cadeiras') +
+            (r.semCad ? 'ambiente inteiro' : r.qtd ? C.plural(r.qtd, 'cadeira', 'cadeiras') +
               (r.disp && r.disp.sugestao && !souPedido() ? ' (' + C.faixasNumeros(r.disp.sugestao) + ')' : '')
               : 'cadeiras a informar')
           ]));
@@ -867,7 +935,22 @@
           bloqueia = true;
           avisos.appendChild(C.el('div', { class: 'alert danger', text: prefixo + m }));
         });
-        if (r.falta) {
+        if (r.falta && r.semCad) {
+          bloqueia = true;
+          var amostraAmb = r.disp.disputas.slice(0, 3).map(rotuloDaDisputa).join(' · ');
+          var datasOcup = r.disp.datasSemVaga;
+          avisos.appendChild(C.el('div', { class: 'alert' }, [
+            C.el('b', { text: prefixo + S.rotuloEscopoCurto(r.l.agrupamentoId, r.l.escopo) + ' já está ocupado neste horário.' }),
+            amostraAmb ? C.el('br') : null,
+            amostraAmb ? 'Já reservado: ' + amostraAmb + (r.disp.disputas.length > 3 ? ' · e mais ' + (r.disp.disputas.length - 3) + '.' : '') : null,
+            C.el('br'),
+            modo === 'recorrente' && !editando && datasOcup.length && datasOcup.length < r.datas.length
+              ? 'O choque é em ' + C.plural(datasOcup.length, 'data', 'datas') + ' — dá para criar pulando ' +
+                (datasOcup.length === 1 ? 'ela' : 'elas') + ', ou ajustar o horário ou o ambiente.'
+              : 'Ajuste o horário ou escolha outro ambiente.'
+          ]));
+          if (modo === 'recorrente') pular = datasOcup;
+        } else if (r.falta) {
           bloqueia = true;
           var amostra = r.disp.disputas.slice(0, 3).map(rotuloDaDisputa).join(' · ');
           var semVaga = r.disp.datasSemVaga;
@@ -896,7 +979,7 @@
       /* "Pular" só resolve quando, sem as datas cheias, a mesma alocação cabe
          em todas as outras — a recorrente usa as mesmas cadeiras toda semana. */
       var podePular = false;
-      if (modo === 'recorrente' && pular.length && !an.gerais.length && !an.linhas[0].erros.length) {
+      if (!editando && modo === 'recorrente' && pular.length && !an.gerais.length && !an.linhas[0].erros.length) {
         var r0b = an.linhas[0];
         if (pular.length < r0b.datas.length) {
           var restantes = r0b.datas.filter(function (dt) { return pular.indexOf(dt) === -1; });
@@ -904,7 +987,7 @@
             agrupamentoId: r0b.l.agrupamentoId, escopo: r0b.l.escopo, datas: restantes,
             inicio: r0b.l.inicio, fim: r0b.l.fim, quantidade: r0b.qtd
           });
-          podePular = d2.livres.length >= r0b.qtd;
+          podePular = r0b.semCad ? !d2.ocupado : d2.livres.length >= r0b.qtd;
         }
       }
       if (podePular) {
@@ -938,7 +1021,8 @@
       var total = datasRecorrencia().length;
       if (r && pular && pular.length) total = Math.max(0, total - pular.length);
       C.toast('Recorrência criada · ' + C.plural(total, 'encontro', 'encontros') +
-        ' até ' + C.fmtDiaAno(form.vigenciaFim) + ' · cadeiras ' + S.textoCadeiras(S.cadeirasDe(r)));
+        ' até ' + C.fmtDiaAno(form.vigenciaFim) + (S.escopoSemCadeiras(l.agrupamentoId, l.escopo)
+          ? ' · ' + S.rotuloEscopoCurto(l.agrupamentoId, l.escopo) : ' · cadeiras ' + S.textoCadeiras(S.cadeirasDe(r))));
       return r;
     }
 
@@ -949,6 +1033,7 @@
         if (an.linhas[i].erros.length || an.linhas[i].falta || an.linhas[i].semQuantidade) return;
       }
       var res;
+      if (editando) { salvarEdicao(); return; }
       if (modo === 'recorrente') {
         res = gravarRecorrencia(null);
         if (!res) return;
@@ -974,9 +1059,39 @@
         C.toast(pendente
           ? (n > 1 ? n + ' pedidos enviados' : 'Pedido enviado') + ' para a coordenação — vale' + (n > 1 ? 'm' : '') + ' só depois de aprovado' + (n > 1 ? 's' : '') + '.'
           : n > 1 ? n + ' atividades registradas.'
-            : 'Atividade registrada em ' + C.fmtDiaAno(form.linhas[0].data) + ' · cadeiras ' + S.textoCadeiras(S.cadeirasDe(res[0])) + '.');
+            : 'Atividade registrada em ' + C.fmtDiaAno(form.linhas[0].data) + (S.escopoSemCadeiras(res[0].agrupamentoId, res[0].escopo)
+              ? ' · ' + S.rotuloEscopoCurto(res[0].agrupamentoId, res[0].escopo) : ' · cadeiras ' + S.textoCadeiras(S.cadeirasDe(res[0]))) + '.');
       }
       if (opcoes.aoRegistrar) opcoes.aoRegistrar(res, modo);
+    }
+
+    /* A edição grava UMA reserva e espera a transação: se faltar cadeira
+       (ou o ambiente estiver tomado) no novo horário, a recusa chega pelo
+       toast do store e o formulário continua aberto para ajustar. */
+    function salvarEdicao() {
+      if (!S.pode('agenda.editar')) { C.toast('Somente a coordenação edita reservas.'); return; }
+      var l = form.linhas[0];
+      acao.disabled = true;
+      acao.textContent = 'Salvando…';
+      S.editarReserva(doc.id, {
+        agrupamentoId: l.agrupamentoId, escopo: l.escopo,
+        disciplinaId: vinculoGravavel(), responsavelId: form.responsavelId,
+        tipoAtividade: form.tipo, descricao: form.descricao,
+        cadeiras: inteiro(l.cadeiras), inicio: l.inicio, fim: l.fim,
+        data: l.data, dias: form.dias,
+        vigenciaInicio: form.vigenciaInicio, vigenciaFim: form.vigenciaFim
+      }).then(function (r) {
+        if (r && r.ok) {
+          C.toast('Ocupação atualizada · ' + S.rotuloReserva(doc) + ' · ' +
+            S.rotuloEscopoCurto(doc.agrupamentoId, doc.escopo) +
+            (!S.cadeirasDe(doc).length || S.ehIntegral(doc) ? ''
+              : ' · cadeiras ' + S.textoCadeiras(S.cadeirasDe(doc))) + '.');
+          if (opcoes.aoRegistrar) opcoes.aoRegistrar(doc, modo);
+        } else {
+          if (r && r.mensagem && !r.erro) C.toast(r.mensagem);
+          desenhar();
+        }
+      });
     }
 
     /* Cria a recorrência já com as datas sem cadeira marcadas como exceção,

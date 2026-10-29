@@ -110,8 +110,22 @@
         descricao: 'T2 · cirurgia guiada', criadoPor: 'prof@teste.br' }),
       /* Pontual antiga: turma, tipo legado, integral. */
       pont('p3', 'ag1', 'b', { data: C.addDays(seg, 5), inicio: '07:40', fim: '11:20', tipoAtividade: 'reposicao',
-        turmaId: 't1', responsavelId: 'coord@teste.br', situacao: 'aprovada', descricao: 'Reposição do feriado.' })
+        turmaId: 't1', responsavelId: 'coord@teste.br', situacao: 'aprovada', descricao: 'Reposição do feriado.' }),
+      /* Ambiente sem cadeira (29/10/2026): a reserva é do ambiente inteiro,
+         sem quantidade. Uma recorrente e uma pontual já passada — a edição
+         da coordenação alcança as duas. */
+      rec('r6', 'ag7', 'a', { disciplinaId: 'd2', responsavelId: 'coord@teste.br', tipoAtividade: 'graduacao',
+        dias: [2], inicio: '07:40', fim: '11:20', descricao: 'T2 · radiografias' }),
+      pont('p4', 'ag9', 'a', { data: C.addDays(seg, -3), inicio: '13:40', fim: '17:20', tipoAtividade: 'graduacao',
+        disciplinaId: 'd1', responsavelId: 'prof@teste.br', situacao: 'aprovada', descricao: 'Reunião de casos' })
     ];
+    /* ?semambientes=1 — o banco de produção antes de 29/10/2026: sem os três
+       ambientes, para ver a coordenação completar a estrutura no login. */
+    if (/[?&]semambientes=1/.test(location.search)) {
+      s.agrupamentos = s.agrupamentos.filter(function (g) { return ['ag7', 'ag8', 'ag9'].indexOf(g.id) === -1; });
+      s.clinicas = s.clinicas.filter(function (c) { return !c.semCadeiras; });
+      ocupacoes = ocupacoes.filter(function (o) { return ['ag7', 'ag8', 'ag9'].indexOf(o.agrupamentoId) === -1; });
+    }
 
     /* ?denso=1 — a segunda-feira cheia. A grade da semana só mostra o que
        tem de errado (ou de certo) na largura das colunas quando um dia tem
@@ -201,11 +215,15 @@
     /* `validar` pode completar `dados` e `resumo` (as cadeiras escolhidas
        dentro da transação) — por isso o resumo é empurrado DEPOIS dele,
        como no `set` do Firestore. */
-    gravarOcupacao: function (agId, id, dados, validar, resumo) {
+    gravarOcupacao: function (agId, id, dados, validar, resumo, agAnterior) {
       var itens = global.__indices[agId] || [];
       var choque = validar(itens);
       if (choque) return global.Promise.reject({ conflito: true, mensagem: choque });
       global.__indices[agId] = itens.filter(function (i) { return i.id !== id; }).concat([resumo]);
+      if (agAnterior && agAnterior !== agId) {
+        global.__indices[agAnterior] = (global.__indices[agAnterior] || []).filter(function (i) { return i.id !== id; });
+        log('saiu do índice ' + agAnterior + '/' + id);
+      }
       log('gravarOcupacao ' + agId + '/' + id + ' · cadeiras ' + JSON.stringify(resumo.cadeiras) +
         ' · índice com ' + global.__indices[agId].length);
       return ok(id);

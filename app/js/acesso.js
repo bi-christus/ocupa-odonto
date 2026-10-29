@@ -32,6 +32,9 @@
     { id: 'agenda.aprovar', area: 'Agenda', rotulo: 'Aprovar e recusar pedidos de ocupação' },
     { id: 'agenda.cancelarQualquer', area: 'Agenda', rotulo: 'Cancelar qualquer registro' },
     { id: 'agenda.excluir', area: 'Agenda', rotulo: 'Excluir e recuperar reservas' },
+    /* 29/10/2026: corrigir qualquer reserva, em qualquer data — passada
+       inclusive. Só da coordenação, como excluir. */
+    { id: 'agenda.editar', area: 'Agenda', rotulo: 'Editar qualquer ocupação registrada' },
     { id: 'agenda.cancelarPropria', area: 'Agenda', rotulo: 'Cancelar os próprios registros' },
     /* A cadeira deixou de ser marcada à mão em 05/10/2026: a reserva aloca as
        suas sozinha, da menor para a maior. O que sobrou para o professor é

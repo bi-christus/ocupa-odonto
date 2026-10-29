@@ -47,10 +47,16 @@
   }
 
   /* "4 agrupamentos · 8 clínicas · 112 cadeiras · 5 cadeiras em manutenção" */
+  /* Ambiente sem cadeira (29/10/2026) não é clínica: conta à parte. */
+  function contagemLocais() {
+    var cls = S.estado.clinicas.filter(function (c) { return !S.semCadeiras(c); }).length;
+    var amb = S.estado.clinicas.length - cls;
+    return C.plural(cls, 'clínica', 'clínicas') + (amb ? ' · ' + C.plural(amb, 'ambiente') : '');
+  }
   function resumoEstrutura() {
     var e = S.estado;
     return C.plural(e.agrupamentos.length, 'agrupamento') + ' · ' +
-      C.plural(e.clinicas.length, 'clínica', 'clínicas') + ' · ' +
+      contagemLocais() + ' · ' +
       C.plural(S.totalCadeiras(), 'cadeira') + ' · ' +
       C.plural(totalInterditadas(), 'cadeira') + ' em manutenção';
   }
@@ -73,11 +79,11 @@
       }, [
         C.el('span', { style: 'font:600 20px var(--font-heading);letter-spacing:-.015em', text: g.nome }),
         C.el('span', { class: 'muted num', style: 'font-size:12px',
-          text: 'cadeiras ' + faixa[0] + '–' + faixa[1] })
+          text: S.escopoSemCadeiras(g.id, 'ambas') ? 'sem cadeiras' : 'cadeiras ' + faixa[0] + '–' + faixa[1] })
       ]),
       C.el('div', { style: 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px' },
         clinicas.map(colunaClinica)),
-      C.el('div', { class: 'muted', style: 'font-size:12px;margin-top:14px',
+      S.escopoSemCadeiras(g.id, 'ambas') ? null : C.el('div', { class: 'muted', style: 'font-size:12px;margin-top:14px',
         text: S.pode('manutencao.abrir')
           ? 'Clique numa cadeira para abrir ou consultar o registro de manutenção.'
           : 'Cadeiras riscadas estão em manutenção.' })
@@ -87,6 +93,21 @@
   function colunaClinica(c) {
     var faixa = S.faixaCadeiras(c.id);
     var interditadas = S.cadeirasInterditadas(c.id);
+    /* Ambiente sem cadeira: não há grade nem manutenção de cadeira. A
+       reserva é do ambiente inteiro. */
+    if (S.semCadeiras(c)) {
+      return C.el('div', {}, [
+        C.el('div', { style: 'display:flex;align-items:baseline;justify-content:space-between;gap:9px;flex-wrap:wrap' }, [
+          C.el('span', { style: 'font:600 14px var(--font-heading);letter-spacing:.03em', text: c.nome }),
+          S.pode('estrutura.editar') ? C.el('button', {
+            class: 'btn-ghost', text: 'Editar', 'aria-label': 'Editar ' + c.nome,
+            onclick: function () { editarClinica(c); }
+          }) : null
+        ]),
+        C.el('div', { class: 'muted', style: 'font-size:12.5px;margin-top:4px',
+          text: 'Sem cadeiras · reservado inteiro · ' + c.abertura + '–' + c.fechamento })
+      ]);
+    }
 
     var grade = C.el('div', { class: 'chairs compacta' });
     for (var i = 0; i < c.cadeiras; i++) grade.appendChild(botaoCadeira(c, c.primeiraCadeira + i));
@@ -142,7 +163,10 @@
     var e = S.estado;
     if (!e.agrupamentos.length) { C.toast('Nenhum agrupamento cadastrado.'); return; }
 
-    var f = { agrupamentoId: e.agrupamentos[0].id, clinicaId: null, cadeira: 0 };
+    /* Manutenção é de CADEIRA: ambiente sem cadeira não entra na lista. */
+    var comCadeiras = e.agrupamentos.filter(function (g) { return !S.escopoSemCadeiras(g.id, 'ambas'); });
+    if (!comCadeiras.length) { C.toast('Nenhuma clínica com cadeiras cadastrada.'); return; }
+    var f = { agrupamentoId: comCadeiras[0].id, clinicaId: null, cadeira: 0 };
     var seletorClinica = C.el('div');
     var seletorCadeira = C.el('div');
     var resumo = C.el('div', { class: 'preview' });
@@ -223,7 +247,7 @@
       largura: '620px',
       conteudo: C.el('div', { class: 'stack' }, [
         C.el('div', { class: 'grid-fields' }, [
-          U.campo('Agrupamento', U.selecao(e.agrupamentos.map(function (g) {
+          U.campo('Agrupamento', U.selecao(comCadeiras.map(function (g) {
             return { valor: g.id, rotulo: g.nome };
           }), f.agrupamentoId, function (v) { f.agrupamentoId = v; desenharClinica(); })),
           seletorClinica,
@@ -272,8 +296,10 @@
             'entre ' + JANELA_FECHAMENTO.min + ' e ' + JANELA_FECHAMENTO.max)
         ]),
         C.el('div', { class: 'alert', style: 'margin-top:16px',
-          text: 'As cadeiras desta clínica são numeradas de ' + faixa[0] + ' a ' + faixa[1] +
-            '. A quantidade é fixa em ' + C.plural(c.cadeiras, 'cadeira') + '.' })
+          text: S.semCadeiras(c)
+            ? 'Ambiente sem cadeiras: a reserva é sempre do ambiente inteiro.'
+            : 'As cadeiras desta clínica são numeradas de ' + faixa[0] + ' a ' + faixa[1] +
+              '. A quantidade é fixa em ' + C.plural(c.cadeiras, 'cadeira') + '.' })
       ]),
       acoes: [
         C.el('button', { class: 'btn btn-outline', text: 'Cancelar', onclick: U.fecharModal }),
@@ -335,7 +361,7 @@
            cartão dela, logo acima. */
         U.kv('Numeração das cadeiras', pill('por clínica', 'soft')),
         U.kv('Estrutura', C.plural(e.agrupamentos.length, 'agrupamento') + ' · ' +
-          C.plural(e.clinicas.length, 'clínica', 'clínicas') + ' · ' +
+          contagemLocais() + ' · ' +
           C.plural(S.totalCadeiras(), 'cadeira')),
         U.kv('Cadeiras operantes', totalOperantes() + ' de ' + S.totalCadeiras()),
         U.kv('Ocupação nas duas clínicas', pill('permitida', 'conjunta')),

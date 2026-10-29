@@ -95,7 +95,10 @@
       { id: 'ag3', nome: 'Clínicas 5 e 6', clinicas: ['cl5', 'cl6'] },
       { id: 'ag4', nome: 'Clínicas 7 e 8', clinicas: ['cl7', 'cl8'] },
       { id: 'ag5', nome: 'Pré-clínica maior', clinicas: ['cl9'] },
-      { id: 'ag6', nome: 'Pré-clínica menor', clinicas: ['cl10'] }
+      { id: 'ag6', nome: 'Pré-clínica menor', clinicas: ['cl10'] },
+      { id: 'ag7', nome: 'Laboratório de radiologia', clinicas: ['cl11'] },
+      { id: 'ag8', nome: 'Espaço de promoção da saúde', clinicas: ['cl12'] },
+      { id: 'ag9', nome: 'Sala de situação', clinicas: ['cl13'] }
     ];
     var clinicas = [];
     agrupamentos.slice(0, 4).forEach(function (g, gi) {
@@ -128,6 +131,26 @@
         id: p.id, nome: p.nome, agrupamentoId: p.ag,
         especialidade: 'Pré-clínica',
         cadeiras: p.cadeiras, primeiraCadeira: 1,
+        abertura: '07:00', fechamento: '22:00'
+      });
+    });
+    /* AMBIENTES SEM CADEIRA (29/10/2026): radiologia, promoção da saúde e
+       sala de situação. A reserva deles é do AMBIENTE inteiro — não há
+       quantidade a pedir nem cadeira a alocar —, então duas ocupações no
+       mesmo horário se recusam, como a reserva integral antiga. Cada um é um
+       agrupamento de um ambiente só, pelo mesmo motivo das pré-clínicas: ter
+       o próprio índice e nunca aparecer em reserva conjunta.
+       `semCadeiras` é a marca que o store lê (`S.semCadeiras`); `cadeiras: 0`
+       mantém as contas de capacidade somando certo. Em banco já
+       provisionado eles entram por `S.completarEstrutura`, no login da
+       coordenação. */
+    [{ id: 'cl11', ag: 'ag7', nome: 'Laboratório de radiologia' },
+     { id: 'cl12', ag: 'ag8', nome: 'Espaço de promoção da saúde' },
+     { id: 'cl13', ag: 'ag9', nome: 'Sala de situação' }].forEach(function (p) {
+      clinicas.push({
+        id: p.id, nome: p.nome, agrupamentoId: p.ag,
+        especialidade: 'Ambiente', semCadeiras: true,
+        cadeiras: 0, primeiraCadeira: 1,
         abertura: '07:00', fechamento: '22:00'
       });
     });
