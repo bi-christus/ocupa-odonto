@@ -2091,20 +2091,34 @@
      semente só alcança banco vazio, e antes disso cada estrutura nova
      entrava gravada à mão no console (as pré-clínicas, em 22/09/2026).
      Agora ela entra no primeiro login da coordenação (app.js), pelo mesmo
-     caminho das Security Rules. Só CRIA o que falta, pelo id: nada que já
-     está no banco é tocado — nem nome, nem horário, nem tamanho. */
+     caminho das Security Rules. CRIA o que falta, pelo id; do que já está
+     no banco só toca o NOME, e só quando ele ainda é o nome antigo da
+     semente (`Dados.NOMES_ANTIGOS` — os três ambientes encurtados em
+     30/10/2026). Horário, tamanho e nome editado à mão ficam como estão. */
   function estruturaFaltando() {
-    if (!estado || !estado.agrupamentos.length) return { agrupamentos: [], clinicas: [] };
+    if (!estado || !estado.agrupamentos.length) return { agrupamentos: [], clinicas: [], renomear: [] };
     var base = D.semente();
+    var antigos = D.NOMES_ANTIGOS || {};
+    var renomear = [];
+    function conferir(colecao, atual, novo) {
+      if (atual && antigos[novo.id] && atual.nome === antigos[novo.id] && novo.nome !== atual.nome) {
+        renomear.push({ colecao: colecao, id: novo.id, nome: novo.nome });
+      }
+    }
+    base.agrupamentos.forEach(function (g) { conferir('agrupamentos', agrupamento(g.id), g); });
+    base.clinicas.forEach(function (c) { conferir('clinicas', clinica(c.id), c); });
     return {
       agrupamentos: base.agrupamentos.filter(function (g) { return !agrupamento(g.id); }),
-      clinicas: base.clinicas.filter(function (c) { return !clinica(c.id); })
+      clinicas: base.clinicas.filter(function (c) { return !clinica(c.id); }),
+      renomear: renomear
     };
   }
   function completarEstrutura() {
     var f = estruturaFaltando();
-    if (!f.agrupamentos.length && !f.clinicas.length) return global.Promise.resolve({ ok: true, valor: [] });
-    var passos = [];
+    if (!f.agrupamentos.length && !f.clinicas.length && !f.renomear.length) {
+      return global.Promise.resolve({ ok: true, valor: [] });
+    }
+    var passos = f.renomear.map(function (x) { return N.gravar(x.colecao, x.id, { nome: x.nome }); });
     f.clinicas.forEach(function (c) {
       passos.push(N.gravar('clinicas', c.id, {
         nome: c.nome, agrupamentoId: c.agrupamentoId, especialidade: c.especialidade,

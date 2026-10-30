@@ -167,7 +167,8 @@
       C.el('div', { class: 'filtros-grupo' }, [
         C.el('span', { class: 'eyebrow', text: 'Reserva' }),
         botaoMarcador('tipos', 'recorrente', 'Recorrente', U.icone('recorrente')),
-        botaoMarcador('tipos', 'pontual', 'Pontual', U.icone('pontual')),
+        botaoMarcador('tipos', 'pontual', 'Pontual', C.el('span', { class: 'marcas' }, [
+          C.el('i', { class: 'sw pont', 'aria-hidden': 'true' }), U.icone('pontual')])),
         botaoMarcador('niveis', 'graduacao', 'Graduação', C.el('i', { class: 'sw-vazio', 'aria-hidden': 'true' })),
         botaoMarcador('niveis', 'pos', 'Pós', U.icone('pos'))
       ]),
@@ -438,8 +439,9 @@
   }
 
   /* ── Leituras de escopo compartilhadas ────────────────────────────── */
-  /* O preenchimento diz o AMBIENTE (amb-clinica, amb-dupla, amb-pre) e a
-     borda tracejada diz PONTUAL — os mesmos marcadores do filtro. */
+  /* O preenchimento diz o AMBIENTE (amb-clinica, amb-dupla, amb-pre) na
+     recorrente; a PONTUAL é âmbar, com borda tracejada, por cima do ambiente
+     (30/10/2026) — os mesmos marcadores do filtro. */
   function classeEvento(o, base) {
     return base + ' amb-' + o.ambiente + (o.origem === 'pontual' ? ' pontual' : '') +
       (o.nivel === 'pos' ? ' nivel-pos' : '');
@@ -553,7 +555,20 @@
   /* Reparte as ocorrências de um dia em colunas lado a lado: quem se cruza no
      tempo divide a largura, quem não se cruza reaproveita a mesma coluna. O
      agrupamento é por CACHO de sobreposição — um bloco solto no fim do dia
-     não fica espremido por causa de dois que se cruzaram de manhã. */
+     não fica espremido por causa de dois que se cruzaram de manhã.
+     Dentro do cacho, a coluna segue a ORDEM DAS CLÍNICAS, da esquerda para a
+     direita (pedido da coordenação, 30/10/2026): Clínica 1, depois a 2, a 3…
+     Antes era a ordem de início, e a Clínica 2 aparecia antes da 1 só por ter
+     começado mais cedo. Cada bloco vai para a primeira coluna em que não
+     cruza ninguém, então a ordem não custa coluna a mais. */
+  function ordemDaClinica(o) {
+    var ids = S.idsDoEscopo(o.agrupamentoId, o.escopo);
+    var pos = -1;
+    S.estado.clinicas.forEach(function (c, i) { if (c.id === ids[0]) pos = i; });
+    if (pos === -1) pos = S.estado.clinicas.length;
+    /* A reserva das duas fica entre a primeira e a segunda clínica. */
+    return pos + (ids.length > 1 ? 0.5 : 0);
+  }
   function disporEmColunas(itens) {
     var ordenados = itens.slice().sort(function (a, b) {
       return C.toMin(a.inicio) - C.toMin(b.inicio) || C.toMin(b.fim) - C.toMin(a.fim);
@@ -562,14 +577,24 @@
 
     function fechar() {
       if (!cacho.length) return;
-      var colunas = [];
-      cacho.forEach(function (d) {
+      var postos = [], total = 0;
+      cacho.slice().sort(function (a, b) {
+        return ordemDaClinica(a.o) - ordemDaClinica(b.o) ||
+          C.toMin(a.o.inicio) - C.toMin(b.o.inicio);
+      }).forEach(function (d) {
+        /* Logo à direita do último bloco já posto que cruza com este: quem
+           cruza no tempo fica SEMPRE em ordem de clínica. */
         var c = 0;
-        while (c < colunas.length && colunas[c] > C.toMin(d.o.inicio)) c++;
-        colunas[c] = C.toMin(d.o.fim);
+        postos.forEach(function (x) {
+          if (C.toMin(x.o.inicio) < C.toMin(d.o.fim) && C.toMin(d.o.inicio) < C.toMin(x.o.fim)) {
+            c = Math.max(c, x.coluna + 1);
+          }
+        });
         d.coluna = c;
+        total = Math.max(total, c + 1);
+        postos.push(d);
       });
-      cacho.forEach(function (d) { d.total = colunas.length; saida.push(d); });
+      cacho.forEach(function (d) { d.total = total; saida.push(d); });
       cacho = [];
       fimDoCacho = -1;
     }
@@ -754,7 +779,11 @@
       onclick: function () { detalhe(o); }
     }, [
       C.el('b', {}, [marcasDoBloco(o), S.rotuloEscopoCurto(o.agrupamentoId, o.escopo)]),
-      C.el('span', { text: o.disciplinaRotulo })
+      C.el('span', { text: o.disciplinaRotulo }),
+      /* A descrição é onde a turma é escrita (pedido da coordenação,
+         30/10/2026): sem ela, duas reservas da mesma disciplina na mesma
+         clínica eram blocos iguais. */
+      o.descricao ? C.el('span', { class: 'ev-desc', text: o.descricao }) : null
     ]);
   }
 
@@ -876,7 +905,8 @@
         marcasDoBloco(o),
         /* A pista já diz o agrupamento e a faixa diz a clínica; na reserva
            das duas o nome vai junto, porque a barra cobre as duas faixas. */
-        (dupla ? S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + ' · ' : '') + o.disciplinaRotulo
+        (dupla ? S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + ' · ' : '') + o.disciplinaRotulo +
+          (o.descricao ? ' · ' + o.descricao : '')
       ]));
     });
 
