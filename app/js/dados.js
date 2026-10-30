@@ -96,9 +96,9 @@
       { id: 'ag4', nome: 'Clínicas 7 e 8', clinicas: ['cl7', 'cl8'] },
       { id: 'ag5', nome: 'Pré-clínica maior', clinicas: ['cl9'] },
       { id: 'ag6', nome: 'Pré-clínica menor', clinicas: ['cl10'] },
-      { id: 'ag7', nome: 'Laboratório de radiologia', clinicas: ['cl11'] },
-      { id: 'ag8', nome: 'Espaço de promoção da saúde', clinicas: ['cl12'] },
-      { id: 'ag9', nome: 'Sala de situação', clinicas: ['cl13'] }
+      { id: 'ag7', nome: 'Lab Radio', clinicas: ['cl11'] },
+      { id: 'ag8', nome: 'EPS', clinicas: ['cl12'] },
+      { id: 'ag9', nome: 'S. Situação', clinicas: ['cl13'] }
     ];
     var clinicas = [];
     agrupamentos.slice(0, 4).forEach(function (g, gi) {
@@ -144,9 +144,9 @@
        mantém as contas de capacidade somando certo. Em banco já
        provisionado eles entram por `S.completarEstrutura`, no login da
        coordenação. */
-    [{ id: 'cl11', ag: 'ag7', nome: 'Laboratório de radiologia' },
-     { id: 'cl12', ag: 'ag8', nome: 'Espaço de promoção da saúde' },
-     { id: 'cl13', ag: 'ag9', nome: 'Sala de situação' }].forEach(function (p) {
+    [{ id: 'cl11', ag: 'ag7', nome: 'Lab Radio' },
+     { id: 'cl12', ag: 'ag8', nome: 'EPS' },
+     { id: 'cl13', ag: 'ag9', nome: 'S. Situação' }].forEach(function (p) {
       clinicas.push({
         id: p.id, nome: p.nome, agrupamentoId: p.ag,
         especialidade: 'Ambiente', semCadeiras: true,
@@ -186,8 +186,21 @@
     };
   }
 
+  /* Nomes que a semente já gravou e depois mudaram. Os três ambientes
+     entraram em 29/10/2026 com o nome por extenso, e a coordenação pediu os
+     curtos no dia seguinte (cabem no bloco da agenda). `S.completarEstrutura`
+     troca o nome no banco só quando ele ainda é EXATAMENTE o antigo — um
+     nome que alguém já editou em Estrutura não é tocado. Vale para o
+     agrupamento e para a clínica, que se chamam igual. */
+  var NOMES_ANTIGOS = {
+    ag7: 'Laboratório de radiologia', cl11: 'Laboratório de radiologia',
+    ag8: 'Espaço de promoção da saúde', cl12: 'Espaço de promoção da saúde',
+    ag9: 'Sala de situação', cl13: 'Sala de situação'
+  };
+
   global.Dados = {
     semente: semente,
+    NOMES_ANTIGOS: NOMES_ANTIGOS,
     CATEGORIAS_MANUTENCAO: CATEGORIAS_MANUTENCAO,
     TIPOS_ATIVIDADE: TIPOS_ATIVIDADE,
     TIPOS_LEGADOS: TIPOS_LEGADOS,

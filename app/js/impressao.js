@@ -103,8 +103,7 @@
   function legenda() {
     return C.el('div', { class: 'imp-leg' }, [
       C.el('span', {}, [C.el('i', { class: 'am-rec' }), 'Aula recorrente']),
-      C.el('span', {}, [C.el('i', { class: 'am-pont' }), 'Atividade pontual']),
-      C.el('span', { text: '"2 clínicas" = ocupação das duas clínicas do agrupamento' })
+      C.el('span', {}, [C.el('i', { class: 'am-pont' }), 'Atividade pontual'])
     ]);
   }
 
@@ -155,14 +154,16 @@
     var o = d.o;
     var a = Math.max(ini, C.toMin(o.inicio)), b = Math.min(ini + span, C.toMin(o.fim));
     if (b <= a) return null;
-    var dupla = S.idsDoEscopo(o.agrupamentoId, o.escopo).length > 1;
     return C.el('div', {
       class: 'g-barra' + (o.origem === 'pontual' ? ' pontual' : ''),
       style: 'left:' + ((a - ini) / span * 100) + '%;width:' + ((b - a) / span * 100) + '%;' +
         'top:' + (d.faixa * ALTURA_FAIXA) + 'pt'
     }, [
-      C.el('b', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) + (dupla ? ' · 2 clínicas' : '') }),
-      C.el('span', { text: ' · ' + o.disciplinaRotulo })
+      /* Sem o "· 2 clínicas" (saiu em 30/10/2026, a pedido da coordenação):
+         a reserva das duas já se chama pelo agrupamento ("Clínicas 1 e 2").
+         A descrição vem junto porque é nela que a turma é escrita. */
+      C.el('b', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) }),
+      C.el('span', { text: ' · ' + o.disciplinaRotulo + (o.descricao ? ' · ' + o.descricao : '') })
     ]);
   }
 
@@ -248,7 +249,10 @@
         corpo.appendChild(C.el('tr', {}, [
           C.el('td', { class: 'h', text: o.inicio + '–' + o.fim }),
           C.el('td', { text: S.rotuloEscopoCurto(o.agrupamentoId, o.escopo) }),
-          C.el('td', {}, C.el('b', { text: o.disciplinaRotulo }))
+          C.el('td', {}, [
+            C.el('b', { text: o.disciplinaRotulo }),
+            o.descricao ? ' · ' + o.descricao : null
+          ])
         ]));
       });
       /* Agrupamento de uma clínica só (pré-clínica, ambiente sem cadeira)

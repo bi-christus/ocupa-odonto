@@ -36,6 +36,10 @@
      nova — o Industry é monocromático, e cinza contra o aço já separa o
      laboratório das clínicas de atendimento. */
   --pre-soft:var(--color-neutral-200);--pre-strong:var(--color-neutral-700);--on-pre:var(--color-neutral-900);
+  /* Pontual: a ÚNICA cor quente da agenda (pedido da coordenação,
+     30/10/2026 — "mais destaque no que for pontual"). Âmbar contra aço e
+     cinza: o par azul × laranja se separa nos três tipos de daltonismo. */
+  --pont-soft:#f8deb4;--pont-strong:#a8641f;--on-pont:#4f2d0f;--pont-solid:#8a4f16;--on-pont-solid:#fff4e4;
   background:var(--color-bg);color:var(--color-text);min-height:100vh;
 }
 [data-tema="escuro"]{
@@ -50,6 +54,7 @@
   --fill-tint:var(--color-accent-2-800);--on-tint:var(--color-accent-2-200);
   --on-line:var(--color-neutral-200);
   --pre-soft:var(--color-neutral-800);--pre-strong:var(--color-neutral-400);--on-pre:var(--color-neutral-100);
+  --pont-soft:#4d3618;--pont-strong:#e0ac6c;--on-pont:#fbe3bf;--pont-solid:#e0ac6c;--on-pont-solid:#2a1907;
   --warn:#e0ac6c;--warn-bg:#3a2e1c;--danger:#e39a94;--danger-bg:#3a2422;
   --ok:#8fc09e;--ok-bg:#1e3325;
 }
@@ -238,8 +243,13 @@ select.input{appearance:none;padding-right:26px;
    preenchimento — o único dos quatro que não é chapado, então se separa dos
    outros três pela forma, e não por mais um tom de cinza. */
 .tl-blk.amb-espaco{background:var(--color-bg);color:var(--color-text);box-shadow:inset 0 0 0 1.5px var(--on-line)}
-.tl-blk.pontual{background-image:repeating-linear-gradient(135deg,transparent 0 6px,
-  color-mix(in srgb,#fff 18%,transparent) 6px 9px)}
+/* Pontual: âmbar chapado na clínica; na pré-clínica, listras de âmbar e
+   cinza — a pontual se destaca e o ambiente continua legível. */
+.tl-blk.pontual{background:var(--pont-solid);color:var(--on-pont-solid)}
+.tl-blk.pontual.amb-dupla{box-shadow:inset 0 0 0 2px var(--on-pont)}
+.tl-blk.pontual.amb-pre{background:repeating-linear-gradient(135deg,var(--pont-solid) 0 7px,var(--pre-strong) 7px 12px);
+  color:var(--on-pont-solid)}
+.tl-blk.pontual.amb-espaco{background:var(--color-bg);color:var(--color-text);box-shadow:inset 0 0 0 2px var(--pont-strong)}
 .tl-blk .marcas{margin-right:5px}
 .tl-blk.agora{outline:1px solid var(--color-accent-300);outline-offset:-3px}
 .tl-now{position:absolute;top:0;bottom:0;width:1px;background:var(--accent-ink)}
@@ -310,6 +320,15 @@ html.arrastando-agenda,html.arrastando-agenda *{
 .ev.amb-pre{background:var(--pre-soft);color:var(--on-pre);border-left-color:var(--pre-strong)}
 .ev.amb-espaco{background:var(--color-bg);color:var(--color-text);border-left-color:var(--on-line);
   box-shadow:0 0 0 1px var(--color-bg),inset 0 0 0 1px var(--line)}
+/* Pontual: âmbar por cima do ambiente (depois dele, para vencer). Clínica =
+   âmbar chapado; duas clínicas = âmbar com a chave da direita; pré-clínica
+   = listras de âmbar e cinza; ambiente sem cadeira = contorno âmbar. */
+.ev.pontual,.mini.pontual,.mini.pontual.amb-dupla{background:var(--pont-soft);color:var(--on-pont);border-left:3px dashed var(--pont-strong)}
+.ev.pontual.amb-dupla{box-shadow:0 0 0 1px var(--color-bg),inset -3px 0 0 var(--pont-strong)}
+.ev.pontual.amb-pre,.mini.pontual.amb-pre{
+  background:repeating-linear-gradient(135deg,var(--pont-soft) 0 8px,var(--pre-soft) 8px 14px)}
+.ev.pontual.amb-espaco,.mini.pontual.amb-espaco{background:var(--color-bg);color:var(--color-text);
+  box-shadow:0 0 0 1px var(--color-bg),inset 0 0 0 1.5px var(--pont-strong)}
 
 /* ═══ Marcadores: ambiente e tipo de reserva ═══
    O ambiente vai no PREENCHIMENTO (`amb-*`); o tipo de reserva vai em
@@ -323,6 +342,7 @@ html.arrastando-agenda,html.arrastando-agenda *{
 .sw.amb-dupla{background:var(--fill-tint);border-left-color:var(--fill-deep);box-shadow:inset -3px 0 0 var(--fill-deep)}
 .sw.amb-pre{background:var(--pre-soft);border-left-color:var(--pre-strong)}
 .sw.amb-espaco{background:none;border-left-color:var(--on-line);box-shadow:inset 0 0 0 1px var(--line)}
+.sw.pont{background:var(--pont-soft);border-left:3px dashed var(--pont-strong)}
 .sw-vazio{display:inline-block;width:0}
 .filtros{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;margin:-4px 0 20px;padding:10px 0;
   border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}

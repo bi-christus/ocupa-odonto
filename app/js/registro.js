@@ -361,8 +361,10 @@
        NÃO substituem os campos de hora: eles seguem livres, e digitar neles
        apenas desmarca os turnos. A marcação é DERIVADA do horário, não um
        estado à parte — então não existe como botão e campo discordarem.
-       Por isso os turnos marcados são sempre uma faixa contínua: manhã e
-       noite juntas cobrem a tarde, e a tarde aparece marcada, porque está. */
+       Por isso os turnos marcados numa linha são sempre uma faixa contínua.
+       Manhã e noite SEM a tarde (pedido da coordenação, 30/10/2026) viram
+       duas linhas — duas ocupações com a mesma clínica e quantidade —, e não
+       um estado de turnos à parte: ver `clicarTurno`. */
     function faixaDeTurnos(l) {
       var a = -1, b = -1;
       D.TURNOS.forEach(function (t, i) {
@@ -377,25 +379,45 @@
         C.toMin(t.fim) <= C.toMin(jan.fechamento) &&
         C.toMin(t.fim) - C.toMin(t.inicio) >= duracaoMinima();
     }
-    /* Clique num turno: o de fora estende a faixa até ele; o da ponta sai; o
-       único marcado fica (sem turno nenhum não há horário). O do MEIO não sai
-       sozinho — tirar a tarde de manhã-tarde-noite partiria a ocupação em
-       duas, e uma ocupação é uma faixa contínua. */
+    /* Clique num turno: o VIZINHO estende a faixa até ele; o da ponta sai; o
+       único marcado fica (sem turno nenhum não há horário). Uma ocupação é
+       uma faixa contínua, então o turno ISOLADO vira outra linha:
+         · manhã marcada + clique na noite → linha nova só com a noite;
+         · manhã-tarde-noite + clique na tarde → manhã aqui, noite numa linha
+           nova.
+       A linha nova copia clínica, cadeiras e data — cada linha é gravada como
+       uma ocupação (na recorrente, uma recorrência com os mesmos dias). Para
+       pegar o dia inteiro, marca-se a tarde: ela é vizinha das duas.
+       Na edição não há linha nova (edita-se UMA reserva), e o aviso antigo
+       continua valendo. */
     function clicarTurno(l, i) {
-      var f = faixaDeTurnos(l), a, b;
+      var f = faixaDeTurnos(l), a, b, isolado = null;
       if (!f) { a = i; b = i; }
       else {
         a = f[0]; b = f[1];
-        if (i < a) a = i;
-        else if (i > b) b = i;
+        if (i === a - 1) a = i;
+        else if (i === b + 1) b = i;
+        else if (i < a || i > b) isolado = [i, i];
         else if (a === b) return;
         else if (i === a) a = i + 1;
         else if (i === b) b = i - 1;
-        else {
+        else { isolado = [i + 1, b]; b = i - 1; }
+      }
+      if (isolado) {
+        if (editando) {
           C.toast('Uma ocupação é uma faixa contínua: com manhã e noite marcadas, a tarde vai junto. ' +
-            (modo === 'pontual' ? 'Para usar as duas sem a tarde, adicione outra ocupação.' : 'Para usar as duas sem a tarde, crie duas recorrências.'));
+            'Para usar as duas sem a tarde, crie outra ocupação.');
           return;
         }
+        var ini = D.TURNOS[isolado[0]].inicio, fim = D.TURNOS[isolado[1]].fim;
+        var repetida = form.linhas.some(function (x) {
+          return x !== l && x.agrupamentoId === l.agrupamentoId && x.escopo === l.escopo &&
+            (modo !== 'pontual' || x.data === l.data) && x.inicio === ini && x.fim === fim;
+        });
+        if (repetida) { C.toast('Esse turno já está em outra ocupação deste formulário.'); return; }
+        var nova = novaLinha(l);
+        nova.inicio = ini; nova.fim = fim;
+        form.linhas.splice(form.linhas.indexOf(l) + 1, 0, nova);
       }
       l.inicio = D.TURNOS[a].inicio;
       l.fim = D.TURNOS[b].fim;
@@ -436,7 +458,8 @@
         C.el('span', { class: 'eyebrow', style: 'display:block;margin-bottom:7px', text: 'Turnos' }),
         l._turnos,
         C.el('small', { class: 'muted', style: 'display:block;margin-top:6px;font-size:11.5px',
-          text: 'Marque um ou mais: o início e o término seguem os turnos marcados.' })
+          text: editando ? 'Marque um ou mais: o início e o término seguem os turnos marcados.'
+            : 'Marque um ou mais: o início e o término seguem os turnos marcados. Turno separado (manhã e noite, sem a tarde) vira outra ocupação.' })
       ]);
     }
 
@@ -519,7 +542,8 @@
       var cap = S.capacidadeEscopo(l.agrupamentoId, l.escopo);
       l._sel = U.selecao(opcoesEscopo(), valorEscopo(l.agrupamentoId, l.escopo), function (v) { aplicarEscopo(l, v); });
       l._dica = C.el('small', { class: 'muted', style: 'font-size:11.5px' });
-      var multi = modo === 'pontual' && form.linhas.length > 1;
+      var multi = form.linhas.length > 1;
+      var cartao = modo === 'pontual' || multi;
       /* Ambiente sem cadeira (radiologia, promoção da saúde, sala de
          situação): a reserva é do ambiente inteiro, então o campo de
          quantidade não existe — fica só a dica dizendo se está livre. */
@@ -551,8 +575,8 @@
           })));
       }
       var jan = janela(l);
-      return C.el('div', { class: modo === 'pontual' ? 'linha-ocup' : '' }, [
-        modo === 'pontual' ? C.el('div', { class: 'linha-ocup-hd' }, [
+      return C.el('div', { class: cartao ? 'linha-ocup' : '' }, [
+        cartao ? C.el('div', { class: 'linha-ocup-hd' }, [
           C.el('span', { class: 'eyebrow', text: multi ? 'Ocupação ' + (i + 1) : 'Ocupação' }),
           multi ? C.el('button', {
             class: 'btn-danger', type: 'button', text: 'Remover',
@@ -615,7 +639,11 @@
       }
 
       if (modo === 'recorrente') {
-        corpo.appendChild(C.el('div', { style: 'margin-top:18px' }, blocoLinha(form.linhas[0], 0)));
+        /* Normalmente uma linha; duas quando um turno isolado foi marcado
+           (manhã e noite sem a tarde) — cada uma vira uma recorrência com os
+           mesmos dias e a mesma vigência. */
+        corpo.appendChild(C.el('div', { class: 'stack', style: 'gap:12px;margin-top:18px' },
+          form.linhas.map(function (ln, i) { return blocoLinha(ln, i); })));
         corpo.appendChild(C.el('div', { style: 'margin-top:16px' }, [
           C.el('span', { class: 'eyebrow', style: 'display:block;margin-bottom:7px', text: 'Dias da semana' }),
           U.seletorDias(form.dias, function () { atualizar(); })
@@ -633,7 +661,8 @@
             oninput: function (ev) { form.vigenciaFim = ev.target.value; atualizar(); }
           }), 'fim do semestre ' + e.periodoLetivo)
         ]));
-        acao.textContent = editando ? 'Salvar alterações' : 'Criar recorrência';
+        acao.textContent = editando ? 'Salvar alterações'
+          : form.linhas.length > 1 ? 'Criar ' + form.linhas.length + ' recorrências' : 'Criar recorrência';
       } else {
         var lista = C.el('div', { class: 'stack', style: 'gap:12px;margin-top:18px' });
         form.linhas.forEach(function (ln, i) { lista.appendChild(blocoLinha(ln, i)); });
@@ -714,6 +743,19 @@
       return erros;
     }
 
+    /* Uma linha do formulário como item de disputa para as linhas seguintes.
+       Na recorrente o item é recorrente, com os dias e a vigência do
+       formulário — como pontual sem data ele não cairia em data nenhuma, e
+       duas linhas no mesmo horário não se enxergariam. */
+    function itemVirtual(l, cadeiras, semCad) {
+      return modo === 'pontual'
+        ? { id: '__linha' + l.id, tipo: 'pontual', escopo: l.escopo, inicio: l.inicio, fim: l.fim,
+          data: l.data, dias: null, excecoes: [], cadeiras: cadeiras, semCad: semCad }
+        : { id: '__linha' + l.id, tipo: 'recorrente', escopo: l.escopo, inicio: l.inicio, fim: l.fim,
+          dias: form.dias, vigenciaInicio: form.vigenciaInicio, vigenciaFim: form.vigenciaFim,
+          excecoes: [], cadeiras: cadeiras, semCad: semCad };
+    }
+
     /* Analisa todas as linhas, em ordem. Cada linha disputa cadeira com as
        reservas gravadas E com as linhas anteriores do mesmo formulário: duas
        linhas na mesma clínica e horário somam cadeiras, e o formulário não
@@ -752,7 +794,7 @@
       }
 
       var extras = [];
-      var linhas = (modo === 'recorrente' ? form.linhas.slice(0, 1) : form.linhas).map(function (l, i) {
+      var linhas = (editando ? form.linhas.slice(0, 1) : form.linhas).map(function (l, i) {
         var erros = errosDoHorario(l);
         var cap = S.capacidadeEscopo(l.agrupamentoId, l.escopo);
         var semCad = S.escopoSemCadeiras(l.agrupamentoId, l.escopo);
@@ -797,13 +839,7 @@
         if (disp && (qtd > 0 || semCad)) {
           var cad = semCad ? [] : disp.sugestao || disp.livres.slice(0, qtd);
           if (cad.length || semCad) {
-            extras.push({
-              agrupamentoId: l.agrupamentoId,
-              item: {
-                id: '__linha' + l.id, tipo: 'pontual', escopo: l.escopo, inicio: l.inicio, fim: l.fim,
-                data: modo === 'pontual' ? l.data : null, dias: null, excecoes: [], cadeiras: cad
-              }
-            });
+            extras.push({ agrupamentoId: l.agrupamentoId, item: itemVirtual(l, cad) });
           }
         }
         return resultado;
@@ -820,7 +856,7 @@
 
     function atualizar() {
       var an = analisar();
-      var multi = modo === 'pontual' && form.linhas.length > 1;
+      var multi = an.linhas.length > 1;
 
       /* Linhas: turnos, dica da quantidade e cadeiras livres por clínica. */
       an.linhas.forEach(function (r) {
@@ -851,12 +887,7 @@
               ignorarId: editando ? doc.id : undefined,
               extras: an.linhas.filter(function (o) { return o.i < r.i && o.l.agrupamentoId === p[0] && o.disp; })
                 .map(function (o) {
-                  return {
-                    id: '__linha' + o.l.id, tipo: 'pontual', escopo: o.l.escopo, inicio: o.l.inicio, fim: o.l.fim,
-                    data: modo === 'pontual' ? o.l.data : null, dias: null, excecoes: [],
-                    cadeiras: o.semCad ? [] : o.disp.sugestao || o.disp.livres.slice(0, o.qtd || 0),
-                    semCad: o.semCad
-                  };
+                  return itemVirtual(o.l, o.semCad ? [] : o.disp.sugestao || o.disp.livres.slice(0, o.qtd || 0), o.semCad);
                 }).filter(function (it) { return it.cadeiras.length || it.semCad; })
             });
             var base = rotuloBaseEscopo(op.value);
@@ -871,11 +902,12 @@
       C.clear(painelPre);
       var d = disciplinaEscolhida();
       var rotuloDisc = d ? S.rotuloDisciplinaLongo(d) : (form.disciplinaId === SEM_VINCULO ? 'Outros' : '—');
-      if (modo === 'recorrente') {
-        var r0 = an.linhas[0], l0 = r0.l;
+      if (modo === 'recorrente') an.linhas.forEach(function (r0) {
+        var l0 = r0.l;
         var dur = C.duracaoH(l0.inicio, l0.fim);
         if (isNaN(dur) || dur < 0) dur = 0;
-        painelPre.appendChild(C.el('div', {}, [
+        painelPre.appendChild(C.el('div', multi && r0.i ? { style: 'margin-top:8px' } : {}, [
+          multi ? (r0.i + 1) + '. ' : null,
           C.el('b', { text: 'Repete toda semana' }), ' · ',
           C.el('b', { text: C.listaDias(form.dias) }), ' · ',
           C.el('b', { text: l0.inicio + '–' + l0.fim }),
@@ -896,7 +928,7 @@
             (r0.disp && r0.disp.sugestao ? ' (' + C.faixasNumeros(r0.disp.sugestao) + ')' : '') : 'cadeiras a informar') +
           ' · professor coordenador: ' + S.nomePessoa(form.responsavelId)
         ]));
-      } else {
+      }); else {
         painelPre.appendChild(C.el('div', {}, [
           C.el('b', { text: S.rotuloTipoAtividade(form.tipo) + ' · ' + rotuloDisc }),
           ' · professor coordenador: ' + S.nomePessoa(form.responsavelId)
@@ -979,7 +1011,7 @@
       /* "Pular" só resolve quando, sem as datas cheias, a mesma alocação cabe
          em todas as outras — a recorrente usa as mesmas cadeiras toda semana. */
       var podePular = false;
-      if (!editando && modo === 'recorrente' && pular.length && !an.gerais.length && !an.linhas[0].erros.length) {
+      if (!editando && modo === 'recorrente' && an.linhas.length === 1 && pular.length && !an.gerais.length && !an.linhas[0].erros.length) {
         var r0b = an.linhas[0];
         if (pular.length < r0b.datas.length) {
           var restantes = r0b.datas.filter(function (dt) { return pular.indexOf(dt) === -1; });
@@ -1003,27 +1035,40 @@
       /* Reconferência: disciplina vazia vira "Sem disciplina" na agenda
          inteira — o formulário não deixa, e a gravação também não. */
       if (!S.pode('agenda.criarRecorrente') || !vinculoGravavel()) return null;
+      /* Mais de uma linha (turnos isolados): uma recorrência por linha, em
+         ordem, cada uma no cache antes de a seguinte escolher as cadeiras. */
+      if (form.linhas.length > 1) {
+        var feitas = form.linhas.map(function (ln) { return criarRecorrenciaDaLinha(ln, []); });
+        C.toast(feitas.length + ' recorrências criadas · ' + form.linhas.map(function (ln) {
+          return ln.inicio + '–' + ln.fim;
+        }).join(' e ') + ' · ' + C.listaDias(form.dias) + '.');
+        return feitas;
+      }
       var l = form.linhas[0];
       /* As datas puladas vão JUNTO na criação. Gravá-las depois, por
          `cancelarOcorrencia`, era uma segunda escrita correndo com a
          transação da primeira — e o resumo que a transação leva para o índice
          sairia sem elas, fazendo a própria gravação ser recusada pela falta
          que o botão existe para contornar. */
-      var r = S.criarRecorrencia({
-        agrupamentoId: l.agrupamentoId, escopo: l.escopo,
-        disciplinaId: vinculoGravavel(), responsavelId: form.responsavelId,
-        tipoAtividade: form.tipo, cadeiras: inteiro(l.cadeiras),
-        dias: form.dias, inicio: l.inicio, fim: l.fim,
-        vigenciaInicio: form.vigenciaInicio, vigenciaFim: form.vigenciaFim,
-        descricao: form.descricao,
-        pular: pular || []
-      });
+      var r = criarRecorrenciaDaLinha(l, pular || []);
       var total = datasRecorrencia().length;
       if (r && pular && pular.length) total = Math.max(0, total - pular.length);
       C.toast('Recorrência criada · ' + C.plural(total, 'encontro', 'encontros') +
         ' até ' + C.fmtDiaAno(form.vigenciaFim) + (S.escopoSemCadeiras(l.agrupamentoId, l.escopo)
           ? ' · ' + S.rotuloEscopoCurto(l.agrupamentoId, l.escopo) : ' · cadeiras ' + S.textoCadeiras(S.cadeirasDe(r))));
       return r;
+    }
+
+    function criarRecorrenciaDaLinha(l, pular) {
+      return S.criarRecorrencia({
+        agrupamentoId: l.agrupamentoId, escopo: l.escopo,
+        disciplinaId: vinculoGravavel(), responsavelId: form.responsavelId,
+        tipoAtividade: form.tipo, cadeiras: inteiro(l.cadeiras),
+        dias: form.dias, inicio: l.inicio, fim: l.fim,
+        vigenciaInicio: form.vigenciaInicio, vigenciaFim: form.vigenciaFim,
+        descricao: form.descricao,
+        pular: pular
+      });
     }
 
     function registrar() {
@@ -1097,7 +1142,7 @@
     /* Cria a recorrência já com as datas sem cadeira marcadas como exceção,
        em vez de deixar a disciplina inteira impossível de lançar. */
     function registrarPulando() {
-      if (modo !== 'recorrente') return;
+      if (modo !== 'recorrente' || form.linhas.length > 1) return;
       var an = analisar();
       if (an.gerais.length || an.linhas[0].erros.length) return;
       var r0 = an.linhas[0];

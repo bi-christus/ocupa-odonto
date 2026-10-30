@@ -94,7 +94,7 @@
     if (estruturaConferida || !S.pode('estrutura.editar') || S.estruturaPendente()) return;
     estruturaConferida = true;
     var f = S.estruturaFaltando();
-    if (!f.agrupamentos.length && !f.clinicas.length) return;
+    if (!f.agrupamentos.length && !f.clinicas.length && !f.renomear.length) return;
     S.completarEstrutura().then(function (r) {
       if (r && r.ok && r.valor && r.valor.length) {
         C.toast('Entraram na estrutura: ' + r.valor.join(', ') + '.');

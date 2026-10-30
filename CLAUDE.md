@@ -249,8 +249,11 @@ duas pré-clínicas entraram em produção.
 
 ### Ambientes sem cadeira (29/10/2026)
 
-**Laboratório de radiologia** (`ag7`/`cl11`), **Espaço de promoção da
-saúde** (`ag8`/`cl12`) e **Sala de situação** (`ag9`/`cl13`). Cada um é um
+**Lab Radio** (`ag7`/`cl11`), **EPS** (`ag8`/`cl12`) e **S. Situação**
+(`ag9`/`cl13`) — nomes curtos desde 30/10/2026 (entraram por extenso:
+Laboratório de radiologia, Espaço de promoção da saúde, Sala de situação).
+`S.completarEstrutura` troca no banco o nome que ainda for EXATAMENTE o
+antigo (`Dados.NOMES_ANTIGOS`); nome editado à mão em Estrutura não é tocado. Cada um é um
 agrupamento de um ambiente só, como as pré-clínicas, com `cadeiras: 0` e
 `semCadeiras: true` (`S.semCadeiras(c)`, `S.escopoSemCadeiras(ag, esc)`).
 
@@ -366,10 +369,17 @@ Consequências para quem mexer aqui:
   todos os seletores: ao lado do nome ela passava por disciplina) e as
   cadeiras livres no horário de cada linha.
 - **Turnos múltiplos**: manhã + tarde dão 07:40–17:20 (início do primeiro,
-  término do último). A marcação continua DERIVADA do horário, então os
-  marcados são sempre uma faixa contínua: manhã e noite cobrem a tarde, e o
-  clique na tarde do meio é recusado com aviso (para usar manhã e noite sem a
-  tarde, duas ocupações). Clique de fora estende; da ponta, recolhe.
+  término do último). A marcação continua DERIVADA do horário, então numa
+  linha os marcados são sempre uma faixa contínua. Clique no turno VIZINHO
+  estende; da ponta, recolhe. **Turno isolado vira outra linha** (30/10/2026):
+  manhã marcada + clique na noite cria uma linha só com a noite, e tirar a
+  tarde de manhã-tarde-noite deixa manhã numa linha e noite em outra — com a
+  mesma clínica, cadeiras e data. Para o dia inteiro, marca-se a tarde. Na
+  edição isso continua recusado com aviso (edita-se UMA reserva).
+- **A recorrente também aceita várias linhas** (só pelo turno isolado; não há
+  botão "+"): cada linha vira uma recorrência com os mesmos dias e vigência,
+  gravadas em ordem. As linhas disputam entre si como item virtual
+  RECORRENTE (`itemVirtual`). "Criar pulando" só aparece com uma linha.
 - **Várias ocupações pontuais num envio** ("+ Adicionar ocupação"): cada linha
   com clínica, cadeiras, data e horário; a nova nasce igual à última. Cada
   linha disputa cadeira com as reservas gravadas E com as linhas anteriores do
@@ -493,6 +503,12 @@ duas horas, e a coluna não dizia nada sobre ocupação real da clínica.
 - Ocupações que se cruzam no tempo **dividem a largura** entre si
   (`disporEmColunas`), por cacho de sobreposição — um bloco solto no fim do
   dia não fica espremido por causa de dois que se cruzaram de manhã.
+- **Da esquerda para a direita, a ordem das clínicas** (30/10/2026): dentro
+  do cacho, quem cruza no tempo fica sempre em ordem (Clínica 1, 2, "3 e 4",
+  … pré-clínicas, ambientes), pela posição da primeira clínica do escopo em
+  `S.estado.clinicas`; a reserva das duas fica entre as duas. Cada bloco vai
+  logo à direita do último bloco menor que cruza com ele — pode custar uma
+  coluna a mais que o encaixe guloso, e é de propósito.
 - **A largura da coluna sai do dia, não de uma fatia igual para todos.**
   `gradeSemana` resolve a disposição dos seis dias ANTES de montar o grid e
   escreve uma trilha por dia: `minmax(15px + pico × 104px, pico fr)`. O piso
@@ -516,12 +532,15 @@ duas horas, e a coluna não dizia nada sobre ocupação real da clínica.
 
 ## Agenda e folhas objetivas (29/10/2026)
 
-O texto de cada bloco (Semana, Dia, Por disciplina) e de cada folha impressa
-diz **só a clínica ocupada e a disciplina que a ocupa** — `o.disciplinaRotulo`
-(na ocorrência; "Outros · nome" na pontual sem disciplina). Horário é a
-posição do bloco/barra; nas tabelas impressas é coluna. Cadeiras, professor,
-descrição e tipo saíram do bloco e do papel: estão na dica (`dicaDoBloco`),
-no detalhe e nos **CSV de Relatórios, que continuam completos**.
+O texto de cada bloco (Semana, Dia) e de cada folha impressa diz **a
+clínica ocupada, a disciplina que a ocupa e a descrição** — `o.disciplinaRotulo`
+(na ocorrência; "Outros · nome" na pontual sem disciplina) e `o.descricao`,
+que voltou em 30/10/2026 a pedido da coordenação porque é onde a turma é
+escrita. Horário é a posição do bloco/barra; nas tabelas impressas é coluna.
+Cadeiras, professor e tipo ficam fora do bloco e do papel: estão na dica
+(`dicaDoBloco`), no detalhe e nos **CSV de Relatórios, que continuam completos**.
+O "· 2 clínicas" da folha da semana (e a linha da legenda que o explicava)
+saiu em 30/10/2026: a reserva das duas já se chama "Clínicas 1 e 2".
 
 Folhas: semana (barra "Clínica · Disciplina"), dia (Horário · Clínica ·
 Disciplina), recorrências (Clínica · Disciplina · Dias · Horário), disciplina
@@ -534,8 +553,13 @@ Cada bloco diz, sem texto, o **tipo de ambiente** e o **tipo de reserva**:
 - **Ambiente → preenchimento** (`amb-clinica`, `amb-dupla`, `amb-pre`, de
   `S.ambienteDe`): aço na clínica de atendimento; tom de agrupamento com um
   traço também na DIREITA (como chave abrangendo as duas) na reserva das duas
-  clínicas; cinza neutro na pré-clínica (`--pre-*`). Sem cor nova — o Industry
-  é monocromático.
+  clínicas; cinza neutro na pré-clínica (`--pre-*`).
+- **Pontual → âmbar** (30/10/2026, "mais destaque no que for pontual"): a
+  única cor quente da agenda (`--pont-*`, com par no tema escuro), por cima
+  do ambiente — âmbar chapado na clínica, listras âmbar × cinza na
+  pré-clínica, contorno âmbar no ambiente sem cadeira. Azul × laranja
+  separa nos três daltonismos. Cor escolhida por reserva foi pedida "se
+  possível" e NÃO foi feita: a coordenação aceitou esta alternativa.
 - **Tipo de reserva → desenho**: ícone de traço fino (Lucide, `U.icone`) ↻
   recorrente, calendário-1 pontual, capelo na pós; a pontual mantém a borda
   tracejada (e listras por cima do tom no gantt).
@@ -913,6 +937,11 @@ agenda; aba "Por disciplina"; e a especialidade fora dos seletores de clínica.
 Em 29/10/2026 entraram, verificados no harness nos três perfis: os três
 ambientes sem cadeira, a agenda e as folhas objetivas (clínica + disciplina)
 e a edição de qualquer reserva pela coordenação.
+
+Em 30/10/2026 (pedidos da Elisa Lima Verde), verificados no harness nos três
+perfis: ordem das clínicas na semana, pontual em âmbar, descrição/turma no
+bloco e na folha, nomes curtos dos ambientes, folha sem "2 clínicas" e
+turnos isolados (manhã e noite sem a tarde) na recorrente e na pontual.
 
 ### Pendências
 
