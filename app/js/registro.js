@@ -105,6 +105,7 @@
          em toda a lógica de permissão — só o rótulo de tela é outro. */
       responsavelId: u.id,
       descricao: '',
+      cor: '',
       dias: [1, 3],
       vigenciaInicio: inicioUtil,
       vigenciaFim: lim.fim,
@@ -257,6 +258,7 @@
       form.disciplinaId = did || (r.tipo === 'pontual' ? SEM_VINCULO : '');
       form.responsavelId = S.responsavelDe(r) || u.id;
       form.descricao = S.descricaoDe(r);
+      form.cor = r.cor || '';
       if (r.tipo !== 'pontual') {
         form.dias = (r.dias || []).slice();
         form.vigenciaInicio = r.vigenciaInicio;
@@ -460,6 +462,27 @@
         C.el('small', { class: 'muted', style: 'display:block;margin-top:6px;font-size:11.5px',
           text: editando ? 'Marque um ou mais: o início e o término seguem os turnos marcados.'
             : 'Marque um ou mais: o início e o término seguem os turnos marcados. Turno separado (manhã e noite, sem a tarde) vira outra ocupação.' })
+      ]);
+    }
+
+    /* Cor do bloco na agenda (30/10/2026). "Automática" é o esquema por
+       ambiente e tipo de reserva; as outras vêm da paleta fixa de
+       `Dados.CORES_RESERVA`. A amostra é o próprio marcador da agenda
+       (`.sw` com a classe da cor), para o botão mostrar o que o bloco vai
+       ser. Vale para todas as linhas do envio. */
+    function blocoCor() {
+      function botao(id, rotulo) {
+        var on = (form.cor || '') === id;
+        return C.el('button', {
+          type: 'button', class: 'marcador' + (on ? ' on' : ' apagado'),
+          'aria-pressed': on ? 'true' : 'false', title: rotulo,
+          onclick: function () { form.cor = id; desenhar(); }
+        }, [C.el('i', { class: 'sw' + (id ? ' com-cor cor-' + id : ''), 'aria-hidden': 'true' }), rotulo]);
+      }
+      return C.el('div', { style: 'margin-top:16px' }, [
+        C.el('span', { class: 'eyebrow', style: 'display:block;margin-bottom:7px', text: 'Cor na agenda' }),
+        C.el('div', { class: 'cores' }, [botao('', 'Automática')].concat(
+          (D.CORES_RESERVA || []).map(function (c) { return botao(c.id, c.rotulo); })))
       ]);
     }
 
@@ -691,6 +714,7 @@
           placeholder: 'Qual turma e o que acontece nesta ocupação? Ex.: T1 · triagem. Fica visível para quem consulta a agenda.',
           oninput: function (ev) { form.descricao = ev.target.value; atualizar(); }
         }), 'a turma é escrita aqui')));
+      corpo.appendChild(blocoCor());
 
       if (modo === 'pontual') {
         var n = form.linhas.length;
@@ -1066,7 +1090,7 @@
         tipoAtividade: form.tipo, cadeiras: inteiro(l.cadeiras),
         dias: form.dias, inicio: l.inicio, fim: l.fim,
         vigenciaInicio: form.vigenciaInicio, vigenciaFim: form.vigenciaFim,
-        descricao: form.descricao,
+        descricao: form.descricao, cor: form.cor,
         pular: pular
       });
     }
@@ -1093,7 +1117,7 @@
             data: l.data, inicio: l.inicio, fim: l.fim,
             cadeiras: inteiro(l.cadeiras),
             tipoAtividade: form.tipo,
-            descricao: form.descricao,
+            descricao: form.descricao, cor: form.cor,
             /* `vinculoGravavel` traduz "Outros" para null: o valor é do
                formulário e não do modelo, e o Firestore não pode recebê-lo. */
             disciplinaId: vinculoGravavel(), responsavelId: form.responsavelId
@@ -1121,7 +1145,7 @@
       S.editarReserva(doc.id, {
         agrupamentoId: l.agrupamentoId, escopo: l.escopo,
         disciplinaId: vinculoGravavel(), responsavelId: form.responsavelId,
-        tipoAtividade: form.tipo, descricao: form.descricao,
+        tipoAtividade: form.tipo, descricao: form.descricao, cor: form.cor,
         cadeiras: inteiro(l.cadeiras), inicio: l.inicio, fim: l.fim,
         data: l.data, dias: form.dias,
         vigenciaInicio: form.vigenciaInicio, vigenciaFim: form.vigenciaFim

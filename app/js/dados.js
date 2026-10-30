@@ -198,8 +198,26 @@
     ag9: 'Sala de situação', cl13: 'Sala de situação'
   };
 
+  /* Cores que a pessoa escolhe para a reserva (pedido da coordenação,
+     30/10/2026). Paleta FIXA, e não seletor livre: a de Okabe-Ito, feita
+     para se separar nos daltonismos, e o documento guarda só o `id` — a cor
+     de verdade mora no CSS (`.cor-<id>`), com par no tema escuro. Sem cor
+     escolhida vale o esquema automático (aço/cinza por ambiente, âmbar na
+     pontual). */
+  var CORES_RESERVA = [
+    { id: 'azul', rotulo: 'Azul' },
+    { id: 'celeste', rotulo: 'Celeste' },
+    { id: 'verde', rotulo: 'Verde' },
+    { id: 'amarelo', rotulo: 'Amarelo' },
+    { id: 'laranja', rotulo: 'Laranja' },
+    { id: 'vermelho', rotulo: 'Vermelho' },
+    { id: 'rosa', rotulo: 'Rosa' },
+    { id: 'cinza', rotulo: 'Cinza' }
+  ];
+
   global.Dados = {
     semente: semente,
+    CORES_RESERVA: CORES_RESERVA,
     NOMES_ANTIGOS: NOMES_ANTIGOS,
     CATEGORIAS_MANUTENCAO: CATEGORIAS_MANUTENCAO,
     TIPOS_ATIVIDADE: TIPOS_ATIVIDADE,

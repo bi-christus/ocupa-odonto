@@ -343,6 +343,35 @@ html.arrastando-agenda,html.arrastando-agenda *{
 .sw.amb-pre{background:var(--pre-soft);border-left-color:var(--pre-strong)}
 .sw.amb-espaco{background:none;border-left-color:var(--on-line);box-shadow:inset 0 0 0 1px var(--line)}
 .sw.pont{background:var(--pont-soft);border-left:3px dashed var(--pont-strong)}
+
+/* ═══ Cor escolhida na reserva (30/10/2026) ═══
+   Paleta de Okabe-Ito (`Dados.CORES_RESERVA`). Cada cor define só três
+   tons — `--cf` forte (traço e barra do gantt), `--cs` fundo claro, `--co`
+   texto sobre o fundo —, e as regras abaixo valem para todas. No tema
+   escuro o fundo e o texto saem da própria cor forte. Vem DEPOIS de
+   ambiente e pontual, com a mesma especificidade, para vencer no
+   preenchimento; o tracejado da pontual e o ícone ficam. */
+.cor-azul{--cf:#0072b2;--cs:#cfe3f4;--co:#0b2f4a}
+.cor-celeste{--cf:#2a86bf;--cs:#d5ecfa;--co:#0d3550}
+.cor-verde{--cf:#00795a;--cs:#c8eadd;--co:#073a2c}
+.cor-amarelo{--cf:#7a7000;--cs:#f6efa4;--co:#3a3500}
+.cor-laranja{--cf:#b86e00;--cs:#fbe0b0;--co:#4d2e00}
+.cor-vermelho{--cf:#b8450a;--cs:#f6cdbb;--co:#4f1d05}
+.cor-rosa{--cf:#a8507f;--cs:#f2d4e5;--co:#45182f}
+.cor-cinza{--cf:#5d5d60;--cs:#e0e0e3;--co:#2b2b2d}
+[data-tema="escuro"] .com-cor{--cs:color-mix(in srgb,var(--cf) 42%,#1d1f20);--co:color-mix(in srgb,var(--cf) 18%,#fff)}
+.ev.com-cor,.mini.com-cor,.sw.com-cor{background:var(--cs);color:var(--co);border-left-color:var(--cf)}
+.ev.com-cor.amb-dupla,.mini.com-cor.amb-dupla{box-shadow:0 0 0 1px var(--color-bg),inset -3px 0 0 var(--cf)}
+.ev.com-cor.amb-pre,.mini.com-cor.amb-pre{
+  background:repeating-linear-gradient(135deg,var(--cs) 0 8px,var(--pre-soft) 8px 14px)}
+.ev.com-cor.amb-espaco,.mini.com-cor.amb-espaco{background:var(--color-bg);color:var(--color-text);
+  box-shadow:0 0 0 1px var(--color-bg),inset 0 0 0 1.5px var(--cf)}
+.tl-blk.com-cor{background:var(--cf);color:#fff}
+.tl-blk.com-cor.amb-pre{background:repeating-linear-gradient(135deg,var(--cf) 0 7px,var(--pre-strong) 7px 12px)}
+.tl-blk.com-cor.amb-espaco{background:var(--color-bg);color:var(--color-text);box-shadow:inset 0 0 0 2px var(--cf)}
+.cores{display:flex;flex-wrap:wrap;gap:6px}
+.cores .sw{width:20px;height:14px}
+.cores .marcador:not(.on){text-decoration:none;opacity:.8;color:inherit}
 .sw-vazio{display:inline-block;width:0}
 .filtros{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;margin:-4px 0 20px;padding:10px 0;
   border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
