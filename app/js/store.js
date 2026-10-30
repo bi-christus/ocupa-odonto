@@ -631,6 +631,12 @@
   /* O que toda ocorrência carrega da reserva de origem — disciplina,
      professor, nível, descrição, ambiente e cadeiras —, já resolvido, com o
      legado embutido. As telas leem daqui, nunca do documento. */
+  /* A cor escolhida para a reserva, ou null (esquema automático). Valor que
+     não está na paleta — gravado à mão, ou de uma paleta futura — vale como
+     sem cor, em vez de virar uma classe CSS que não existe. */
+  function corValida(v) {
+    return (D.CORES_RESERVA || []).some(function (c) { return c.id === v; }) ? v : null;
+  }
   function baseDaOcorrencia(o) {
     var did = disciplinaIdDe(o);
     var d = disciplina(did);
@@ -646,7 +652,7 @@
       disciplinaRotulo: d ? (d.nome || rotuloDisciplina(d)) : did ? 'Disciplina removida'
         : o.tipo === 'pontual' ? 'Outros · ' + nomePessoa(responsavelDe(o)) : 'Sem disciplina',
       responsavelId: responsavelDe(o), nivel: nivelDe(o), descricao: descricaoDe(o),
-      ambiente: ambienteDe(o.agrupamentoId, o.escopo)
+      ambiente: ambienteDe(o.agrupamentoId, o.escopo), cor: corValida(o.cor)
     };
   }
   function ocorrenciaDeRegra(r, data) {
@@ -668,7 +674,7 @@
       subtitulo: subtituloDisciplina(b.d),
       responsavelId: b.responsavelId,
       tipoAtividade: 'aula', nivel: b.nivel, ambiente: b.ambiente,
-      descricao: b.descricao
+      descricao: b.descricao, cor: b.cor
     };
   }
   /* Título DERIVADO: tipo + disciplina, ou tipo + quem pediu quando a
@@ -700,7 +706,7 @@
       tituloOriginal: p.titulo || '',
       responsavelId: b.responsavelId,
       tipoAtividade: p.tipoAtividade, nivel: b.nivel, ambiente: b.ambiente,
-      descricao: b.descricao
+      descricao: b.descricao, cor: b.cor
     };
   }
 
@@ -1208,7 +1214,8 @@
       }),
       encerradaEm: null,
       criadoPor: euId(), criadoEm: agora,
-      descricao: String(dados.descricao || '').trim()
+      descricao: String(dados.descricao || '').trim(),
+      cor: corValida(dados.cor)
     };
     /* As cadeiras são escolhidas já com as datas puladas fora: é contra as
        datas que de fato acontecem que elas precisam estar livres. */
@@ -1229,6 +1236,7 @@
       data: dados.data, inicio: dados.inicio, fim: dados.fim,
       tipoAtividade: dados.tipoAtividade,
       descricao: String(dados.descricao || '').trim(),
+      cor: corValida(dados.cor),
       disciplinaId: dados.disciplinaId || null, responsavelId: dados.responsavelId,
       cadeirasPedidas: escopoSemCadeiras(dados.agrupamentoId, dados.escopo || 'a') ? null : quantidadeValida(dados),
       excecoes: [],
@@ -1396,7 +1404,7 @@
      nas cadeiras não mudam. */
   var CAMPOS_EDITAVEIS = ['agrupamentoId', 'escopo', 'disciplinaId', 'responsavelId', 'tipoAtividade',
     'descricao', 'inicio', 'fim', 'data', 'dias', 'vigenciaInicio', 'vigenciaFim',
-    'cadeirasPedidas', 'cadeirasAlocadas', 'turmaId', 'editadoPor', 'editadoEm'];
+    'cadeirasPedidas', 'cadeirasAlocadas', 'turmaId', 'editadoPor', 'editadoEm', 'cor'];
   function editarReserva(id, dados) {
     if (!pode('agenda.editar')) {
       return global.Promise.resolve({ ok: false, mensagem: 'Somente a coordenação edita reservas.' });
@@ -1413,6 +1421,9 @@
     o.responsavelId = dados.responsavelId || responsavelDe(o) || euId();
     o.tipoAtividade = dados.tipoAtividade === 'pos' ? 'pos' : 'graduacao';
     o.descricao = String(dados.descricao || '').trim();
+    /* null, e não ausente: a gravação é `merge`, e "voltar ao automático"
+       precisa apagar a cor que estava lá. */
+    o.cor = corValida(dados.cor);
     o.inicio = dados.inicio;
     o.fim = dados.fim;
     if (o.tipo === 'pontual') {

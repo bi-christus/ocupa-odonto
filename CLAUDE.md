@@ -106,7 +106,7 @@ hora, pelo snapshot de `autorizados`.
 | `turmas` | auto | **legado, sem tela desde 05/10/2026** — `disciplinaId`, `codigo`, `professorCoordenadorId`, `periodoLetivo`; lida só para as reservas antigas acharem disciplina e professor |
 | `alunos` | auto | **legado, sem tela** — `nome`, `matricula`, `periodo`; lida só para o nome das atribuições antigas |
 | `matriculas` | `{turmaId}__{alunoId}` | **não é mais lida** (o vínculo de alunos saiu com a turma) |
-| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `disciplinaId`, `responsavelId`, `tipoAtividade`, `descricao`, `cadeirasPedidas`, `cadeirasAlocadas[]`, `criadoPor`, `criadoEm`, `editadoPor`, `editadoEm`, `excecoes[]`, `excluidaEm`, `excluidaPor`, `motivoExclusao` · recorrente: `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm` · pontual: `data`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` · **legado**: `turmaId` e `observacao` (antes de 05/10/2026), `titulo` (antes de 17/09/2026), `cadeiras` (antes de 17/09/2026, ignorado) |
+| `ocupacoes` | auto | `tipo`, `agrupamentoId`, `escopo`, `inicio`, `fim`, `disciplinaId`, `responsavelId`, `tipoAtividade`, `descricao`, `cor` (id da paleta ou nulo; 30/10/2026), `cadeirasPedidas`, `cadeirasAlocadas[]`, `criadoPor`, `criadoEm`, `editadoPor`, `editadoEm`, `excecoes[]`, `excluidaEm`, `excluidaPor`, `motivoExclusao` · recorrente: `dias[]`, `vigenciaInicio`, `vigenciaFim`, `periodoLetivo`, `encerradaEm` · pontual: `data`, `situacao`, `motivoRecusa`, `decididoPor`, `decididoEm` · **legado**: `turmaId` e `observacao` (antes de 05/10/2026), `titulo` (antes de 17/09/2026), `cadeiras` (antes de 17/09/2026, ignorado) |
 | `manutencoes` | auto | `protocolo`, `clinicaId`, `cadeira`, `categoria`, `criticidade`, `motivo`, `abertoPor`, `abertoEm`, `previsaoRetorno`, `status`, `fechadoPor`, `fechadoEm`, `laudo`, `impacto{}` |
 | `atribuicoes` | auto | `chave`, `clinicaId`, `cadeira`, `nome`, `alunoId` (nulo nos registros novos), `data`, `registradoPor`, `registradoEm` — desde 05/10/2026 é só o NOME anotado na cadeira |
 | `indices` | `ag1`–`ag6` | `agrupamentoId`, `itens[]` — cada item com `cadeiras[]` (ou `null`/ausente = integral) |
@@ -558,8 +558,16 @@ Cada bloco diz, sem texto, o **tipo de ambiente** e o **tipo de reserva**:
   única cor quente da agenda (`--pont-*`, com par no tema escuro), por cima
   do ambiente — âmbar chapado na clínica, listras âmbar × cinza na
   pré-clínica, contorno âmbar no ambiente sem cadeira. Azul × laranja
-  separa nos três daltonismos. Cor escolhida por reserva foi pedida "se
-  possível" e NÃO foi feita: a coordenação aceitou esta alternativa.
+  separa nos três daltonismos.
+- **Cor escolhida → vence o preenchimento** (30/10/2026): campo `cor` da
+  reserva, um id da paleta fixa `Dados.CORES_RESERVA` (Okabe-Ito: azul,
+  celeste, verde, amarelo, laranja, vermelho, rosa, cinza) ou `null` =
+  automática. Escolhe quem cria (no formulário, "Cor na agenda"); muda a
+  coordenação pelo Editar. `S.corValida` descarta id fora da paleta. A cor
+  de verdade mora no CSS (`.cor-<id>` define `--cf/--cs/--co`; o tema
+  escuro deriva fundo e texto da cor forte). Com cor escolhida, o
+  tracejado e o ícone ainda dizem pontual, e as listras ainda dizem
+  pré-clínica. O papel continua sem cor (impressão sem fundo).
 - **Tipo de reserva → desenho**: ícone de traço fino (Lucide, `U.icone`) ↻
   recorrente, calendário-1 pontual, capelo na pós; a pontual mantém a borda
   tracejada (e listras por cima do tom no gantt).
@@ -940,8 +948,9 @@ e a edição de qualquer reserva pela coordenação.
 
 Em 30/10/2026 (pedidos da Elisa Lima Verde), verificados no harness nos três
 perfis: ordem das clínicas na semana, pontual em âmbar, descrição/turma no
-bloco e na folha, nomes curtos dos ambientes, folha sem "2 clínicas" e
-turnos isolados (manhã e noite sem a tarde) na recorrente e na pontual.
+bloco e na folha, nomes curtos dos ambientes, folha sem "2 clínicas",
+turnos isolados (manhã e noite sem a tarde) na recorrente e na pontual, e a
+cor escolhida por reserva.
 
 ### Pendências
 

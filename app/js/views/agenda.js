@@ -441,10 +441,12 @@
   /* ── Leituras de escopo compartilhadas ────────────────────────────── */
   /* O preenchimento diz o AMBIENTE (amb-clinica, amb-dupla, amb-pre) na
      recorrente; a PONTUAL é âmbar, com borda tracejada, por cima do ambiente
-     (30/10/2026) — os mesmos marcadores do filtro. */
+     (30/10/2026) — os mesmos marcadores do filtro. A COR ESCOLHIDA na
+     reserva (`com-cor cor-*`) vence as duas no preenchimento; o tracejado,
+     o ícone e as listras da pré-clínica continuam dizendo o resto. */
   function classeEvento(o, base) {
     return base + ' amb-' + o.ambiente + (o.origem === 'pontual' ? ' pontual' : '') +
-      (o.nivel === 'pos' ? ' nivel-pos' : '');
+      (o.nivel === 'pos' ? ' nivel-pos' : '') + (o.cor ? ' com-cor cor-' + o.cor : '');
   }
 
   /* ── Semana ───────────────────────────────────────────────────────────
