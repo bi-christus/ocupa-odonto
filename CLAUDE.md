@@ -125,6 +125,16 @@ como ocupadas. O resto da clínica continua livre para outras reservas no
 mesmo horário até as cadeiras acabarem. Várias reservas dividem a clínica;
 o que não pode é dividir a CADEIRA.
 
+**Menos nas pré-clínicas, que são reservadas INTEIRAS** (pedido da
+coordenação, 05/11/2026: "como uma sala só"). Cada uma — a maior (70) e a
+menor (20) — continua individual, mas não se reserva parte dela.
+`S.escopoInteiro(ag, esc)` reconhece o escopo; `quantidadeValida` devolve a
+capacidade nele (criar, editar e pedido), `aprovarPedido` sobe para a
+capacidade o pedido parcial antigo, e `podeGerirCadeiras` é falso (não há
+cadeira de fora para trocar). O formulário mostra "pré-clínica inteira · 70"
+no lugar do campo de quantidade. Reservas parciais gravadas antes disso
+continuam valendo como foram gravadas, até alguém editá-las.
+
 Três estados de documento (`S.ehIntegral`, `S.quantidadeDe`, `S.cadeirasDe`):
 
 - com `cadeirasAlocadas` — reserva nova ou ajustada: segura aquelas;
@@ -421,6 +431,13 @@ campo também vale como ligado**), ocupação criada por professor nasce
 pela fila no Painel; `agenda.aprovar` é a permissão, só do coordenador. O
 próprio autor pode retirar o pedido enquanto ninguém decidiu.
 
+**A coordenação edita o pedido antes de aprovar** (05/11/2026): botão
+"Editar" na fila do Painel (só com `agenda.editar`), que abre o formulário de
+edição ("Editar pedido") com o aviso de que salvar não aprova. Grava por
+`S.editarReserva`, que já mantinha o pedido pendente e fora do índice; a
+escolha das cadeiras e a checagem de choque continuam na transação de
+`aprovarPedido`.
+
 **Pedido não segura cadeira.** Ele não entra em `indices/{agrupamentoId}`
 e só tem `cadeirasPedidas` (a quantidade), então vários professores podem
 pedir as mesmas. É a **aprovação** que passa pela transação, ESCOLHE as
@@ -562,8 +579,11 @@ Cada bloco diz, sem texto, o **tipo de ambiente** e o **tipo de reserva**:
 - **Cor escolhida → vence o preenchimento** (30/10/2026): campo `cor` da
   reserva, um id da paleta fixa `Dados.CORES_RESERVA` (Okabe-Ito: azul,
   celeste, verde, amarelo, laranja, vermelho, rosa, cinza) ou `null` =
-  automática. Escolhe quem cria (no formulário, "Cor na agenda"); muda a
-  coordenação pelo Editar. `S.corValida` descarta id fora da paleta. A cor
+  automática. **Só a coordenação escolhe** (05/11/2026, `S.podeEscolherCor`
+  = `agenda.editar`): o campo "Cor na agenda" não aparece para o professor,
+  e `criarPontual`/`criarRecorrencia` gravam `null` quando quem cria não pode
+  escolher. A coordenação escolhe ao criar, ao editar e no Editar da fila,
+  antes de aprovar. `S.corValida` descarta id fora da paleta. A cor
   de verdade mora no CSS (`.cor-<id>` define `--cf/--cs/--co`; o tema
   escuro deriva fundo e texto da cor forte). Com cor escolhida, o
   tracejado e o ícone ainda dizem pontual, e as listras ainda dizem
@@ -852,7 +872,8 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
   no formulário, não um estado à parte — não transforme turno em campo gravado
   na ocupação
 - **Toda reserva informa quantas cadeiras usa**; o sistema escolhe quais, da
-  menor para a maior, e o resto da clínica segue reservável
+  menor para a maior, e o resto da clínica segue reservável — **menos a
+  pré-clínica, reservada sempre inteira**
 - **Tipo da ocupação é só `graduacao` ou `pos`.** Os sete tipos antigos
   (reposicao, avaliacao, evento…) vivem em `Dados.TIPOS_LEGADOS`, fora do
   formulário: servem só para `rotuloTipoAtividade` conseguir exibir ocupação
@@ -951,6 +972,10 @@ perfis: ordem das clínicas na semana, pontual em âmbar, descrição/turma no
 bloco e na folha, nomes curtos dos ambientes, folha sem "2 clínicas",
 turnos isolados (manhã e noite sem a tarde) na recorrente e na pontual, e a
 cor escolhida por reserva.
+
+Em 09/11/2026 (áudios da Elisa de 05/11), verificados no harness nos três
+perfis: cor só pela coordenação, pré-clínicas reservadas inteiras e "Editar"
+do pedido pendente na fila do Painel.
 
 ### Pendências
 
