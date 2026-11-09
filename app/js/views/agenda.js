@@ -425,7 +425,7 @@
     if (!doc) { C.toast('Reserva não encontrada.'); return; }
     var slot = C.el('div');
     U.modal({
-      titulo: doc.tipo === 'pontual' ? 'Editar ocupação' : 'Editar recorrência',
+      titulo: doc.tipo === 'pontual' ? (S.situacaoDe(doc) === 'pendente' ? 'Editar pedido' : 'Editar ocupação') : 'Editar recorrência',
       subtitulo: S.rotuloReserva(doc) + ' · ' + S.rotuloEscopoCurto(doc.agrupamentoId, doc.escopo) +
         (doc.tipo === 'pontual' ? ' · ' + C.fmtDiaAno(doc.data) : ' · ' + C.listaDias(doc.dias) + ' · vale para todos os encontros'),
       largura: '840px',

@@ -472,7 +472,8 @@
       if (dono) {
         caixa.appendChild(C.el('div', { class: 'alert', style: 'margin-top:14px',
           text: 'Esta cadeira está na reserva ' + rotuloOcorrencia(ref, dono) + '. ' +
-            (S.podeGerirCadeiras(dono) ? 'Troque-a por uma livre em "Alterar cadeiras".'
+            (S.escopoInteiro(dono.agrupamentoId, dono.escopo) ? 'A pré-clínica é reservada inteira: a cadeira fica fora de uso nesse encontro.'
+              : S.podeGerirCadeiras(dono) ? 'Troque-a por uma livre em "Alterar cadeiras".'
               : 'O professor responsável precisa trocá-la por uma livre.') }));
         if (S.podeGerirCadeiras(dono)) caixa.appendChild(botaoAlterar(dono));
       }

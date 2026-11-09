@@ -115,6 +115,14 @@
     if (sit !== 'pendente') return null;
     if (souCoord) {
       return [
+        /* Editar antes de aprovar (05/11/2026): a coordenação acerta horário,
+           data, clínica ou descrição do pedido em vez de recusar e pedir de
+           novo. Salvar NÃO aprova — o pedido volta à fila, e a checagem de
+           cadeira continua sendo a da transação de aprovação. */
+        S.pode('agenda.editar') ? C.el('button', {
+          class: 'btn-ghost', style: 'margin-right:12px', text: 'Editar',
+          onclick: function () { global.Agenda.editar(p); }
+        }) : null,
         C.el('button', { class: 'btn-ghost', text: 'Aprovar', onclick: function () { aprovarPedido(p); } }),
         C.el('button', {
           class: 'btn-danger', style: 'margin-left:12px', text: 'Recusar',

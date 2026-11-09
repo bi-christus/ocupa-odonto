@@ -350,8 +350,12 @@
     function aplicarEscopo(l, v) {
       var p = String(v).split('|');
       if (!S.agrupamento(p[0])) return;
+      var eraInteiro = S.escopoInteiro(l.agrupamentoId, l.escopo);
       l.agrupamentoId = p[0];
       l.escopo = p[1] === 'b' || p[1] === 'ambas' ? p[1] : 'a';
+      /* Saindo da pré-clínica, a quantidade dela (70, 20) não serve para a
+         clínica de 14: o campo volta vazio, como nasce. */
+      if (eraInteiro && !S.escopoInteiro(l.agrupamentoId, l.escopo)) l.cadeiras = '';
       encaixarNaJanela(l);
       desenhar();
     }
@@ -571,7 +575,11 @@
          situação): a reserva é do ambiente inteiro, então o campo de
          quantidade não existe — fica só a dica dizendo se está livre. */
       var campoCadeiras;
-      if (S.escopoSemCadeiras(l.agrupamentoId, l.escopo)) {
+      if (S.escopoInteiro(l.agrupamentoId, l.escopo)) {
+        /* Pré-clínica: reservada inteira, sem campo de quantidade. */
+        campoCadeiras = campoComDica('Cadeiras', C.el('div', { class: 'input', style: 'display:flex;align-items:center;color:var(--color-text-muted, inherit)',
+          text: 'pré-clínica inteira · ' + cap }), l._dica);
+      } else if (S.escopoSemCadeiras(l.agrupamentoId, l.escopo)) {
         campoCadeiras = campoComDica('Cadeiras', C.el('div', { class: 'input', style: 'display:flex;align-items:center;color:var(--color-text-muted, inherit)',
           text: 'ambiente inteiro' }), l._dica);
       } else {
@@ -630,6 +638,13 @@
 
       /* Dizer que o pedido NÃO segura o horário é obrigatório: quem pede
          assume que pedir já garante, e aí descobre no dia. */
+      if (editando && doc.tipo === 'pontual' && S.situacaoDe(doc) === 'pendente') {
+        corpo.appendChild(C.el('div', {
+          class: 'alert', style: 'margin-bottom:16px',
+          text: 'Este é um pedido de professor. Salvar as alterações não aprova: ele continua na fila ' +
+            'até alguém clicar em Aprovar, e é na aprovação que as cadeiras são escolhidas.'
+        }));
+      }
       if (modo === 'pontual' && souPedido()) {
         corpo.appendChild(C.el('div', {
           class: 'alert', style: 'margin-bottom:16px',
@@ -714,7 +729,9 @@
           placeholder: 'Qual turma e o que acontece nesta ocupação? Ex.: T1 · triagem. Fica visível para quem consulta a agenda.',
           oninput: function (ev) { form.descricao = ev.target.value; atualizar(); }
         }), 'a turma é escrita aqui')));
-      corpo.appendChild(blocoCor());
+      /* Cor é decisão da coordenação (05/11/2026): o professor nem vê o
+         campo, e o store descarta a cor que chegasse de outro jeito. */
+      if (S.podeEscolherCor()) corpo.appendChild(blocoCor());
 
       if (modo === 'pontual') {
         var n = form.linhas.length;
@@ -822,6 +839,8 @@
         var erros = errosDoHorario(l);
         var cap = S.capacidadeEscopo(l.agrupamentoId, l.escopo);
         var semCad = S.escopoSemCadeiras(l.agrupamentoId, l.escopo);
+        /* Pré-clínica é a sala inteira: a quantidade é a capacidade, sempre. */
+        if (S.escopoInteiro(l.agrupamentoId, l.escopo)) l.cadeiras = String(cap);
         var qtd = semCad ? null : inteiro(l.cadeiras);
         /* Vazia trava o envio, mas não vira alerta vermelho: formulário
            recém-aberto que acusa erro antes de a pessoa digitar ensina a

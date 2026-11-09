@@ -348,6 +348,14 @@
     var l = clinicasDoEscopo(agrupamentoId, escopo);
     return l.length > 0 && l.every(semCadeiras);
   }
+  /* Pré-clínica é reservada INTEIRA (pedido da coordenação, 05/11/2026): a
+     maior e a menor funcionam cada uma como uma sala só — nada de reservar 30
+     das 70. A quantidade de cadeiras continua valendo nas clínicas de
+     atendimento; aqui ela é sempre a capacidade do escopo. */
+  function escopoInteiro(agrupamentoId, escopo) {
+    var l = clinicasDoEscopo(agrupamentoId, escopo);
+    return l.length > 0 && !l.some(semCadeiras) && l.every(ehPreClinica);
+  }
   function ambienteDe(agrupamentoId, escopo) {
     var l = clinicasDoEscopo(agrupamentoId, escopo);
     if (l.length > 1) return 'dupla';
@@ -637,6 +645,12 @@
   function corValida(v) {
     return (D.CORES_RESERVA || []).some(function (c) { return c.id === v; }) ? v : null;
   }
+  /* Só a coordenação escolhe a cor (05/11/2026) — ao criar, ao editar e, pelo
+     Editar da fila, antes de aprovar. Reserva de professor nasce automática.
+     É a mesma permissão de editar reserva: cor é decisão de quem organiza a
+     agenda inteira, não de quem pede um horário. */
+  function podeEscolherCor() { return pode('agenda.editar'); }
+  function corDoCriador(v) { return podeEscolherCor() ? corValida(v) : null; }
   function baseDaOcorrencia(o) {
     var did = disciplinaIdDe(o);
     var d = disciplina(did);
@@ -1182,6 +1196,8 @@
   function quantidadeValida(dados) {
     var n = Math.floor(Number(dados.cadeiras) || 0);
     var cap = capacidadeEscopo(dados.agrupamentoId, dados.escopo || 'a');
+    /* Pré-clínica: sempre a sala inteira, diga o formulário o que disser. */
+    if (escopoInteiro(dados.agrupamentoId, dados.escopo || 'a')) return cap;
     return Math.max(1, Math.min(n || cap, cap));
   }
 
@@ -1215,7 +1231,7 @@
       encerradaEm: null,
       criadoPor: euId(), criadoEm: agora,
       descricao: String(dados.descricao || '').trim(),
-      cor: corValida(dados.cor)
+      cor: corDoCriador(dados.cor)
     };
     /* As cadeiras são escolhidas já com as datas puladas fora: é contra as
        datas que de fato acontecem que elas precisam estar livres. */
@@ -1236,7 +1252,7 @@
       data: dados.data, inicio: dados.inicio, fim: dados.fim,
       tipoAtividade: dados.tipoAtividade,
       descricao: String(dados.descricao || '').trim(),
-      cor: corValida(dados.cor),
+      cor: corDoCriador(dados.cor),
       disciplinaId: dados.disciplinaId || null, responsavelId: dados.responsavelId,
       cadeirasPedidas: escopoSemCadeiras(dados.agrupamentoId, dados.escopo || 'a') ? null : quantidadeValida(dados),
       excecoes: [],
@@ -1300,8 +1316,13 @@
     if (!p || !ehPendente(p)) return global.Promise.resolve({ ok: false, mensagem: 'Pedido não está pendente.' });
     var antes = {
       situacao: p.situacao, decididoPor: p.decididoPor, decididoEm: p.decididoEm,
-      cadeirasAlocadas: p.cadeirasAlocadas
+      cadeirasAlocadas: p.cadeirasAlocadas, cadeirasPedidas: p.cadeirasPedidas
     };
+    /* Pedido de pré-clínica com quantidade parcial (anterior a 05/11/2026)
+       é aprovado como a sala inteira, que é a única forma de reservá-la. */
+    if (p.cadeirasPedidas && escopoInteiro(p.agrupamentoId, p.escopo)) {
+      p.cadeirasPedidas = capacidadeEscopo(p.agrupamentoId, p.escopo);
+    }
     p.situacao = 'aprovada';
     p.decididoPor = euId();
     p.decididoEm = C.carimbo();
@@ -2253,8 +2274,10 @@
      resolvedores. */
   function podeGerirCadeiras(o) {
     if (!o || !usuarioAtual || !pode('cadeira.ocupar')) return false;
-    /* Ambiente sem cadeira: não há cadeira para trocar. */
+    /* Ambiente sem cadeira: não há cadeira para trocar. Pré-clínica é
+       reservada inteira: não há cadeira de fora para trocar por uma dela. */
     if (escopoSemCadeiras(o.agrupamentoId, o.escopo)) return false;
+    if (escopoInteiro(o.agrupamentoId, o.escopo)) return false;
     if (usuarioAtual.perfil === 'coordenador') return true;
     var doc = o.origemId ? reservaPorId(o.origemId) : o;
     if (!doc) return false;
@@ -2311,7 +2334,8 @@
     cadeirasInterditadas: cadeirasInterditadas,
     poolDoEscopo: poolDoEscopo, rotuloEscopoCurto: rotuloEscopoCurto,
     ehPreClinica: ehPreClinica, ambienteDe: ambienteDe,
-    semCadeiras: semCadeiras, escopoSemCadeiras: escopoSemCadeiras,
+    semCadeiras: semCadeiras, escopoSemCadeiras: escopoSemCadeiras, escopoInteiro: escopoInteiro,
+    podeEscolherCor: podeEscolherCor,
     disciplina: disciplina,
     aluno: aluno, pessoa: pessoa, nomePessoa: nomePessoa,
     subtituloAgrupamento: subtituloAgrupamento,
