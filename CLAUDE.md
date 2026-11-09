@@ -379,16 +379,23 @@ Consequências para quem mexer aqui:
   todos os seletores: ao lado do nome ela passava por disciplina) e as
   cadeiras livres no horário de cada linha.
 - **Turnos múltiplos**: manhã + tarde dão 07:40–17:20 (início do primeiro,
-  término do último). A marcação continua DERIVADA do horário, então numa
-  linha os marcados são sempre uma faixa contínua. Clique no turno VIZINHO
-  estende; da ponta, recolhe. **Turno isolado vira outra linha** (30/10/2026):
-  manhã marcada + clique na noite cria uma linha só com a noite, e tirar a
-  tarde de manhã-tarde-noite deixa manhã numa linha e noite em outra — com a
-  mesma clínica, cadeiras e data. Para o dia inteiro, marca-se a tarde. Na
-  edição isso continua recusado com aviso (edita-se UMA reserva).
-- **A recorrente também aceita várias linhas** (só pelo turno isolado; não há
-  botão "+"): cada linha vira uma recorrência com os mesmos dias e vigência,
-  gravadas em ordem. As linhas disputam entre si como item virtual
+  término do último). Cada clique liga ou desliga AQUELE turno no cartão
+  (`clicarTurno`). **Manhã e noite sem a tarde ficam marcadas no MESMO
+  cartão** (09/11/2026): os turnos marcados viram faixas contínuas, cada faixa
+  é uma LINHA do formulário (uma ocupação na gravação), e as linhas de um
+  cartão compartilham `grupo` — clínica, cadeiras e data valem para o grupo, e
+  cada faixa mostra o próprio início/término ("faixa 1", "faixa 2"). Antes a
+  noite pulava para um segundo cartão e o primeiro seguia mostrando só a
+  manhã; na edição o clique era recusado com "a tarde vai junto". As duas
+  coisas se liam como "o sistema exige a tarde". A marcação continua DERIVADA
+  do horário (`turnosMarcados` = união das faixas que são turnos inteiros).
+- **Na edição, faixa a mais vira reserva nova** (`criarFaixasExtras`): a
+  reserva editada fica com a primeira faixa, e cada outra é criada com os
+  mesmos dados. Editando PEDIDO pendente, a nova nasce pedido também
+  (`criarPontual({ pendente: true })`), na fila, com o mesmo professor.
+- **A recorrente também aceita várias linhas** (só por turnos separados; não
+  há botão "+"): cada faixa vira uma recorrência com os mesmos dias e
+  vigência, gravadas em ordem. As linhas disputam entre si como item virtual
   RECORRENTE (`itemVirtual`). "Criar pulando" só aparece com uma linha.
 - **Várias ocupações pontuais num envio** ("+ Adicionar ocupação"): cada linha
   com clínica, cadeiras, data e horário; a nova nasce igual à última. Cada
@@ -976,6 +983,8 @@ cor escolhida por reserva.
 Em 09/11/2026 (áudios da Elisa de 05/11), verificados no harness nos três
 perfis: cor só pela coordenação, pré-clínicas reservadas inteiras e "Editar"
 do pedido pendente na fila do Painel.
+No mesmo dia, turnos separados (manhã e noite sem a tarde) passaram a ficar
+marcados no mesmo cartão, também na edição.
 
 ### Pendências
 

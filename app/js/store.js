@@ -1245,7 +1245,9 @@
   }
 
   function criarPontual(dados) {
-    var soPedido = precisaAprovacao();
+    /* `pendente`: a faixa extra que a coordenação cria ao editar um PEDIDO
+       (turnos separados) nasce pedido também, e não reserva aprovada. */
+    var soPedido = precisaAprovacao() || dados.pendente === true;
     var p = {
       id: N.novoId('ocupacoes'), tipo: 'pontual',
       agrupamentoId: dados.agrupamentoId, escopo: dados.escopo || 'a',
