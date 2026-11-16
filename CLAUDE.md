@@ -318,12 +318,25 @@ reserva aponta direto para a disciplina (`disciplinaId`) e grava o próprio
 `turma.professorCoordenadorId`. **A turma de cada ocupação é escrita no
 campo "Descrição/Turma"** do formulário, nos dois modos e nos dois tipos.
 
-**O professor é vinculado às disciplinas na tela ACESSOS** (editar a pessoa →
-lista marcável com busca). O vínculo mora na DISCIPLINA, em `professores` (lista
+**O professor é vinculado às disciplinas por DOIS caminhos, que gravam a
+mesma fonte**: na tela ACESSOS (editar a pessoa → lista marcável de
+disciplinas, com busca) e, desde 16/11/2026, na tela DISCIPLINAS (Editar a
+disciplina ou especialização → lista marcável de professores, com busca), para
+quem monta a grade não ir e voltar entre as telas. A linha de cada disciplina
+já mostrava os professores vinculados. Elegíveis são os mesmos de Acessos:
+professor e coordenação ativos (técnico não responde por disciplina); quem já
+está vinculado aparece sempre, mesmo suspenso, para só sair desmarcado.
+O controle pede `acessos.editar` — o rótulo da permissão já é "vincular
+professores às disciplinas" —, não `disciplinas.editar`; sem ela, o modal só
+mostra os nomes. O vínculo mora na DISCIPLINA, em `professores` (lista
 de e-mails), e não em `autorizados`: a regra de `disciplinas` já é "escrita só
 de coordenador", sem restrição de campo; a de `autorizados` restringe campo,
 e um campo novo ali só funcionaria depois de alguém mexer no console.
-`S.vincularDisciplinas(email, ids)` grava só as disciplinas que mudaram.
+`S.vincularDisciplinas(email, ids)` grava só as disciplinas que mudaram;
+`S.vincularProfessores(disciplinaId, emails)` é o gravador pela disciplina
+(lista COMPLETA), e materializa `professores` mesmo sem mudança quando a
+disciplina ainda herdava o vínculo das turmas. Na disciplina NOVA ele roda
+depois de `salvarDisciplina`, que é quem dá o id.
 Professor vê no formulário só as disciplinas dele (+ "Outros" na pontual).
 
 **Legado embutido — nunca leia `disciplinaId`/`responsavelId` cru de um
@@ -826,7 +839,7 @@ Três níveis — `coordenador`, `professor`, `tecnico` — e **19 permissões**
 cadeiras das próprias reservas). "Técnico de manutenção" é só rótulo de tela. Não existe perfil
 "administrador"; coordenador cumpre esse papel.
 
-A tela Acessos também vincula o professor às disciplinas (gravado em
+A tela Acessos (e, pelo outro lado, a tela Disciplinas) também vincula o professor às disciplinas (gravado em
 `disciplinas.professores`, por `acessos.editar`).
 
 O único portão é a coleção `autorizados`, aplicada **no servidor** pelas Security
@@ -985,6 +998,10 @@ perfis: cor só pela coordenação, pré-clínicas reservadas inteiras e "Editar
 do pedido pendente na fila do Painel.
 No mesmo dia, turnos separados (manhã e noite sem a tarde) passaram a ficar
 marcados no mesmo cartão, também na edição.
+
+Em 16/11/2026, verificado no harness nos três perfis: o vínculo professor ↔
+disciplina também pela tela Disciplinas (graduação e pós), aparecendo em
+Acessos e no formulário do professor, e vice-versa.
 
 ### Pendências
 
