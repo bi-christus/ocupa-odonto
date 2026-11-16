@@ -141,7 +141,7 @@
       'tem efeito imediato para a pessoa, em qualquer computador. Suspender ' +
       'não apaga histórico: o que a pessoa registrou continua na agenda e nos ' +
       'relatórios. As disciplinas de cada professor também são escolhidas aqui, ' +
-      'em "Editar": é por elas que ele pede ocupação e troca as cadeiras das reservas.'
+      'em "Editar" (ou, disciplina por disciplina, na tela Disciplinas): é por elas que ele pede ocupação e troca as cadeiras das reservas.'
     ]));
 
     return caixa;

@@ -4,8 +4,12 @@
    Desde 05/10/2026 disciplina é SÓ disciplina: código e nome na graduação,
    nome na pós. Saíram o cadastro de turma, o código de turma e o vínculo de
    alunos, que era por turma. A turma de cada ocupação é escrita na
-   "Descrição/Turma" do formulário, e o professor é ligado às disciplinas
-   dele na tela ACESSOS — aqui o vínculo só é mostrado.
+   "Descrição/Turma" do formulário. O professor é ligado às disciplinas
+   pelos dois lados (16/11/2026): em ACESSOS, pessoa por pessoa, e aqui,
+   disciplina por disciplina (no "Editar"), para quem monta a grade não ir e
+   voltar entre as telas. As duas gravam `disciplinas.professores`
+   (`S.vincularDisciplinas` / `S.vincularProfessores`), com a mesma
+   permissão: `acessos.editar`.
 
    A LIMPEZA DO CADASTRO mora aqui: o banco ainda guarda turma de três
    jeitos (reserva antiga apontando para turma, especialização com "T1" no
@@ -94,7 +98,7 @@
       ]));
       celulas.push(C.el('td', { style: 'font-size:12.5px' }, profs.length
         ? profs.map(S.nomePessoa).join(', ')
-        : C.el('span', { class: 'muted', text: 'nenhum — vincule em Acessos' })));
+        : C.el('span', { class: 'muted', text: 'nenhum vinculado' })));
       celulas.push(C.el('td', { class: 'num', style: 'font-size:12.5px', text: u.encontros
         ? C.plural(u.encontros, 'encontro', 'encontros') + ' · ' + C.fmtHoras(u.horas)
         : (reservas.length ? 'só pedidos' : '—') }));
@@ -127,7 +131,9 @@
       ])),
       C.el('p', { class: 'muted', style: 'font-size:12.5px;margin-top:16px;line-height:1.6', text:
         'A turma não é mais cadastrada: quem ocupa a clínica escreve a turma na "Descrição/Turma" da ocupação. ' +
-        'O professor é vinculado às disciplinas dele na tela Acessos.' })
+        (S.pode('acessos.editar')
+          ? 'Os professores de cada disciplina são escolhidos em "Editar" — ou, pessoa por pessoa, na tela Acessos.'
+          : 'O professor é vinculado às disciplinas dele pela coordenação.') })
     ]);
   }
 
@@ -138,6 +144,21 @@
     var pos = d ? S.ehEspecializacao(d) : vista === 'pos';
     var f = { codigo: d ? (d.codigo || '') : '', nome: d ? d.nome : '' };
     var profs = d ? S.professoresDaDisciplina(d).map(S.nomePessoa) : [];
+    /* Vínculo de professor: mesma permissão de Acessos. Sem ela, o modal só
+       mostra quem está vinculado. */
+    var vincula = S.pode('acessos.editar');
+    var marcados = {};
+    if (d) S.professoresDaDisciplina(d).forEach(function (e) { marcados[e] = true; });
+    /* Grava o vínculo depois da disciplina (a nova só tem id depois de
+       salva) e avisa uma vez só, com a contagem de professores. */
+    function concluir(salva, texto) {
+      if (!vincula || !salva) { C.toast(texto + '.'); global.App.recarregar(); return; }
+      var emails = Object.keys(marcados).filter(function (k) { return marcados[k]; });
+      S.vincularProfessores(salva.id, emails).then(function (r) {
+        if (r && r.ok) C.toast(texto + ' · ' + C.plural(emails.length, 'professor vinculado', 'professores vinculados') + '.');
+        global.App.recarregar();
+      });
+    }
     var campos = pos
       ? [U.campo('Nome da especialização', C.el('input', {
         class: 'input', value: f.nome, placeholder: 'Ex.: Implantodontia',
@@ -155,9 +176,8 @@
       largura: '620px',
       conteudo: C.el('div', { class: 'stack', style: 'gap:16px' }, [
         C.el('div', { class: 'grid-fields' }, campos),
-        C.el('div', { class: 'muted', style: 'font-size:12.5px;line-height:1.6', text:
-          (profs.length ? 'Professores vinculados: ' + profs.join(', ') + '. ' : 'Nenhum professor vinculado. ') +
-          'O vínculo é feito na tela Acessos, pessoa por pessoa.' })
+        vincula ? escolhaDeProfessores(marcados) : C.el('div', { class: 'muted', style: 'font-size:12.5px;line-height:1.6', text:
+          profs.length ? 'Professores vinculados: ' + profs.join(', ') + '.' : 'Nenhum professor vinculado.' })
       ]),
       acoes: [
         C.el('button', { class: 'btn btn-outline', text: 'Cancelar', onclick: U.fecharModal }),
@@ -167,17 +187,87 @@
             if (!S.pode('disciplinas.editar')) { C.toast('Seu perfil não edita disciplinas.'); return; }
             if (pos) {
               if (!f.nome.trim()) { C.toast('Informe o nome da especialização.'); return; }
-              if (!S.salvarEspecializacao(id, { nome: f.nome })) { C.toast('Não foi possível salvar a especialização.'); return; }
-              U.fecharModal(); C.toast('Especialização salva.'); global.App.recarregar();
+              var esp = S.salvarEspecializacao(id, { nome: f.nome });
+              if (!esp) { C.toast('Não foi possível salvar a especialização.'); return; }
+              U.fecharModal(); concluir(esp, 'Especialização salva');
               return;
             }
             if (!f.codigo.trim() || !f.nome.trim()) { C.toast('Código e nome são obrigatórios.'); return; }
-            S.salvarDisciplina(id, { codigo: f.codigo.trim(), nome: f.nome.trim(), nivel: 'graduacao' });
-            U.fecharModal(); C.toast('Disciplina salva.'); global.App.recarregar();
+            var disc = S.salvarDisciplina(id, { codigo: f.codigo.trim(), nome: f.nome.trim(), nivel: 'graduacao' });
+            U.fecharModal(); concluir(disc, 'Disciplina salva');
           }
         })
       ]
     });
+  }
+
+  /* Quem pode ser vinculado: o mesmo que Acessos aceita — professor e
+     coordenação (o técnico não responde por disciplina). Quem já está
+     vinculado entra sempre, mesmo suspenso ou fora da lista, para nunca
+     sair do vínculo sem alguém desmarcar. */
+  function candidatos(marcados) {
+    var lista = (S.estado.usuarios || []).filter(function (u) {
+      return marcados[u.id] || (u.ativo && (u.perfil === 'professor' || u.perfil === 'coordenador'));
+    });
+    Object.keys(marcados).forEach(function (e) {
+      if (marcados[e] && !S.pessoa(e)) lista.push({ id: e, email: e, nome: e, perfil: null, ativo: false });
+    });
+    return lista.sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
+  }
+
+  /* Lista marcável de pessoas, com busca — o espelho de
+     `escolhaDeDisciplinas` da tela Acessos. */
+  function escolhaDeProfessores(marcados) {
+    var busca = '';
+    var todos = candidatos(marcados);
+    var lista = C.el('div', { class: 'escolha-disc' });
+    function desenhar() {
+      C.clear(lista);
+      var termo = busca.trim().toLowerCase();
+      [['Professores', function (u) { return u.perfil === 'professor'; }],
+       ['Coordenação', function (u) { return u.perfil === 'coordenador'; }],
+       ['Sem acesso de professor', function (u) { return u.perfil !== 'professor' && u.perfil !== 'coordenador'; }]
+      ].forEach(function (par) {
+        var itens = todos.filter(par[1]).filter(function (u) {
+          return !termo || (u.nome + ' ' + u.email).toLowerCase().indexOf(termo) !== -1;
+        });
+        if (!itens.length) return;
+        lista.appendChild(C.el('span', { class: 'eyebrow', style: 'display:block;margin:8px 0 4px', text: par[0] }));
+        itens.forEach(function (u) {
+          lista.appendChild(C.el('label', { class: 'limpeza-item' }, [
+            C.el('input', {
+              type: 'checkbox', checked: marcados[u.id] ? true : null,
+              onchange: function (ev) { marcados[u.id] = ev.target.checked; contador(); }
+            }),
+            C.el('span', {}, [
+              C.el('span', { text: u.nome }),
+              C.el('small', { class: 'muted', style: 'margin-left:8px', text: u.email + (u.ativo ? '' : ' · suspenso') })
+            ])
+          ]));
+        });
+      });
+      if (!lista.childNodes.length) {
+        lista.appendChild(C.el('div', { class: 'muted', style: 'font-size:12.5px;padding:8px 0',
+          text: todos.length ? 'Ninguém com esse nome.' : 'Nenhum professor com acesso ainda — conceda em Acessos.' }));
+      }
+    }
+    var rotulo = C.el('span');
+    function contador() {
+      var n = Object.keys(marcados).filter(function (k) { return marcados[k]; }).length;
+      rotulo.textContent = 'Professores vinculados · ' + n + (n === 1 ? ' marcado' : ' marcados');
+    }
+    desenhar(); contador();
+    return C.el('div', { class: 'fld' }, [
+      C.el('span', {}, rotulo),
+      C.el('input', {
+        class: 'input', type: 'search', placeholder: 'Buscar por nome ou e-mail',
+        oninput: function (ev) { busca = ev.target.value; desenhar(); }
+      }),
+      lista,
+      C.el('small', { class: 'muted', style: 'font-size:11.5px',
+        text: 'Quem está marcado pede ocupação para esta disciplina e troca as cadeiras das reservas dela. ' +
+          'É o mesmo vínculo da tela Acessos.' })
+    ]);
   }
 
   /* Sem cascata: disciplina com reserva não sai. O caminho é tirar as

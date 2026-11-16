@@ -1887,6 +1887,32 @@
     });
   }
 
+  /* O mesmo vínculo pelo outro lado (16/11/2026): a tela Disciplinas
+     escolhe os professores de UMA disciplina. `emails` é a lista COMPLETA.
+     Mesma fonte de `vincularDisciplinas` — `disciplinas.professores` —, então
+     o que uma tela grava a outra lê. A disciplina que ainda herdava o vínculo
+     das turmas ganha a lista explícita (materializada) mesmo sem mudança:
+     depois de salvar, o que se vê na tela é o que está gravado. */
+  function vincularProfessores(disciplinaId, emails) {
+    var d = disciplina(disciplinaId);
+    if (!d) return global.Promise.resolve({ ok: false, mensagem: 'Disciplina não encontrada.' });
+    var novo = [];
+    (emails || []).forEach(function (e) {
+      e = String(e || '').trim().toLowerCase();
+      if (e && novo.indexOf(e) === -1) novo.push(e);
+    });
+    var atual = professoresDaDisciplina(d);
+    var igual = Array.isArray(d.professores) && atual.length === novo.length &&
+      novo.every(function (e) { return atual.indexOf(e) !== -1; });
+    if (igual) return global.Promise.resolve({ ok: true });
+    var antes = d.professores;
+    d.professores = novo;
+    commit();
+    return persistir(N.gravar('disciplinas', d.id, { professores: novo }), function () {
+      if (antes === undefined) delete d.professores; else d.professores = antes;
+    });
+  }
+
   /* ── Limpeza do cadastro ──────────────────────────────────────────────
      A turma saiu do modelo em 05/10/2026, mas o banco de produção ainda a
      carrega de três jeitos. A limpeza resolve os três de uma vez, com
@@ -2350,7 +2376,7 @@
     disciplinaIdDe: disciplinaIdDe, disciplinaDe: disciplinaDe, responsavelDe: responsavelDe,
     descricaoDe: descricaoDe, nivelDe: nivelDe,
     salvarEspecializacao: salvarEspecializacao, reservasDaDisciplina: reservasDaDisciplina,
-    vincularDisciplinas: vincularDisciplinas,
+    vincularDisciplinas: vincularDisciplinas, vincularProfessores: vincularProfessores,
     separarTurmaDoNome: separarTurmaDoNome,
     planoDeLimpeza: planoDeLimpeza, executarLimpeza: executarLimpeza,
     manutencoesAbertas: manutencoesAbertas, cadeiraEmManutencao: cadeiraEmManutencao,
