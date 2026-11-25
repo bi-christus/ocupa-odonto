@@ -187,7 +187,7 @@ test('GET diz o que falta, sem valor nenhum; sem configuração o POST dá 503',
   const g = await b.chamar('', null, { metodo: 'GET' });
   assert.strictEqual(g.status, 200);
   assert.strictEqual(g.corpo.configurado, false);
-  assert.deepStrictEqual(g.corpo.faltando, ['AVISOS_SMTP_PORTA', 'AVISOS_SMTP_USUARIO', 'AVISOS_REMETENTE']);
+  assert.deepStrictEqual(g.corpo.faltando, ['AVISOS_SMTP_USUARIO']);
   assert.deepStrictEqual(g.corpo.invalidas, ['AVISOS_SEGREDO']);
   assert.ok(!JSON.stringify(g.corpo).includes('senha-secreta'));
   const r = await b.avisar({ evento: 'aprovada', id: 'p1' });
@@ -203,6 +203,68 @@ test('configuração inválida não é aceita', async () => {
     const b = banca({ env: Object.assign({}, ENV, x) });
     assert.strictEqual((await b.chamar('', null, { metodo: 'GET' })).corpo.configurado, false, JSON.stringify(x));
   }
+});
+
+test('duas variáveis bastam: usuário e senha de app', async () => {
+  const Config = require('../../app/api/_avisos/config');
+  const min = { AVISOS_SMTP_USUARIO: 'conta@teste.br', AVISOS_SMTP_SENHA: 'abcd efgh ijkl mnop' };
+  const c = Config.ler(min);
+  assert.deepStrictEqual([c.configurado, c.faltando, c.invalidas], [true, [], []]);
+  assert.deepStrictEqual(c.smtp, { host: 'smtp.gmail.com', porta: 465, usuario: 'conta@teste.br', senha: 'abcdefghijklmnop' });
+  assert.deepStrictEqual(c.remetente, { nome: 'Ocupa · não responda', endereco: 'conta+ocupa@teste.br' });
+  assert.deepStrictEqual(c.responderPara, { nome: '', endereco: 'conta+ocupa@teste.br' });
+  assert.strictEqual(c.responder, null, 'apelido não vira contato no rodapé');
+  /* O segredo derivado: estável, diferente por senha, e nunca a senha. */
+  assert.match(c.segredo, /^[0-9a-f]{64}$/);
+  assert.strictEqual(Config.ler(Object.assign({}, min, { AVISOS_SMTP_SENHA: 'abcdefghijklmnop' })).segredo, c.segredo);
+  assert.notStrictEqual(Config.ler(Object.assign({}, min, { AVISOS_SMTP_SENHA: 'abcd efgh ijkl mnoq' })).segredo, c.segredo);
+  /* De senha escolhida por gente não se deriva segredo. */
+  assert.deepStrictEqual(Config.ler(Object.assign({}, min, { AVISOS_SMTP_SENHA: 'Senha2026!' })).faltando, ['AVISOS_SEGREDO']);
+  assert.deepStrictEqual(Config.ler({}).faltando, ['AVISOS_SMTP_USUARIO', 'AVISOS_SMTP_SENHA']);
+  assert.deepStrictEqual(Config.ler(Object.assign({}, min, { AVISOS_SMTP_USUARIO: 'semarroba' })).faltando, ['AVISOS_REMETENTE']);
+  /* E o bilhete funciona com ele. */
+  const b = banca({ env: min });
+  b.por('p1', pontual({}), 60000);
+  const bil = await b.bilhete('p1');
+  delete b.banco.ocupacoes.p1;
+  assert.deepStrictEqual((await b.avisar({ evento: 'cancelada', id: 'p1', bilhete: bil })).corpo.enviados, ['Filipe Professor']);
+});
+
+test('teste de envio: só coordenação, só para si, com o aviso desligado, e com teto', async () => {
+  const b = banca();
+  b.banco.config.sistema.dados.parametros = {};
+  let r = await b.chamar({ acao: 'teste' });
+  assert.deepStrictEqual([r.status, r.corpo.enviados], [200, ['Andréa Coordenação']]);
+  assert.strictEqual(b.caixa[0].para, 'coord@teste.br');
+  assert.strictEqual(b.caixa[0].assunto, 'Ocupa · Teste de envio · servidor de e-mail funcionando');
+  for (const quem of ['prof@teste.br', 'tec@teste.br']) assert.strictEqual((await b.chamar({ acao: 'teste' }, quem)).status, 403, quem);
+  assert.strictEqual((await b.chamar({ acao: 'teste' }, 'suspensa@teste.br')).status, 403);
+  for (const x of [{ para: 'vitima@fora.com' }, { texto: 'x' }, { itens: [] }]) {
+    assert.strictEqual((await b.chamar(Object.assign({ acao: 'teste' }, x))).status, 400, JSON.stringify(x));
+  }
+  assert.strictEqual((await b.chamar({ acao: 'teste' }, null)).status, 401);
+  for (let i = 0; i < 4; i++) assert.strictEqual((await b.chamar({ acao: 'teste' })).status, 200);
+  assert.strictEqual((await b.chamar({ acao: 'teste' })).status, 429);
+  assert.strictEqual(b.caixa.length, 5);
+  assert.ok(b.caixa.every((m) => m.para === 'coord@teste.br'));
+  const f = banca({ enviar: async () => [{ ok: false, codigo: 'autenticacao' }] });
+  r = await f.chamar({ acao: 'teste' });
+  assert.deepStrictEqual([r.corpo.ok, r.corpo.falhas[0].motivo], [false, 'autenticacao']);
+  const semConfig = banca({ env: {} });
+  assert.strictEqual((await semConfig.chamar({ acao: 'teste' })).status, 503);
+});
+
+test('enviar-teste: a mensagem vai marcada e só para o endereço pedido', async () => {
+  const { marcar } = require('./enviar-teste');
+  const { gerar } = require('./exemplos');
+  const l = (await gerar(true)).map((x) => marcar(x.m, 'so-este@teste.br'));
+  assert.ok(l.length >= 14);
+  l.forEach((m) => {
+    assert.strictEqual(m.para, 'so-este@teste.br');
+    assert.ok(m.assunto.startsWith('Ocupa · TESTE · '), m.assunto);
+    assert.ok(m.texto.startsWith('TESTE do Ocupa') && m.html.includes('TESTE do Ocupa'));
+    assert.ok(!/exemplo\.br/.test(m.texto + m.html), 'sem endereço fictício no corpo');
+  });
 });
 
 test('a resposta do professor nunca volta para a caixa que envia', async () => {
@@ -677,7 +739,7 @@ async function comServidor(op, fn, tlsCliente) {
   const porta = await s.ouvir();
   const cfg = {
     smtp: { host: 'localhost', porta: porta, usuario: 'conta@teste.br', senha: 'sênha' },
-    remetente: { nome: 'Ocupa · não responda', endereco: 'conta+ocupa@teste.br' }, responder: { nome: 'Coordenação', endereco: 'contato@teste.br' }
+    remetente: { nome: 'Ocupa · não responda', endereco: 'conta+ocupa@teste.br' }, responderPara: { nome: 'Coordenação', endereco: 'contato@teste.br' }
   };
   try {
     return await fn((msgs) => Smtp.enviar(cfg, msgs, { tls: Object.assign({ direto: !!op.direto }, tlsCliente || { ca: cert }) }), s.estado);

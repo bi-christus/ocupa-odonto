@@ -310,4 +310,17 @@ function montar(nome, blocos, url, contato) {
   return { assunto: assunto(blocos), texto: texto(n, blocos, url, contato), html: html(n, blocos, url, contato) };
 }
 
-module.exports = { bloco: bloco, montar: montar, limpo: limpo, esc: esc };
+/* O teste que a coordenação manda para si mesma, em Estrutura. */
+function teste(nome, perfil, url, contato) {
+  const b = {
+    titulo: 'Teste de envio', plural: 'testes de envio', mudancas: [], motivo: '', nota: '',
+    frase: 'Se você está lendo isto, o servidor de e-mail do Ocupa está funcionando. Nenhuma reserva foi alterada ' +
+      'e nenhum professor recebeu esta mensagem.',
+    chamada: 'servidor de e-mail funcionando',
+    linhas: [['Aviso aos professores', 'ligue ou desligue em Estrutura, Parâmetros']],
+    rotuloAutor: 'Pedido por', autor: limpo(nome, 80) + (perfil === 'coordenador' ? ' (coordenação)' : '')
+  };
+  return montar(nome, [b], url, contato);
+}
+
+module.exports = { bloco: bloco, montar: montar, teste: teste, limpo: limpo, esc: esc };

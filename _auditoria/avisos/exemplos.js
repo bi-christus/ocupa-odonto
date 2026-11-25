@@ -67,7 +67,7 @@ const CASOS = [
   ['Reserva recuperada, com outras cadeiras', pontual({ excluidaEm: '2026-11-20 08:00', excluidaPor: COORD }), { excluidaEm: null, cadeirasAlocadas: faixa(7, 12) }, [{ evento: 'recuperada', id: 'x1' }]]
 ];
 
-async function gerar() {
+async function gerar(semContato) {
   const saida = [];
   for (const [titulo, antes, mudanca, itens, outras] of CASOS) {
     const b = banco(), caixa = [];
@@ -76,7 +76,7 @@ async function gerar() {
     const atender = Atender.criar({
       env: {
         AVISOS_SMTP_HOST: 'smtp.invalid', AVISOS_SMTP_PORTA: '465', AVISOS_SMTP_USUARIO: 'x', AVISOS_SMTP_SENHA: 'x',
-        AVISOS_REMETENTE: 'Ocupa · não responda <conta+ocupa@exemplo.br>', AVISOS_RESPONDER_PARA: 'contato@exemplo.br',
+        AVISOS_REMETENTE: 'Ocupa · não responda <conta+ocupa@exemplo.br>', AVISOS_RESPONDER_PARA: semContato ? '' : 'contato@exemplo.br',
         AVISOS_SEGREDO: 'segredo-de-mentira-dos-exemplos-0123456789'
       },
       buscar: BancoFalso.criar({ banco: () => b }).buscar,
@@ -101,7 +101,9 @@ async function gerar() {
   return saida;
 }
 
-gerar().then((l) => {
+module.exports = { gerar: gerar };
+
+if (require.main === module) gerar().then((l) => {
   const pasta = path.join(__dirname, '..', '..', 'dist', 'avisos');
   fs.mkdirSync(pasta, { recursive: true });
   const html = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +

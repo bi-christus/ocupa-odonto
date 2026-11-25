@@ -414,12 +414,35 @@
               onclick: function () { trocarEnvioDeEmail(liga); }
             }) : null
           ]));
-        })()
+        })(),
+        editar ? servidorDeEmail() : null
       ]),
       editar ? C.el('button', {
         class: 'btn btn-outline', style: 'margin-top:18px', text: 'Ajustar parâmetros', onclick: editarParametros
       }) : null
     ]);
+  }
+
+  /* Ligado sem servidor configurado não envia nada, e isso precisa estar
+     escrito na tela: "ligado" sozinho prometeria o que não acontece. */
+  function servidorDeEmail() {
+    var estado = C.el('span', {}, pill('conferindo', 'neutral'));
+    var botao = C.el('button', {
+      class: 'chip-btn', text: 'Enviar teste', style: 'display:none',
+      title: 'Manda um e-mail de teste só para você, com o aviso ligado ou desligado.',
+      onclick: function () {
+        botao.disabled = true;
+        botao.textContent = 'Enviando…';
+        global.Avisos.testar().then(function () { botao.disabled = false; botao.textContent = 'Enviar teste'; });
+      }
+    });
+    global.Avisos.situacao().then(function (s) {
+      C.clear(estado).appendChild(pill(!s ? 'sem resposta' : s.configurado ? 'pronto' : 'não configurado',
+        s && s.configurado ? 'neutral' : 'warn'));
+      if (s && s.configurado) botao.style.display = '';
+      else if (s) estado.title = 'Falta na Vercel: ' + s.faltando.concat(s.invalidas).join(', ');
+    });
+    return U.kv('Servidor de e-mail', C.el('span', { class: 'row', style: 'gap:10px' }, [estado, botao]));
   }
 
   function trocarEnvioDeEmail(estavaLigado) {
@@ -430,6 +453,12 @@
       global.App.recarregar();
     }
     if (estavaLigado) { gravar(); return; }
+    var alerta = C.el('div', {});
+    global.Avisos.situacao().then(function (s) {
+      if (s && s.configurado) return;
+      alerta.appendChild(C.el('div', { class: 'alert', style: 'margin-top:14px', text:
+        'O servidor de e-mail ainda não está configurado: mesmo ligado, nada sai até as variáveis entrarem na Vercel.' }));
+    });
     U.confirmar({
       titulo: 'Ligar o aviso por e-mail',
       rotulo: 'Ligar',
@@ -440,7 +469,8 @@
           ' confirma, recusa, altera, cancela, exclui ou recupera uma reserva dele.'
         ]),
         C.el('p', { class: 'muted', style: 'margin:12px 0 0' },
-          'Vale do próximo clique em diante, para quem recarregar a página. O que já aconteceu não gera e-mail.')
+          'Vale do próximo clique em diante, para quem recarregar a página. O que já aconteceu não gera e-mail.'),
+        alerta
       ])
     }, gravar);
   }

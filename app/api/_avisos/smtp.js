@@ -44,7 +44,7 @@ function montarMime(config, msg, agora) {
   const partes = [
     'From: ' + caixa(config.remetente),
     'To: <' + msg.para + '>',
-    config.responder ? 'Reply-To: ' + caixa(config.responder) : null,
+    config.responderPara ? 'Reply-To: ' + caixa(config.responderPara) : null,
     'Subject: ' + cabecalho(msg.assunto),
     'Date: ' + new Date(agora).toUTCString().replace('GMT', '+0000'),
     'Message-ID: <' + crypto.randomBytes(16).toString('hex') + '@' + dominio + '>',

@@ -543,12 +543,15 @@ em `mensagem.js`.
 
 ### Configuração (painel da Vercel, nunca no repositório)
 
-`AVISOS_SMTP_HOST`, `AVISOS_SMTP_PORTA` (465 ou 587), `AVISOS_SMTP_USUARIO`,
-`AVISOS_SMTP_SENHA`, `AVISOS_REMETENTE`, `AVISOS_SEGREDO` (32+ caracteres) e
-`AVISOS_RESPONDER_PARA` (dispensável só quando o remetente é um apelido). Opcionais:
-`AVISOS_LIMITE_DIA` (padrão 150) e `AVISOS_URL`. Mudar variável exige novo deploy.
+Duas bastam: `AVISOS_SMTP_USUARIO` e `AVISOS_SMTP_SENHA` (senha de app). As
+outras têm padrão (`config.js`): `AVISOS_SMTP_HOST` e `AVISOS_SMTP_PORTA` (Gmail,
+465), `AVISOS_REMETENTE` ("Ocupa · não responda" no apelido `+ocupa` da conta),
+`AVISOS_RESPONDER_PARA`, `AVISOS_SEGREDO` (derivado da senha de app, e só dela),
+`AVISOS_LIMITE_DIA` (150) e `AVISOS_URL`. Mudar variável exige novo deploy.
 `GET /api/avisos` diz quais faltam, só pelo nome. Sem elas a função responde 503
 e nada é enviado. O remetente é só variável: trocar de conta não mexe no código.
+Em Estrutura, a coordenação vê o estado do servidor e o botão **Enviar teste**, que
+manda um e-mail só para quem clicou, com o aviso ligado ou desligado.
 Não use escopo do Gmail no login — escopo sensível leva o consent screen para a
 verificação do Google.
 
@@ -579,7 +582,10 @@ ferramenta não confunde, teto do dia, SMTP de mentira com TLS. Precisa do `open
 tela inteira falando com a função de verdade; as mensagens ficam em
 `/_harness/caixa`, e `/_harness/modo?v=falha|fora|lento` simula defeito.
 `node _auditoria/avisos/exemplos.js` — um exemplo de cada e-mail em
-`dist/avisos/exemplos.html` (fora do git). **Nenhum deles envia e-mail.**
+`dist/avisos/exemplos.html` (fora do git). **Nenhum destes envia e-mail.**
+`node _auditoria/avisos/enviar-teste.js --usuario conta --para quem` — o único que
+envia: manda os exemplos marcados como TESTE para UM endereço, e só depois de uma
+pessoa digitar a senha de app no próprio terminal. Agente não digita nem lê a senha.
 
 ---
 
@@ -1105,14 +1111,14 @@ Acessos e no formulário do professor, e vice-versa.
 
 Em 25/11/2026 entraram, com o envio DESLIGADO, os avisos por e-mail ao
 professor (função `/api/avisos`, `js/avisos.js` e a chave em Parâmetros).
-Verificados no harness nos três perfis e em 37 testes da função, sem enviar
+Verificados no harness nos três perfis e em 40 testes da função, sem enviar
 e-mail nenhum e sem tocar no banco de produção.
 
 ### Pendências
 
-- **Ligar os avisos por e-mail**: definir a conta remetente, pôr as variáveis
-  `AVISOS_*` no painel da Vercel, fazer novo deploy, conferir
-  `GET /api/avisos` (`configurado: true`) e ligar em Estrutura → Parâmetros
+- **Ligar os avisos por e-mail**: pôr `AVISOS_SMTP_USUARIO` e `AVISOS_SMTP_SENHA`
+  no painel da Vercel, fazer novo deploy, Enviar teste e Ligar em Estrutura →
+  Parâmetros
 - **Os três ambientes entram no banco no primeiro login de um coordenador**
   depois do deploy (`S.completarEstrutura`); conferir que apareceram em
   Estrutura
