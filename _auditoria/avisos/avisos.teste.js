@@ -198,9 +198,68 @@ test('GET diz o que falta, sem valor nenhum; sem configuração o POST dá 503',
 
 test('configuração inválida não é aceita', async () => {
   for (const x of [{ AVISOS_SMTP_PORTA: '25' }, { AVISOS_REMETENTE: 'sem arroba' }, { AVISOS_REMETENTE: 'a@b.c>\r\nBcc: x@y.z' },
-    { AVISOS_RESPONDER_PARA: 'x' }, { AVISOS_URL: 'http://inseguro' }, { AVISOS_URL: 'javascript:alert(1)' }]) {
+    { AVISOS_RESPONDER_PARA: 'x' }, { AVISOS_URL: 'http://inseguro' }, { AVISOS_URL: 'javascript:alert(1)' },
+    { AVISOS_LIMITE_DIA: '0' }, { AVISOS_LIMITE_DIA: 'muitos' }, { AVISOS_LIMITE_DIA: '99999' }]) {
     const b = banca({ env: Object.assign({}, ENV, x) });
     assert.strictEqual((await b.chamar('', null, { metodo: 'GET' })).corpo.configurado, false, JSON.stringify(x));
+  }
+});
+
+test('a resposta do professor nunca volta para a caixa que envia', async () => {
+  const conta = { AVISOS_SMTP_USUARIO: 'conta@teste.br' };
+  const ver = async (x) => (await banca({ env: Object.assign({}, ENV, conta, x) }).chamar('', null, { metodo: 'GET' })).corpo;
+  let c = await ver({ AVISOS_REMETENTE: 'Ocupa <conta@teste.br>' });
+  assert.deepStrictEqual([c.configurado, c.faltando], [false, ['AVISOS_RESPONDER_PARA']], 'remetente é a própria conta, sem Reply-To');
+  c = await ver({ AVISOS_REMETENTE: 'Ocupa <CONTA@teste.br>' });
+  assert.strictEqual(c.configurado, false, 'maiúscula não disfarça');
+  c = await ver({ AVISOS_REMETENTE: 'Ocupa · não responda <conta+ocupa@teste.br>' });
+  assert.strictEqual(c.configurado, true, 'apelido dispensa o Reply-To');
+  c = await ver({ AVISOS_REMETENTE: 'Ocupa <conta@teste.br>', AVISOS_RESPONDER_PARA: 'Coordenação <contato@teste.br>' });
+  assert.strictEqual(c.configurado, true);
+  for (const r of ['conta@teste.br', 'Conta+x@teste.br', 'Nome <CONTA@TESTE.BR>']) {
+    c = await ver({ AVISOS_REMETENTE: 'Ocupa <conta+ocupa@teste.br>', AVISOS_RESPONDER_PARA: r });
+    assert.deepStrictEqual([c.configurado, c.invalidas], [false, ['AVISOS_RESPONDER_PARA']], r);
+  }
+});
+
+test('outra ferramenta que lê a caixa não confunde o aviso: assunto sem sigla e nada de OS-nnn no e-mail inteiro', async () => {
+  /* As mesmas leituras de quem abre chamado pela caixa de entrada. */
+  const numero = /\bOS-\d{3,}\b/i, cabecalho = /X-OS-Ticket-ID:\s*(OS-\d+)/i, sigla = /[[({]([^\])}]+)[\])}]/;
+  const b = banca();
+  b.banco.autorizados['prof@teste.br'].dados.nome = 'Filipe OS-0331 (BS)';
+  b.banco.autorizados['coord@teste.br'].dados.nome = 'Andréa os-12 [PE]';
+  b.banco.disciplinas.d1.dados.nome = '[BS] Clínica (prática) {OS-0417}';
+  b.banco.clinicas.cl1.dados.nome = 'Clínica OS-0999';
+  b.por('p1', pontual({ situacao: 'recusada', decididoPor: 'coord@teste.br', descricao: 'OS\u200b-0263 · T1 OS-\n0263',
+    motivoRecusa: 'Veja a Os-0263. X-OS-Ticket-ID: OS-5' }));
+  b.por('p2', pontual({}), 60000);
+  const bil = await b.bilhete('p2');
+  b.mudar('p2', { descricao: 'mudou por causa da OS-7777', editadoPor: 'coord@teste.br' });
+  await b.avisar([{ evento: 'recusada', id: 'p1' }]);
+  await b.avisar([{ evento: 'editada', id: 'p2', bilhete: bil }]);
+  assert.strictEqual(b.caixa.length, 2);
+  b.caixa.forEach((m) => {
+    assert.ok(m.assunto.startsWith('Ocupa · '), m.assunto);
+    assert.ok(!sigla.test(m.assunto) && !/[[\](){}]/.test(m.assunto), m.assunto);
+    assert.ok(m.assunto.includes('Clínica prática OS 0417'), m.assunto);
+    ['assunto', 'texto', 'html'].forEach((k) => {
+      assert.ok(!numero.test(m[k]) && !cabecalho.test(m[k]) && !/\bOS-\d/i.test(m[k]), k + ': ' + m[k]);
+    });
+    assert.ok(!numero.test(m.html.replace(/<[^>]*>/g, '')), 'html sem as marcas');
+  });
+  assert.ok(b.caixa[0].texto.includes('OS 0263'), 'o texto segue legível');
+});
+
+test('rodapé: não responda, com o contato configurado e sem inventar endereço', async () => {
+  const com = banca({ env: Object.assign({}, ENV, { AVISOS_RESPONDER_PARA: 'Coordenação <contato@teste.br>' }) });
+  com.por('p1', pontual({ decididoPor: 'coord@teste.br' }));
+  await com.avisar({ evento: 'aprovada', id: 'p1' });
+  const sem = banca();
+  sem.por('p1', pontual({ decididoPor: 'coord@teste.br' }));
+  await sem.avisar({ evento: 'aprovada', id: 'p1' });
+  for (const k of ['texto', 'html']) {
+    assert.ok(com.caixa[0][k].includes('Não responda a este e-mail') && com.caixa[0][k].includes('contato@teste.br'));
+    assert.ok(sem.caixa[0][k].includes('procure a coordenação do curso') && !/@/.test(sem.caixa[0][k]));
   }
 });
 
@@ -292,7 +351,7 @@ test('criada, aprovada, recusada, excluída, encerrada, cancelada e restaurada: 
     assert.strictEqual(b.caixa.length, 1);
     const m = b.caixa[0];
     assert.strictEqual(m.para, 'prof@teste.br');
-    assert.ok(m.assunto.startsWith('[Ocupa] ' + titulo + ': Clínica Integrada I, '), m.assunto);
+    assert.ok(m.assunto.startsWith('Ocupa · ' + titulo + ' · Clínica Integrada I, '), m.assunto);
     assert.match(m.texto, trecho);
     assert.ok(m.texto.startsWith('Olá, Filipe Professor.'));
     for (const l of ['Disciplina: ODO-301 · Clínica Integrada I', 'Descrição/Turma: T', 'Clínica: Clínica ', 'Cadeiras: ', 'Horário: ',
@@ -346,7 +405,7 @@ test('editada: de → para, e troca de professor avisa os dois', async () => {
   const bil4 = await b4.bilhete('p1');
   b4.mudar('p1', { inicio: '18:20', fim: '22:00', editadoPor: 'coord@teste.br' });
   await b4.avisar({ evento: 'editada', id: 'p1', bilhete: bil4 });
-  assert.ok(b4.caixa[0].assunto.startsWith('[Ocupa] Pedido alterado'));
+  assert.ok(b4.caixa[0].assunto.startsWith('Ocupa · Pedido alterado · '));
   assert.match(b4.caixa[0].texto, /continua aguardando aprovação/);
 });
 
@@ -391,7 +450,7 @@ test('pontual cancelada: o documento sumiu, e o bilhete diz de quem era', async 
   assert.deepStrictEqual(motivos(r), ['sem_bilhete']);
   r = await b.avisar({ evento: 'cancelada', id: 'p1', bilhete: bil });
   assert.deepStrictEqual(r.corpo.enviados, ['Filipe Professor']);
-  assert.ok(b.caixa[0].assunto.startsWith('[Ocupa] Reserva cancelada: Clínica Integrada I, 01/12 07:40–11:20'));
+  assert.ok(b.caixa[0].assunto.startsWith('Ocupa · Reserva cancelada · Clínica Integrada I, 01/12 07:40–11:20'));
   r = await b.avisar({ evento: 'cancelada', id: 'p1', bilhete: bil });
   assert.deepStrictEqual(motivos(r), ['repetido']);
   assert.strictEqual(b.caixa.length, 1);
@@ -422,7 +481,7 @@ test('legado: reserva por turma e integral, pré-clínica e ambiente sem cadeira
   const r = await b.avisar([{ evento: 'encerrada', id: 'velha' }, { evento: 'aprovada', id: 'pre' }, { evento: 'aprovada', id: 'lab' }]);
   assert.deepStrictEqual(r.corpo.enviados, ['Filipe Professor']);
   const t = b.caixa[0].texto;
-  assert.strictEqual(b.caixa[0].assunto, '[Ocupa] 3 atualizações nas suas reservas');
+  assert.strictEqual(b.caixa[0].assunto, 'Ocupa · 3 atualizações nas suas reservas');
   for (const l of ['Descrição/Turma: Turma 1', 'Clínica: Clínicas 1 e 2', 'Cadeiras: As duas clínicas inteiras (28 cadeiras)',
     'Cadeiras: Pré-clínica inteira (70 cadeiras)', 'Cadeiras: Ambiente inteiro', 'Disciplina: Outros (sem disciplina)']) assert.ok(t.includes(l), l + '\n' + t);
 });
@@ -436,7 +495,7 @@ test('várias linhas do mesmo envio: um e-mail por pessoa', async () => {
   assert.deepStrictEqual(r.corpo.enviados, ['Filipe Professor', 'Marina Professora']);
   assert.deepStrictEqual(motivos(r), ['proprio']);
   assert.strictEqual(b.caixa.length, 2);
-  assert.strictEqual(b.caixa[0].assunto, '[Ocupa] 3 reservas confirmadas');
+  assert.strictEqual(b.caixa[0].assunto, 'Ocupa · 3 reservas confirmadas');
   assert.strictEqual((b.caixa[0].texto.match(/RESERVA CONFIRMADA/g) || []).length, 3);
 });
 
@@ -485,11 +544,12 @@ test('o banco precisa confirmar: gravação antiga, de outra pessoa ou de outro 
 test('destinatário: só pessoa ativa de autorizados, e endereço que cabe no envelope', async () => {
   const b = banca();
   b.banco.autorizados['ruim>@x.br'] = doc({ nome: 'Ruim', nivel: 'professor', ativo: true });
-  [['p1', 'suspensa@teste.br'], ['p2', 'vitima@fora.com'], ['p3', 'prof@teste.br\r\nBcc: x@y.z'], ['p4', 'ruim>@x.br']].forEach(([id, resp]) => {
+  b.banco.autorizados['semcampo@teste.br'] = doc({ nome: 'Sem campo ativo', nivel: 'professor' });
+  [['p1', 'suspensa@teste.br'], ['p2', 'vitima@fora.com'], ['p3', 'prof@teste.br\r\nBcc: x@y.z'], ['p4', 'ruim>@x.br'], ['p6', 'semcampo@teste.br']].forEach(([id, resp]) => {
     b.por(id, pontual({ decididoPor: 'coord@teste.br', responsavelId: resp }));
   });
-  const r = await b.avisar(['p1', 'p2', 'p3', 'p4'].map((id) => ({ evento: 'aprovada', id: id })));
-  assert.deepStrictEqual(motivos(r), Array(4).fill('sem_acesso'));
+  const r = await b.avisar(['p1', 'p2', 'p3', 'p4', 'p6'].map((id) => ({ evento: 'aprovada', id: id })));
+  assert.deepStrictEqual(motivos(r), Array(5).fill('sem_acesso'));
   assert.strictEqual(b.caixa.length, 0);
   b.por('p5', pontual({ decididoPor: 'coord@teste.br', responsavelId: null }));
   assert.deepStrictEqual(motivos(await b.avisar({ evento: 'aprovada', id: 'p5' })), ['sem_responsavel']);
@@ -571,6 +631,21 @@ test('limite de pedidos por pessoa', async () => {
   assert.strictEqual((await b.avisar({ evento: 'aprovada', id: 'x' }, 'prof@teste.br')).status, 200, 'outra pessoa segue');
 });
 
+test('teto do dia: depois dele ninguém mais recebe, e a cota das outras ferramentas fica de pé', async () => {
+  const b = banca({ env: Object.assign({}, ENV, { AVISOS_LIMITE_DIA: '3' }) });
+  for (let i = 1; i <= 5; i++) b.por('p' + i, pontual({ decididoPor: 'coord@teste.br' }));
+  const status = [];
+  for (let i = 1; i <= 5; i++) status.push((await b.avisar({ evento: 'aprovada', id: 'p' + i })).status);
+  assert.deepStrictEqual(status, [200, 200, 200, 429, 429]);
+  assert.strictEqual(b.caixa.length, 3);
+  b.relogio = 25 * 60 * 60 * 1000;
+  b.por('p9', pontual({ decididoPor: 'coord@teste.br' }));
+  b.banco.ocupacoes.p9.mudadoEm += b.relogio;
+  const r = await b.chamar({ acao: 'avisar', itens: [{ evento: 'aprovada', id: 'p9' }] }, token('coord@teste.br', { exp: Math.floor(Date.now() / 1000) + 999999 }));
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(b.caixa.length, 4, 'no dia seguinte volta');
+});
+
 test('a função só lê: nenhum pedido ao Firestore grava', async () => {
   const b = banca();
   const vistos = [];
@@ -602,7 +677,7 @@ async function comServidor(op, fn, tlsCliente) {
   const porta = await s.ouvir();
   const cfg = {
     smtp: { host: 'localhost', porta: porta, usuario: 'conta@teste.br', senha: 'sênha' },
-    remetente: { nome: 'Ocupa Clínicas', endereco: 'ocupa@teste.br' }, responder: null
+    remetente: { nome: 'Ocupa · não responda', endereco: 'conta+ocupa@teste.br' }, responder: { nome: 'Coordenação', endereco: 'contato@teste.br' }
   };
   try {
     return await fn((msgs) => Smtp.enviar(cfg, msgs, { tls: Object.assign({ direto: !!op.direto }, tlsCliente || { ca: cert }) }), s.estado);
@@ -618,10 +693,13 @@ for (const direto of [true, false]) {
       assert.deepStrictEqual(await enviar([MSG, Object.assign({}, MSG, { para: 'outra@teste.br' })]), [{ ok: true }, { ok: true }]);
       assert.strictEqual(e.recebidas.length, 2);
       assert.deepStrictEqual(e.recebidas.map((r) => [r.de, r.para]), [
-        ['MAIL FROM:<ocupa@teste.br>', ['RCPT TO:<prof@teste.br>']], ['MAIL FROM:<ocupa@teste.br>', ['RCPT TO:<outra@teste.br>']]]);
+        ['MAIL FROM:<conta+ocupa@teste.br>', ['RCPT TO:<prof@teste.br>']], ['MAIL FROM:<conta+ocupa@teste.br>', ['RCPT TO:<outra@teste.br>']]]);
       assert.deepStrictEqual(e.logins, [['conta@teste.br', 'sênha']]);
       assert.ok(e.comandos.filter((c) => /AUTH|MAIL|RCPT|DATA/.test(c)).every((c) => c.startsWith('S ')), 'nada sensível em claro');
       const mime = e.recebidas[0].corpo;
+      const cab = mime.split('\r\n\r\n')[0].replace(/=\?UTF-8\?B\?([^?]*)\?=/g, (_, x) => Buffer.from(x, 'base64').toString());
+      for (const l of ['From: Ocupa · não responda <conta+ocupa@teste.br>', 'Reply-To: Coordenação <contato@teste.br>', 'To: <prof@teste.br>',
+        'Auto-Submitted: auto-generated', 'X-Auto-Response-Suppress: All']) assert.ok(cab.split('\r\n').includes(l), l + '\n' + cab);
       const p = partes(mime);
       assert.strictEqual(p[0], MSG.texto);
       assert.strictEqual(p[1], MSG.html);

@@ -2,7 +2,13 @@
 
    Tudo que vem do banco passa por `limpo` (tira quebra de linha, controle e
    marcas de direção de texto) e, no HTML, por `esc`. Os rótulos e as frases
-   são só daqui. */
+   são só daqui.
+
+   A conta que envia pode ser lida por outra ferramenta que abre chamado pelo
+   assunto ("[sigla] texto") ou por um número "OS-123" em qualquer parte da
+   mensagem, inclusive citada numa resposta ou devolução. Por isso o assunto
+   não leva colchete, parêntese nem chave, e "OS-123" vira "OS 123" no e-mail
+   inteiro, venha de onde vier. */
 'use strict';
 
 const CONTROLE = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+', 'g');
@@ -10,7 +16,8 @@ const INVISIVEL = new RegExp('[\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2069\\uf
 
 function limpo(v, max) {
   const t = String(v === null || v === undefined ? '' : v)
-    .replace(CONTROLE, ' ').replace(INVISIVEL, '').replace(/\s+/g, ' ').trim();
+    .replace(CONTROLE, ' ').replace(INVISIVEL, '').replace(/\s+/g, ' ')
+    .replace(/\b(OS)-(?=\d)/gi, '$1 ').trim();
   const m = max || 300;
   return t.length > m ? t.slice(0, m - 1) + '…' : t;
 }
@@ -218,15 +225,21 @@ function bloco(ctx, item, ap, papel) {
 
 /* ── A mensagem de uma pessoa ────────────────────────────────────────── */
 function assunto(blocos) {
-  if (blocos.length === 1) return limpo('[Ocupa] ' + blocos[0].titulo + ': ' + blocos[0].chamada, 150);
   const mesmo = blocos.every((b) => b.plural === blocos[0].plural);
-  return limpo('[Ocupa] ' + blocos.length + ' ' + (mesmo ? blocos[0].plural : 'atualizações nas suas reservas'), 150);
+  const t = blocos.length === 1 ? blocos[0].titulo + ' · ' + blocos[0].chamada
+    : blocos.length + ' ' + (mesmo ? blocos[0].plural : 'atualizações nas suas reservas');
+  return limpo(('Ocupa · ' + t).replace(/[[\](){}<>]/g, ' '), 150);
 }
 
-const RODAPE = 'Mensagem automática do Ocupa, o controle de ocupação das clínicas de Odontologia. ' +
-  'Este aviso é enviado a quem responde pela reserva como professor coordenador.';
+/* O contato é o Reply-To configurado. Sem ele não se inventa endereço. */
+function rodape(contato) {
+  return 'Não responda a este e-mail: a mensagem é automática e esta caixa não é lida. ' +
+    (contato ? 'Dúvidas sobre a reserva: ' + contato + '. ' : 'Dúvidas sobre a reserva: procure a coordenação do curso. ') +
+    'Ocupa, controle de ocupação das clínicas de Odontologia. Este aviso é enviado a quem responde pela reserva ' +
+    'como professor coordenador.';
+}
 
-function texto(nome, blocos, url) {
+function texto(nome, blocos, url, contato) {
   const l = ['Olá, ' + nome + '.', ''];
   if (blocos.length > 1) l.push('Há ' + blocos.length + ' atualizações nas suas reservas.', '');
   blocos.forEach((b) => {
@@ -242,7 +255,7 @@ function texto(nome, blocos, url) {
     if (b.nota) l.push('', b.nota);
     l.push('');
   });
-  l.push('Abrir o sistema: ' + url, '', RODAPE);
+  l.push('Abrir o sistema: ' + url, '', rodape(contato));
   return l.join('\r\n');
 }
 
@@ -275,7 +288,7 @@ function blocoHtml(b) {
   if (b.nota) h += '<p style="' + F + 'margin:14px 0 0;font-size:13px;line-height:1.5;color:#2a2e34">' + esc(b.nota) + '</p>';
   return h + '</td></tr>';
 }
-function html(nome, blocos, url) {
+function html(nome, blocos, url, contato) {
   return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Ocupa</title></head>' +
     '<body style="margin:0;padding:0;background:#f2f2f3">' +
@@ -289,12 +302,12 @@ function html(nome, blocos, url) {
     '<tr><td style="padding:22px 26px 26px"><a href="' + esc(url) + '" style="' + F + 'display:inline-block;background:#416180;color:#ffffff;' +
     'text-decoration:none;font-size:14px;padding:10px 18px">Abrir o Ocupa</a></td></tr>' +
     '<tr><td style="' + F + 'padding:14px 26px;border-top:1px solid #e2e5e9;font-size:12px;line-height:1.5;color:#5b6169">' +
-    esc(RODAPE) + '</td></tr></table></td></tr></table></body></html>';
+    esc(rodape(contato)) + '</td></tr></table></td></tr></table></body></html>';
 }
 
-function montar(nome, blocos, url) {
+function montar(nome, blocos, url, contato) {
   const n = limpo(nome, 80);
-  return { assunto: assunto(blocos), texto: texto(n, blocos, url), html: html(n, blocos, url) };
+  return { assunto: assunto(blocos), texto: texto(n, blocos, url, contato), html: html(n, blocos, url, contato) };
 }
 
 module.exports = { bloco: bloco, montar: montar, limpo: limpo, esc: esc };

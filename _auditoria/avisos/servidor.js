@@ -30,7 +30,8 @@ const atender = Atender.criar({
   env: {
     AVISOS_SMTP_HOST: 'smtp.invalid', AVISOS_SMTP_PORTA: '465',
     AVISOS_SMTP_USUARIO: 'x', AVISOS_SMTP_SENHA: 'x',
-    AVISOS_REMETENTE: 'Ocupa <ocupa@teste.br>',
+    AVISOS_REMETENTE: 'Ocupa · não responda <conta+ocupa@teste.br>',
+    AVISOS_RESPONDER_PARA: 'contato@teste.br',
     AVISOS_SEGREDO: 'segredo-de-mentira-do-harness-0123456789'
   },
   buscar: fake.buscar,

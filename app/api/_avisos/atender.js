@@ -31,6 +31,7 @@ const MAX_ITENS = 30;
 const MAX_PESSOAS = 15;
 const DEZ_MIN = 10 * 60 * 1000;
 const UMA_HORA = 60 * 60 * 1000;
+const UM_DIA = 24 * UMA_HORA;
 
 const ID = /^[A-Za-z0-9_-]{1,100}$/;
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
@@ -209,7 +210,11 @@ function criar(op) {
       ap.para.forEach((alvo) => {
         if (alvo.id === quem.conta.email) { ignorar(it, 'proprio'); return; }
         const pessoa = loja.S.pessoa(alvo.id);
-        if (!pessoa || pessoa.ativo !== true || !Config.enderecoValido(alvo.id)) {
+        /* `ativo` cru, e não o da tela (que trata a ausência como ativo): é a
+           mesma exigência das Security Rules, e endereço que não existe mais
+           vira devolução na caixa de quem envia. */
+        const registro = lido.acervo.autorizados.find((a) => a.id === alvo.id);
+        if (!pessoa || !registro || registro.ativo !== true || !Config.enderecoValido(alvo.id)) {
           ignorar(it, 'sem_acesso', pessoa ? pessoa.nome : undefined);
           return;
         }
@@ -228,12 +233,16 @@ function criar(op) {
     const pessoas = Array.from(porPessoa.keys());
     if (!pessoas.length) return Object.assign(vazio, { ignorados: ignorados });
     if (pessoas.length > MAX_PESSOAS) throw new Recusa(400, 'pedido_invalido');
+    /* A cota da conta de envio é somada entre as ferramentas que a usam:
+       estourá-la pararia as outras também. */
     if (!limite.cabe('e:' + quem.conta.uid, pessoas.length, 60, UMA_HORA) ||
-      !limite.cabe('e:todos', pessoas.length, 150, UMA_HORA)) throw new Recusa(429, 'limite');
+      !limite.cabe('e:todos', pessoas.length, 100, UMA_HORA) ||
+      !limite.cabe('d:todos', pessoas.length, cfg.limiteDia, UM_DIA)) throw new Recusa(429, 'limite');
 
     const mensagens = pessoas.map((id) => {
       const g = porPessoa.get(id);
-      return Object.assign({ para: id }, Mensagem.montar(g.nome, g.blocos, cfg.url));
+      return Object.assign({ para: id }, Mensagem.montar(g.nome, g.blocos, cfg.url,
+        cfg.responder ? cfg.responder.endereco : ''));
     });
     const res = await enviar(cfg, mensagens, { agora: agora });
     const enviados = [], falhas = [];

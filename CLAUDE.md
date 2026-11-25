@@ -544,21 +544,37 @@ em `mensagem.js`.
 ### Configuração (painel da Vercel, nunca no repositório)
 
 `AVISOS_SMTP_HOST`, `AVISOS_SMTP_PORTA` (465 ou 587), `AVISOS_SMTP_USUARIO`,
-`AVISOS_SMTP_SENHA`, `AVISOS_REMETENTE`, `AVISOS_SEGREDO` (32+ caracteres) e, se
-quiser, `AVISOS_RESPONDER_PARA` e `AVISOS_URL`. Mudar variável exige novo deploy.
+`AVISOS_SMTP_SENHA`, `AVISOS_REMETENTE`, `AVISOS_SEGREDO` (32+ caracteres) e
+`AVISOS_RESPONDER_PARA` (dispensável só quando o remetente é um apelido). Opcionais:
+`AVISOS_LIMITE_DIA` (padrão 150) e `AVISOS_URL`. Mudar variável exige novo deploy.
 `GET /api/avisos` diz quais faltam, só pelo nome. Sem elas a função responde 503
 e nada é enviado. O remetente é só variável: trocar de conta não mexe no código.
 Não use escopo do Gmail no login — escopo sensível leva o consent screen para a
 verificação do Google.
 
-O limite de volume (`limite.js`) é por instância da Vercel, em memória: segura
-laço e repetição, não é contador exato. A cota diária é a da conta de envio.
+### A conta que envia pode ser de mais de uma ferramenta
+
+A cota diária e as devoluções são da CONTA, e outra ferramenta pode ler a caixa
+de entrada dela. Três regras do código existem por isso, e não devem cair:
+
+- **assunto** começa com "Ocupa · " e não leva `[ ] ( ) { }`, e `OS-123` vira
+  `OS 123` no e-mail **inteiro** (`limpo`, em `mensagem.js`): resposta e
+  devolução citam o corpo;
+- **resposta** nunca volta para a caixa que envia: Reply-To na mesma caixa é
+  configuração inválida, e sem Reply-To o remetente tem de ser apelido;
+- **destinatário** com `ativo === true` e endereço válido, para não gerar
+  devolução.
+
+O limite de volume (`limite.js`: por pessoa, por hora e por dia) é por instância
+da Vercel, em memória: segura laço e repetição, não é contador exato. Operação em
+massa (`executarLimpeza`, `completarEstrutura`, vínculos) não passa por `avisando`
+e não envia nada — mantenha assim.
 
 ### Testes
 
 `node --test _auditoria/avisos/avisos.teste.js` — token inválido, tentativa de
-escolher destinatário, permissão, bilhete adulterado, escape, SMTP de mentira
-com TLS. Precisa do `openssl` no PATH (Git Bash).
+escolher destinatário, permissão, bilhete adulterado, escape, assunto que outra
+ferramenta não confunde, teto do dia, SMTP de mentira com TLS. Precisa do `openssl` no PATH (Git Bash).
 `node _auditoria/avisos/servidor.js` + `harness.html?emails=1` na porta 3010 — a
 tela inteira falando com a função de verdade; as mensagens ficam em
 `/_harness/caixa`, e `/_harness/modo?v=falha|fora|lento` simula defeito.
@@ -1089,7 +1105,7 @@ Acessos e no formulário do professor, e vice-versa.
 
 Em 25/11/2026 entraram, com o envio DESLIGADO, os avisos por e-mail ao
 professor (função `/api/avisos`, `js/avisos.js` e a chave em Parâmetros).
-Verificados no harness nos três perfis e em 33 testes da função, sem enviar
+Verificados no harness nos três perfis e em 37 testes da função, sem enviar
 e-mail nenhum e sem tocar no banco de produção.
 
 ### Pendências

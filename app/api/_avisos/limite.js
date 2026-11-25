@@ -13,7 +13,7 @@ function criar(agora) {
   const vistos = new Map();
 
   function limpar(t) {
-    if (janelas.size > 2000) janelas.forEach((v, k) => { if (!v.length || t - v[v.length - 1] > 3600000) janelas.delete(k); });
+    if (janelas.size > 2000) janelas.forEach((v, k) => { if (!v.length || t - v[v.length - 1] > 86400000) janelas.delete(k); });
     if (vistos.size > 5000) vistos.forEach((v, k) => { if (t - v > 3600000) vistos.delete(k); });
   }
   /* Conta mais `n` em `chave` e diz se ainda cabe em `max` por `periodo`. */

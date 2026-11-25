@@ -76,7 +76,8 @@ async function gerar() {
     const atender = Atender.criar({
       env: {
         AVISOS_SMTP_HOST: 'smtp.invalid', AVISOS_SMTP_PORTA: '465', AVISOS_SMTP_USUARIO: 'x', AVISOS_SMTP_SENHA: 'x',
-        AVISOS_REMETENTE: 'Ocupa <ocupa@exemplo.br>', AVISOS_SEGREDO: 'segredo-de-mentira-dos-exemplos-0123456789'
+        AVISOS_REMETENTE: 'Ocupa · não responda <conta+ocupa@exemplo.br>', AVISOS_RESPONDER_PARA: 'contato@exemplo.br',
+        AVISOS_SEGREDO: 'segredo-de-mentira-dos-exemplos-0123456789'
       },
       buscar: BancoFalso.criar({ banco: () => b }).buscar,
       verificar: async () => ({ uid: 'u', email: COORD, nome: '' }),
@@ -107,7 +108,8 @@ gerar().then((l) => {
     '<title>Ocupa · exemplos dos e-mails</title><style>body{font:15px/1.5 Arial,sans-serif;margin:0 auto;padding:24px 16px;max-width:760px;color:#16181c}' +
     'h1{font-size:22px}h2{font-size:17px;margin:40px 0 4px}p{margin:2px 0;color:#5b6169;font-size:14px}iframe{width:100%;border:1px solid #cfd8e2;margin-top:10px}' +
     'details{margin-top:8px;font-size:14px}pre{white-space:pre-wrap;background:#f2f2f3;padding:12px;font-size:13px}</style></head><body>' +
-    '<h1>Exemplos dos e-mails do Ocupa</h1><p>Pessoas, disciplinas e reservas são fictícias. Nenhuma destas mensagens foi enviada.</p>' +
+    '<h1>Exemplos dos e-mails do Ocupa</h1><p>Pessoas, disciplinas, reservas e endereços são fictícios. Nenhuma destas mensagens foi enviada.</p>' +
+    '<p><b>De:</b> Ocupa · não responda &lt;conta+ocupa@exemplo.br&gt; &nbsp; <b>Responder para:</b> contato@exemplo.br</p>' +
     l.map((x, i) => '<h2>' + (i + 1) + '. ' + esc(x.titulo) + '</h2><p><b>Para:</b> ' + esc(x.m.para) + '</p><p><b>Assunto:</b> ' + esc(x.m.assunto) + '</p>' +
       '<iframe title="' + esc(x.titulo) + '" srcdoc="' + esc(x.m.html) + '" onload="this.style.height=this.contentDocument.documentElement.scrollHeight+\'px\'"></iframe>' +
       '<details><summary>versão em texto</summary><pre>' + esc(x.m.texto) + '</pre></details>').join('') + '</body></html>';
