@@ -24,6 +24,9 @@
       parametros: {
         faixaMinimaMin: 120, capacidadeSemanalH: 60, bloquearSobreposicao: true,
         exigirMotivoManutencao: true, exigirAprovacaoProfessor: true,
+        /* Ausência no banco vale DESLIGADO: o envio de e-mail só começa
+           quando a coordenação liga, em Estrutura. */
+        enviarEmails: false,
         aberturaPadrao: '07:00', fechamentoPadrao: '22:00'
       },
       agrupamentos: [], clinicas: [], usuarios: [], alunos: [], disciplinas: [],
@@ -1082,6 +1085,16 @@
       });
   }
 
+  /* ── Aviso por e-mail ao professor coordenador ────────────────────────
+     Toda mutação que o professor precisa saber passa a gravação por aqui:
+     `fn` grava e devolve a promessa, e `Avisos` só acompanha. Desligado (ou
+     quando a reserva é de quem está agindo), é `fn()` e mais nada. `avisos`
+     não existe quando o store roda no servidor (app/api/_avisos/ocupa.js),
+     que nunca grava. */
+  function avisando(aviso, fn) {
+    return global.Avisos ? global.Avisos.gravar(aviso, fn) : fn();
+  }
+
   /* ── Índice de ocupação e revalidação transacional ────────────────────
      O índice indices/{agrupamentoId} guarda a forma compacta de tudo que
      ocupa aquele agrupamento. A transação relê ESSE documento e revalida a
@@ -1238,7 +1251,9 @@
     r.cadeirasAlocadas = r.cadeirasPedidas ? alocarLocal(r) : null;
     estado.recorrencias.push(r);
     commit();
-    persistir(gravarOcupacaoNaNuvem(r), function () {
+    persistir(avisando({ evento: 'criada', id: r.id, de: [r.responsavelId] }, function () {
+      return gravarOcupacaoNaNuvem(r);
+    }), function () {
       estado.recorrencias = estado.recorrencias.filter(function (x) { return x.id !== r.id; });
     });
     return r;
@@ -1268,7 +1283,9 @@
     commit();
     /* Pedido é gravação simples: não reserva nada, logo não passa pela
        transação nem entra no índice. Quem indexa é `aprovarPedido`. */
-    persistir(soPedido ? N.gravar('ocupacoes', p.id, p) : gravarOcupacaoNaNuvem(p), function () {
+    persistir(avisando({ evento: 'criada', id: p.id, de: [p.responsavelId] }, function () {
+      return soPedido ? N.gravar('ocupacoes', p.id, p) : gravarOcupacaoNaNuvem(p);
+    }), function () {
       estado.pontuais = estado.pontuais.filter(function (x) { return x.id !== p.id; });
     });
     return p;
@@ -1330,7 +1347,9 @@
     p.decididoEm = C.carimbo();
     if (!ehIntegral(p)) p.cadeirasAlocadas = alocarLocal(p);
     commit();
-    return persistir(gravarOcupacaoNaNuvem(p), function () {
+    return persistir(avisando({ evento: 'aprovada', id: p.id, de: [responsavelDe(p)] }, function () {
+      return gravarOcupacaoNaNuvem(p);
+    }), function () {
       Object.keys(antes).forEach(function (k) {
         if (antes[k] === undefined) delete p[k]; else p[k] = antes[k];
       });
@@ -1352,9 +1371,11 @@
     p.decididoPor = euId();
     p.decididoEm = C.carimbo();
     commit();
-    return persistir(N.gravar('ocupacoes', p.id, {
-      situacao: p.situacao, motivoRecusa: p.motivoRecusa,
-      decididoPor: p.decididoPor, decididoEm: p.decididoEm
+    return persistir(avisando({ evento: 'recusada', id: p.id, de: [responsavelDe(p)] }, function () {
+      return N.gravar('ocupacoes', p.id, {
+        situacao: p.situacao, motivoRecusa: p.motivoRecusa,
+        decididoPor: p.decididoPor, decididoEm: p.decididoEm
+      });
     }), function () {
       Object.keys(antes).forEach(function (k) { p[k] = antes[k]; });
     });
@@ -1399,7 +1420,9 @@
     o.cadeirasAlocadas = limpa.sort(numeroCrescente);
     o.cadeirasPedidas = limpa.length;
     commit();
-    return persistir(gravarOcupacaoNaNuvem(o, { fixo: true }), function () {
+    return persistir(avisando({ evento: 'cadeiras', id: o.id, antes: true, de: [responsavelDe(o)] }, function () {
+      return gravarOcupacaoNaNuvem(o, { fixo: true });
+    }), function () {
       Object.keys(antes).forEach(function (k) {
         if (antes[k] === undefined) delete o[k]; else o[k] = antes[k];
       });
@@ -1436,7 +1459,7 @@
     if (!o) return global.Promise.resolve({ ok: false, mensagem: 'Reserva não encontrada.' });
     var antes = {};
     CAMPOS_EDITAVEIS.forEach(function (k) { antes[k] = o[k]; });
-    var agAntes = o.agrupamentoId, escAntes = o.escopo;
+    var agAntes = o.agrupamentoId, escAntes = o.escopo, respAntes = responsavelDe(o);
 
     o.agrupamentoId = dados.agrupamentoId;
     o.escopo = dados.escopo || 'a';
@@ -1492,10 +1515,14 @@
     commit();
 
     var indexavel = !estaExcluida(o) && !pedido;
-    var promessa = indexavel
-      ? gravarOcupacaoNaNuvem(o, { agrupamentoAnterior: agAntes !== o.agrupamentoId ? agAntes : null })
-      : N.gravar('ocupacoes', o.id, o);
-    return persistir(promessa, function () {
+    /* Trocou de professor, os dois são avisados: quem entrou e quem saiu. */
+    return persistir(avisando({
+      evento: 'editada', id: o.id, antes: true, de: [respAntes, responsavelDe(o)]
+    }, function () {
+      return indexavel
+        ? gravarOcupacaoNaNuvem(o, { agrupamentoAnterior: agAntes !== o.agrupamentoId ? agAntes : null })
+        : N.gravar('ocupacoes', o.id, o);
+    }), function () {
       CAMPOS_EDITAVEIS.forEach(function (k) {
         if (antes[k] === undefined) delete o[k]; else o[k] = antes[k];
       });
@@ -1513,17 +1540,20 @@
         registradoPor: euId(), registradoEm: C.carimbo()
       });
       commit();
-      persistir(N.gravar('ocupacoes', r.id, { excecoes: r.excecoes })
-        .then(function () { return N.atualizarIndice(r.agrupamentoId, r.id, resumoDaOcupacao(r)); }),
-        function () {
-          r.excecoes = r.excecoes.filter(function (x) { return x.data !== o.data; });
-        });
+      persistir(avisando({ evento: 'cancelada', id: r.id, data: o.data, de: [responsavelDe(r)] }, function () {
+        return N.gravar('ocupacoes', r.id, { excecoes: r.excecoes })
+          .then(function () { return N.atualizarIndice(r.agrupamentoId, r.id, resumoDaOcupacao(r)); });
+      }), function () {
+        r.excecoes = r.excecoes.filter(function (x) { return x.data !== o.data; });
+      });
     } else {
       var p = porId(estado.pontuais, o.origemId);
       if (!p) return;
       estado.pontuais = estado.pontuais.filter(function (x) { return x.id !== o.origemId; });
       commit();
-      persistir(N.removerOcupacao(p.agrupamentoId, p.id), function () {
+      persistir(avisando({ evento: 'cancelada', id: p.id, antes: true, de: [responsavelDe(p)] }, function () {
+        return N.removerOcupacao(p.agrupamentoId, p.id);
+      }), function () {
         estado.pontuais.push(p);
       });
     }
@@ -1536,9 +1566,10 @@
     var antes = r.encerradaEm;
     r.encerradaEm = data || C.hojeISO();
     commit();
-    persistir(N.gravar('ocupacoes', id, { encerradaEm: r.encerradaEm })
-      .then(function () { return N.atualizarIndice(r.agrupamentoId, id, resumoDaOcupacao(r)); }),
-      function () { r.encerradaEm = antes; });
+    persistir(avisando({ evento: 'encerrada', id: id, de: [responsavelDe(r)] }, function () {
+      return N.gravar('ocupacoes', id, { encerradaEm: r.encerradaEm })
+        .then(function () { return N.atualizarIndice(r.agrupamentoId, id, resumoDaOcupacao(r)); });
+    }), function () { r.encerradaEm = antes; });
   }
 
   /* Substituiu o antigo `excluirRecorrencia`, que apagava o documento de vez
@@ -1557,8 +1588,10 @@
     o.excluidaPor = euId();
     o.motivoExclusao = String(motivo || '').trim();
     commit();
-    return persistir(N.desindexarOcupacao(o.agrupamentoId, o.id, {
-      excluidaEm: o.excluidaEm, excluidaPor: o.excluidaPor, motivoExclusao: o.motivoExclusao
+    return persistir(avisando({ evento: 'excluida', id: o.id, de: [responsavelDe(o)] }, function () {
+      return N.desindexarOcupacao(o.agrupamentoId, o.id, {
+        excluidaEm: o.excluidaEm, excluidaPor: o.excluidaPor, motivoExclusao: o.motivoExclusao
+      });
     }), function () {
       Object.keys(antes).forEach(function (k) { o[k] = antes[k]; });
     });
@@ -1588,7 +1621,9 @@
     if (indexavel && !ehIntegral(o)) o.cadeirasAlocadas = alocarLocal(o);
     commit();
     return persistir(
-      indexavel ? gravarOcupacaoNaNuvem(o) : N.gravar('ocupacoes', o.id, o),
+      avisando({ evento: 'recuperada', id: o.id, antes: true, de: [responsavelDe(o)] }, function () {
+        return indexavel ? gravarOcupacaoNaNuvem(o) : N.gravar('ocupacoes', o.id, o);
+      }),
       function () {
         Object.keys(antes).forEach(function (k) {
           if (antes[k] === undefined) delete o[k]; else o[k] = antes[k];
@@ -1611,15 +1646,17 @@
     var antes = r.excecoes.slice();
     r.excecoes = r.excecoes.filter(function (e) { return e.data !== data; });
     commit();
-    return persistir(gravarOcupacaoNaNuvem(r, {
-      fixo: true,
-      mensagem: function (res) {
-        return 'O encontro de ' + C.fmtDia(data) + ' não pode voltar: depois do cancelamento, ' +
-          (res.presas && res.presas.length
-            ? (res.presas.length === 1 ? 'a cadeira ' + res.presas[0] + ' foi reservada'
-              : 'as cadeiras ' + C.faixasNumeros(res.presas) + ' foram reservadas')
-            : 'as cadeiras dela foram reservadas') + ' por outra ocupação nesse horário.';
-      }
+    return persistir(avisando({ evento: 'restaurada', id: r.id, data: data, de: [responsavelDe(r)] }, function () {
+      return gravarOcupacaoNaNuvem(r, {
+        fixo: true,
+        mensagem: function (res) {
+          return 'O encontro de ' + C.fmtDia(data) + ' não pode voltar: depois do cancelamento, ' +
+            (res.presas && res.presas.length
+              ? (res.presas.length === 1 ? 'a cadeira ' + res.presas[0] + ' foi reservada'
+                : 'as cadeiras ' + C.faixasNumeros(res.presas) + ' foram reservadas')
+              : 'as cadeiras dela foram reservadas') + ' por outra ocupação nesse horário.';
+        }
+      });
     }), function () { r.excecoes = antes; });
   }
 

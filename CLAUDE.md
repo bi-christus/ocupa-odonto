@@ -15,6 +15,7 @@ trabalho" antes de empurrar qualquer coisa.
 |---|---|
 | Repositório | `github.com/bi-christus/ocupa-odonto`, branch `main` (público) |
 | Publish root | `app/` — é o Root Directory configurado na Vercel |
+| Função de servidor | `app/api/avisos.js` (`/api/avisos`), a única; região `gru1` em `app/vercel.json` |
 | Produção | https://controle-de-clinicas-odonto.vercel.app |
 | Vercel | projeto `controle-de-clinicas-odonto`, plano Hobby, conta `setorbiunichristus-4527` |
 | Firebase / GCP | projeto `ocupa-odonto` (o mesmo para Auth, Firestore e OAuth) |
@@ -33,6 +34,8 @@ Branch antiga a remover quando der: `feat/lista-de-acessos`.
 **ES5 estrito, sem bundler.** IIFEs penduradas em `window`, dependências
 resolvidas pela ordem dos `<script>` em `index.html`. Não existe build step.
 Não introduza Vite, webpack, npm scripts nem módulos ES sem conversar antes.
+A exceção é `app/api/`, que roda no Node da Vercel e não no navegador: lá a
+sintaxe é moderna (CommonJS), mas continua **sem npm e sem `package.json`**.
 
 **SDK Firebase em builds `compat`**, não o modular. O modular pressupõe ESM e
 não encaixa no padrão acima.
@@ -43,11 +46,13 @@ Ordem dos scripts em produção (é a ordem real, conferida):
 firebase-app-compat.js
 firebase-auth-compat.js
 firebase-firestore-compat.js
-core.js  config.js  nuvem.js  acesso.js  dados.js  store.js  ui.js
+core.js  config.js  nuvem.js  acesso.js  dados.js  avisos.js  store.js  ui.js
 registro.js  manutencao.js  cadeiras.js  impressao.js  painel.js  agora.js
 agenda.js  disciplinas.js  relatorios.js  estrutura.js  acessos.js  app.js
 ```
 
+`avisos.js` vem antes do store, que acompanha as gravações por ele; ele só
+procura o `Store` na hora de usar.
 `impressao.js` vem antes das views porque Agenda e Relatórios chamam as duas.
 `cadeiras.js` (o seletor de cadeiras da reserva, 05/10/2026) também: Agenda e
 Ocupação agora chamam `Cadeiras.escolher`.
@@ -97,7 +102,7 @@ hora, pelo snapshot de `autorizados`.
 
 | Coleção | Id do documento | Campos |
 |---|---|---|
-| `config` | `sistema` (doc único) | `versao`, `periodoLetivo`, `semestre{inicio,fim}`, `parametros{faixaMinimaMin, capacidadeSemanalH, bloquearSobreposicao, exigirMotivoManutencao, exigirAprovacaoProfessor, aberturaPadrao, fechamentoPadrao}` |
+| `config` | `sistema` (doc único) | `versao`, `periodoLetivo`, `semestre{inicio,fim}`, `parametros{faixaMinimaMin, capacidadeSemanalH, bloquearSobreposicao, exigirMotivoManutencao, exigirAprovacaoProfessor, enviarEmails, aberturaPadrao, fechamentoPadrao}` |
 | `autorizados` | e-mail em minúsculas | `nome`, `nivel`, `ativo`, `ultimoAcesso` |
 | `agrupamentos` | `ag1`–`ag6` | `nome`, `clinicas[]` |
 | `agrupamentos` | `ag7`–`ag9` | os três ambientes sem cadeira (29/10/2026), um por agrupamento |
@@ -483,6 +488,82 @@ no dia do deploy.
 > convenção de tela, não controle — o mesmo erro que a tela Acessos já cometeu
 > aqui. A regra precisa exigir `situacao == 'pendente'` no `create` de
 > professor e proibi-lo de alterar `situacao` no `update`.
+
+---
+
+## Avisos por e-mail ao professor (25/11/2026)
+
+O professor coordenador (`S.responsavelDe`) recebe e-mail quando **outra
+pessoa** mexe numa reserva dele: criada em nome dele, pedido aprovado ou
+recusado, editada, cadeiras trocadas, encontro cancelado ou restaurado,
+pontual cancelada, recorrência encerrada, reserva excluída ou recuperada.
+Trocou de professor na edição, recebem os dois. Quem agiu nunca recebe.
+
+**Desligado por padrão**: `parametros.enviarEmails`, ausência vale desligado.
+A chave fica em Estrutura → Parâmetros e é conferida duas vezes — no navegador
+(desligado, nenhum pedido sai) e no servidor, que lê do banco. `config` não é
+assinado: aba aberta antes de ligar só passa a avisar depois de recarregar.
+
+### Como funciona
+
+- **Navegador** (`js/avisos.js`). `Avisos.gravar(aviso, fn)` embrulha a gravação
+  de cada mutação do store (`avisando(...)`). Só depois que a promessa dá certo
+  o aviso entra na fila, e a fila vai em um pedido só (700 ms depois da última
+  gravação em curso) — é o que junta as linhas do mesmo formulário num e-mail
+  por pessoa. Falha de envio vira toast ("Mudança salva, mas o e-mail de aviso
+  não saiu"), nunca desfaz nada.
+- **Servidor** (`api/avisos.js` → `api/_avisos/`). Confere o ID token, relê a
+  reserva pela REST do Firestore **com o token de quem chamou** (as Security
+  Rules valem; não há conta de serviço e a função não grava nada), confirma no
+  banco que o evento aconteceu (`eventos.js`) e só então monta e envia.
+- **O store roda no servidor.** `ocupa.js` carrega `core`, `acesso`, `dados` e
+  `store.js` num `window` próprio por pedido, com uma `Nuvem` que só entrega o
+  que veio da REST — o truque do harness. Por isso responsável, disciplina,
+  cadeiras, legado e permissões saem das MESMAS funções da tela. Consequência:
+  `store.js` não pode passar a usar `document` ou `window.*` novo na carga. Os
+  arquivos lidos estão em `includeFiles` do `vercel.json`; arquivo novo na
+  cadeia entra nos dois lugares.
+
+**O navegador não escolhe destinatário nem texto.** O corpo aceita
+`{ evento, id, data?, bilhete? }` e qualquer campo a mais derruba o pedido (400).
+Quem recebe vem do banco e precisa ser pessoa ATIVA de `autorizados`. Não
+afrouxe isso: a URL é pública e o código também.
+
+**Bilhete** (`bilhete.js`) é o estado ANTERIOR da reserva, lido e assinado pelo
+servidor (HMAC, `AVISOS_SEGREDO`) antes da gravação e devolvido pelo navegador
+depois. Existe porque cancelar pontual apaga o documento, e editar, trocar
+cadeiras e recuperar sobrescrevem o "de → para". Vale por 1 h, só para quem
+pediu e para aquela reserva. As telas pedem na abertura do formulário
+(`Avisos.preparar`); se não chegou, a gravação espera no máximo 2,5 s e segue
+sem e-mail — gravação nunca fica presa ao aviso.
+
+**Mutação nova que o professor precise saber**: embrulhe com `avisando`,
+acrescente o evento em `eventos.js` (permissão + confirmação no banco) e o texto
+em `mensagem.js`.
+
+### Configuração (painel da Vercel, nunca no repositório)
+
+`AVISOS_SMTP_HOST`, `AVISOS_SMTP_PORTA` (465 ou 587), `AVISOS_SMTP_USUARIO`,
+`AVISOS_SMTP_SENHA`, `AVISOS_REMETENTE`, `AVISOS_SEGREDO` (32+ caracteres) e, se
+quiser, `AVISOS_RESPONDER_PARA` e `AVISOS_URL`. Mudar variável exige novo deploy.
+`GET /api/avisos` diz quais faltam, só pelo nome. Sem elas a função responde 503
+e nada é enviado. O remetente é só variável: trocar de conta não mexe no código.
+Não use escopo do Gmail no login — escopo sensível leva o consent screen para a
+verificação do Google.
+
+O limite de volume (`limite.js`) é por instância da Vercel, em memória: segura
+laço e repetição, não é contador exato. A cota diária é a da conta de envio.
+
+### Testes
+
+`node --test _auditoria/avisos/avisos.teste.js` — token inválido, tentativa de
+escolher destinatário, permissão, bilhete adulterado, escape, SMTP de mentira
+com TLS. Precisa do `openssl` no PATH (Git Bash).
+`node _auditoria/avisos/servidor.js` + `harness.html?emails=1` na porta 3010 — a
+tela inteira falando com a função de verdade; as mensagens ficam em
+`/_harness/caixa`, e `/_harness/modo?v=falha|fora|lento` simula defeito.
+`node _auditoria/avisos/exemplos.js` — um exemplo de cada e-mail em
+`dist/avisos/exemplos.html` (fora do git). **Nenhum deles envia e-mail.**
 
 ---
 
@@ -952,6 +1033,9 @@ Domínios autorizados no Auth: `localhost`, `ocupa-odonto.firebaseapp.com`,
    índice da transação de mentira nasce SEMEADO com o acervo — vazio, ela não
    via choque nenhum e escondia a classe de defeito que existe para pegar.
    `?imprimir=disciplina` monta a folha da disciplina `d1`.
+   Desde 25/11/2026 o dublê guarda em `__banco` o que foi gravado (com merge e
+   hora), e `?emails=1` liga os avisos por e-mail contra o servidor local — ver
+   "Avisos por e-mail ao professor".
 4. Nunca reescreva um arquivo digitando conteúdo vindo de saída de ferramenta
    (pode estar truncada). Edite in place.
 5. Não semeie nem edite dados de produção pelo console do Firebase sem avisar.
@@ -1003,8 +1087,16 @@ Em 16/11/2026, verificado no harness nos três perfis: o vínculo professor ↔
 disciplina também pela tela Disciplinas (graduação e pós), aparecendo em
 Acessos e no formulário do professor, e vice-versa.
 
+Em 25/11/2026 entraram, com o envio DESLIGADO, os avisos por e-mail ao
+professor (função `/api/avisos`, `js/avisos.js` e a chave em Parâmetros).
+Verificados no harness nos três perfis e em 33 testes da função, sem enviar
+e-mail nenhum e sem tocar no banco de produção.
+
 ### Pendências
 
+- **Ligar os avisos por e-mail**: definir a conta remetente, pôr as variáveis
+  `AVISOS_*` no painel da Vercel, fazer novo deploy, conferir
+  `GET /api/avisos` (`configurado: true`) e ligar em Estrutura → Parâmetros
 - **Os três ambientes entram no banco no primeiro login de um coordenador**
   depois do deploy (`S.completarEstrutura`); conferir que apareceram em
   Estrutura

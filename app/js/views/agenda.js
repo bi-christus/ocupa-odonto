@@ -1380,6 +1380,9 @@
     }
 
     if (o.origem === 'pontual') {
+      /* Cancelar apaga o documento: o e-mail de aviso precisa do que ele
+         dizia, e o servidor guarda isso antes do clique. */
+      global.Avisos.preparar(o.origemId);
       U.confirmar({
         titulo: 'Cancelar atividade',
         subtitulo: o.titulo,

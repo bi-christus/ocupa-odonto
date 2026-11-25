@@ -36,6 +36,7 @@
       return;
     }
 
+    global.Avisos.preparar(reserva.id);
     var mapa = S.mapaDeCadeiras(reserva);
     var integral = S.ehIntegral(reserva);
     var limite = S.limiteDeCadeiras(reserva);
