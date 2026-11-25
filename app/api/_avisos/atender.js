@@ -1,6 +1,7 @@
 /* atender.js — a porta da função /api/avisos.
 
      GET                            o que falta configurar (nomes, sem valores)
+     POST { acao:'teste' }          um e-mail de teste para quem chamou
      POST { acao:'bilhete', id }    o "antes" assinado de uma reserva
      POST { acao:'avisar', itens }  itens: { evento, id, data?, bilhete? }
 
@@ -255,6 +256,25 @@ function criar(op) {
     return { ok: !falhas.length, enviados: enviados, falhas: falhas, ignorados: ignorados };
   }
 
+  /* Teste de envio: só de quem edita a estrutura, só para o endereço do próprio
+     token. Vale com o interruptor desligado, que é quando ele serve. */
+  async function teste(corpo, quem, cfg) {
+    if (!soEstas(corpo, ['acao'])) throw new Recusa(400, 'pedido_invalido');
+    const lido = await carregar([], {}, quem);
+    const loja = await Ocupa.montar(quem.conta, lido.acervo);
+    if (!loja.aceito || !loja.S.pode('estrutura.editar') || !Config.enderecoValido(quem.conta.email)) throw new Recusa(403, 'acesso');
+    if (!limite.cabe('t:' + quem.conta.uid, 1, 5, DEZ_MIN) ||
+      !limite.cabe('d:todos', 1, cfg.limiteDia, UM_DIA)) throw new Recusa(429, 'limite');
+    const u = loja.S.usuario();
+    const m = Mensagem.teste(u.nome, u.perfil, cfg.url, cfg.responder ? cfg.responder.endereco : '');
+    const r = (await enviar(cfg, [Object.assign({ para: quem.conta.email }, m)], { agora: agora }))[0];
+    if (!r || !r.ok) {
+      log('falha de envio: ' + ((r && r.codigo) || 'conexao'));
+      return { ok: false, enviados: [], falhas: [{ nome: u.nome, motivo: (r && r.codigo) || 'conexao' }] };
+    }
+    return { ok: true, enviados: [u.nome], falhas: [] };
+  }
+
   return async function atender(req, res) {
     try {
       const cfg = config();
@@ -269,6 +289,7 @@ function criar(op) {
       if (!corpo || typeof corpo !== 'object') throw new Recusa(400, 'pedido_invalido');
       if (corpo.acao === 'bilhete') responder(res, 200, await bilhete(corpo, quem, cfg));
       else if (corpo.acao === 'avisar') responder(res, 200, await avisar(corpo, quem, cfg));
+      else if (corpo.acao === 'teste') responder(res, 200, await teste(corpo, quem, cfg));
       else throw new Recusa(400, 'pedido_invalido');
     } catch (e) {
       if (e instanceof Recusa) { responder(res, e.status, { ok: false, erro: e.erro }); return; }

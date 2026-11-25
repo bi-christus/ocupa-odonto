@@ -26,7 +26,7 @@ const TIPOS = {
 let banco = {}, modo = 'ok', caixa = [], chamadas = [];
 const fake = BancoFalso.criar({ banco: () => banco });
 
-const atender = Atender.criar({
+const opcoes = {
   env: {
     AVISOS_SMTP_HOST: 'smtp.invalid', AVISOS_SMTP_PORTA: '465',
     AVISOS_SMTP_USUARIO: 'x', AVISOS_SMTP_SENHA: 'x',
@@ -50,7 +50,10 @@ const atender = Atender.criar({
       return { ok: true };
     });
   }
-});
+};
+const atender = Atender.criar(opcoes);
+/* modo=semconfig: produção antes de as variáveis entrarem na Vercel. */
+const atenderSemConfig = Atender.criar(Object.assign({}, opcoes, { env: {} }));
 
 function ler(req) {
   return new Promise((ok) => {
@@ -70,7 +73,7 @@ http.createServer(async (req, res) => {
     chamadas.push(req.method);
     if (modo === 'fora') { req.socket.destroy(); return; }
     if (modo === 'lento') await new Promise((ok) => setTimeout(ok, 4000));
-    await atender(req, res);
+    await (modo === 'semconfig' ? atenderSemConfig : atender)(req, res);
     return;
   }
   if (url.pathname === '/_harness/banco') { banco = JSON.parse(await ler(req)); json(res, { ok: true }); return; }

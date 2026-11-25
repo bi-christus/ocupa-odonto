@@ -184,5 +184,32 @@
     }, function (e) { naoSaiu(e && e.erro ? e.erro : 'rede'); });
   }
 
-  global.Avisos = { ligado: ligado, preparar: preparar, gravar: gravar };
+  /* ── Estado do servidor e teste (Estrutura, coordenação) ──────────── */
+  var situacaoLida = null;
+  /* Resolve com { configurado, faltando, invalidas } ou null, sem rejeitar. Lida
+     uma vez por página: variável nova na Vercel só vale com novo deploy. */
+  function situacao() {
+    if (!situacaoLida) {
+      situacaoLida = global.fetch ? comPrazo(global.fetch(ENDERECO), 10000).then(function (r) {
+        return r.ok ? r.json() : null;
+      }).then(function (j) { return j && j.servico === 'avisos' ? j : null; },
+        function () { return null; }) : global.Promise.resolve(null);
+      situacaoLida.then(function (j) { if (!j) situacaoLida = null; });
+    }
+    return situacaoLida;
+  }
+  /* Um e-mail de teste para quem clicou: o servidor só usa o endereço da
+     própria sessão. */
+  function testar() {
+    return chamar({ acao: 'teste' }, PRAZO).then(function (r) {
+      if (r.ok) C.toast('E-mail de teste enviado para você. Confira a caixa de entrada e o spam.');
+      else testeFalhou(r.falhas && r.falhas[0] ? r.falhas[0].motivo : 'conexao');
+      return !!r.ok;
+    }, function (e) { testeFalhou(e && e.erro ? e.erro : 'rede'); return false; });
+  }
+  function testeFalhou(motivo) {
+    C.toast('O e-mail de teste não saiu' + (MOTIVOS[motivo] ? ': ' + MOTIVOS[motivo] : '') + '.');
+  }
+
+  global.Avisos = { ligado: ligado, preparar: preparar, gravar: gravar, situacao: situacao, testar: testar };
 })(window);
