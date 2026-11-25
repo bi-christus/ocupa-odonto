@@ -20,6 +20,7 @@
   <a href="?perfil=professor">professor</a>
   <a href="?perfil=tecnico">técnico</a>
   <a href="?perfil=coordenador&denso=1">semana cheia</a>
+  <a href="?perfil=coordenador&emails=1">e-mails ligados</a>
   <button onclick="verFolha()">ver folha impressa</button>
   <span id="hns-log"></span>
 </div>
@@ -185,6 +186,59 @@
     };
   }
 
+  /* ?emails=1 — aviso por e-mail ligado (25/11/2026). Precisa do servidor
+     local, que roda a função /api/avisos de verdade contra este banco e guarda
+     as mensagens em vez de enviar:
+       node _auditoria/avisos/servidor.js   →  http://localhost:3010/…
+     Com outro servidor (o python da porta 3000) a função não existe, e o que
+     se vê é o toast de e-mail que não saiu — com a reserva salva. */
+  var EMAILS = /[?&]emails=1/.test(location.search);
+
+  /* O banco de mentira guarda o que FOI GRAVADO, documento a documento, com
+     merge e hora da gravação, como o Firestore. Enquanto `gravar` só escrevia
+     no log, nada conferia se o que chega ao banco é o que o e-mail diz. */
+  var banco = null;
+  function copia(v) { return v === undefined ? null : JSON.parse(JSON.stringify(v)); }
+  function montarBanco() {
+    var a = acervo(), t = Date.now() - 86400000;
+    if (EMAILS) a.config.parametros.enviarEmails = true;
+    banco = { config: { sistema: { dados: copia(a.config), criadoEm: t, mudadoEm: t } } };
+    Object.keys(a).forEach(function (col) {
+      if (col === 'config') return;
+      banco[col] = {};
+      a[col].forEach(function (d) { banco[col][d.id] = { dados: copia(d), criadoEm: t, mudadoEm: t }; });
+    });
+    global.__banco = banco;
+  }
+  function juntar(alvo, novo) {
+    Object.keys(novo).forEach(function (k) {
+      var v = novo[k];
+      if (v && typeof v === 'object' && !Array.isArray(v) && alvo[k] && typeof alvo[k] === 'object' && !Array.isArray(alvo[k])) juntar(alvo[k], v);
+      else alvo[k] = v;
+    });
+    return alvo;
+  }
+  function noBanco(col, id, dados) {
+    if (!banco) montarBanco();
+    if (!banco[col]) banco[col] = {};
+    var d = banco[col][id] || { dados: {}, criadoEm: Date.now() };
+    d.dados = juntar(d.dados, copia(dados));
+    d.mudadoEm = Date.now();
+    banco[col][id] = d;
+  }
+  function foraDoBanco(col, id) { if (banco && banco[col]) delete banco[col][id]; }
+
+  /* A função lê o banco na hora do pedido: ele vai para o servidor local
+     imediatamente antes de cada chamada. `__chamadas` conta o que saiu. */
+  global.__chamadas = [];
+  var fetchReal = global.fetch ? global.fetch.bind(global) : null;
+  global.fetch = function (url, op) {
+    if (url !== '/api/avisos') return fetchReal(url, op);
+    global.__chamadas.push(JSON.parse(op.body));
+    return fetchReal('/_harness/banco', { method: 'POST', body: JSON.stringify(banco) })
+      .then(function () { return fetchReal(url, op); });
+  };
+
   function ok(v) { return global.Promise.resolve(v); }
   function log(m) { global.__escritas.push(m); var n = document.getElementById('hns-log'); if (n) n.textContent = m; }
 
@@ -196,6 +250,7 @@
     sair: function () { return ok(); },
     aoMudarSessao: function (cb) { global.setTimeout(function () { cb(CONTAS[PERFIL]); }, 0); },
     contaAtual: function () { return CONTAS[PERFIL]; },
+    tokenAtual: function () { return ok('harness.' + PERFIL); },
     lerAutorizado: function (email) {
       var a = null;
       AUTORIZADOS.forEach(function (x) { if (x.id === email) a = x; });
@@ -203,19 +258,41 @@
     },
     lerColecao: function () { return ok([]); },
     lerConfig: function () { return ok(acervo().config); },
-    carregarTudo: function () { return ok(acervo()); },
+    carregarTudo: function () {
+      if (!banco) montarBanco();
+      var s = { config: copia(banco.config.sistema.dados) };
+      Object.keys(banco).forEach(function (col) {
+        if (col === 'config') return;
+        s[col] = Object.keys(banco[col]).map(function (id) {
+          var o = copia(banco[col][id].dados);
+          o.id = id;
+          return o;
+        });
+      });
+      return ok(s);
+    },
     assinarVivas: function () { },
     encerrarAssinaturas: function () { },
     novoId: function (c) { return c + '_' + (++seq); },
-    gravar: function (c, id, d) { log('gravar ' + c + '/' + id + ' ' + JSON.stringify(d).slice(0, 160)); return ok(id); },
-    apagar: function (c, id) { log('apagar ' + c + '/' + id); return ok(); },
-    apagarVarios: function (c, ids) { log('apagarVarios ' + c + ' ' + ids.length); return ok(); },
+    gravar: function (c, id, d) {
+      if (global.__recusarGravacao) return global.Promise.reject(new Error('gravação recusada pelo harness'));
+      noBanco(c, id, d);
+      log('gravar ' + c + '/' + id + ' ' + JSON.stringify(d).slice(0, 160));
+      return ok(id);
+    },
+    apagar: function (c, id) { foraDoBanco(c, id); log('apagar ' + c + '/' + id); return ok(); },
+    apagarVarios: function (c, ids) {
+      ids.forEach(function (id) { foraDoBanco(c, id); });
+      log('apagarVarios ' + c + ' ' + ids.length);
+      return ok();
+    },
     /* Reproduz a transação: roda o validador contra o índice em memória e
        recusa igual ao Firestore quando há choque. */
     /* `validar` pode completar `dados` e `resumo` (as cadeiras escolhidas
        dentro da transação) — por isso o resumo é empurrado DEPOIS dele,
        como no `set` do Firestore. */
     gravarOcupacao: function (agId, id, dados, validar, resumo, agAnterior) {
+      if (global.__recusarGravacao) return global.Promise.reject(new Error('gravação recusada pelo harness'));
       var itens = global.__indices[agId] || [];
       var choque = validar(itens);
       if (choque) return global.Promise.reject({ conflito: true, mensagem: choque });
@@ -224,6 +301,7 @@
         global.__indices[agAnterior] = (global.__indices[agAnterior] || []).filter(function (i) { return i.id !== id; });
         log('saiu do índice ' + agAnterior + '/' + id);
       }
+      noBanco('ocupacoes', id, dados);
       log('gravarOcupacao ' + agId + '/' + id + ' · cadeiras ' + JSON.stringify(resumo.cadeiras) +
         ' · índice com ' + global.__indices[agId].length);
       return ok(id);
@@ -234,11 +312,13 @@
        criar. */
     removerOcupacao: function (agId, id) {
       global.__indices[agId] = (global.__indices[agId] || []).filter(function (i) { return i.id !== id; });
+      foraDoBanco('ocupacoes', id);
       log('removerOcupacao ' + agId + '/' + id + ' · índice com ' + global.__indices[agId].length);
       return ok(true);
     },
-    desindexarOcupacao: function (agId, id) {
+    desindexarOcupacao: function (agId, id, dados) {
       global.__indices[agId] = (global.__indices[agId] || []).filter(function (i) { return i.id !== id; });
+      noBanco('ocupacoes', id, dados);
       log('desindexar ' + agId + '/' + id + ' · índice com ' + global.__indices[agId].length);
       return ok(id);
     },
@@ -284,6 +364,7 @@
 
 <script src="../app/js/acesso.js"></script>
 <script src="../app/js/dados.js"></script>
+<script src="../app/js/avisos.js"></script>
 <script src="../app/js/store.js"></script>
 <script src="../app/js/ui.js"></script>
 <script src="../app/js/registro.js"></script>

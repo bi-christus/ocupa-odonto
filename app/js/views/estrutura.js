@@ -398,12 +398,51 @@
               }
             }) : null
           ]));
+        })(),
+        /* Aviso por e-mail ao professor coordenador (25/11/2026). Ausência no
+           banco vale desligado. Ligar confirma antes: é a partir daí que
+           mensagem sai para fora do sistema. */
+        (function () {
+          var liga = global.Avisos.ligado();
+          return U.kv('Aviso por e-mail ao professor', C.el('span', { class: 'row', style: 'gap:10px' }, [
+            pill(liga ? 'ligado' : 'desligado', liga ? 'warn' : 'neutral'),
+            editar ? C.el('button', {
+              class: 'chip-btn', text: liga ? 'Desligar' : 'Ligar',
+              title: liga
+                ? 'Desligar: ninguém mais recebe e-mail de confirmação ou alteração de reserva.'
+                : 'Ligar: o professor coordenador passa a receber e-mail quando a reserva dele é confirmada, alterada ou cancelada por outra pessoa.',
+              onclick: function () { trocarEnvioDeEmail(liga); }
+            }) : null
+          ]));
         })()
       ]),
       editar ? C.el('button', {
         class: 'btn btn-outline', style: 'margin-top:18px', text: 'Ajustar parâmetros', onclick: editarParametros
       }) : null
     ]);
+  }
+
+  function trocarEnvioDeEmail(estavaLigado) {
+    if (!S.pode('estrutura.editar')) { C.toast('Seu perfil não altera os parâmetros.'); return; }
+    function gravar() {
+      S.atualizarParametros({ enviarEmails: !estavaLigado });
+      C.toast(estavaLigado ? 'Aviso por e-mail desligado.' : 'Aviso por e-mail ligado.');
+      global.App.recarregar();
+    }
+    if (estavaLigado) { gravar(); return; }
+    U.confirmar({
+      titulo: 'Ligar o aviso por e-mail',
+      rotulo: 'Ligar',
+      conteudo: C.el('div', {}, [
+        C.el('p', { style: 'margin:0' }, [
+          'O professor coordenador passa a receber e-mail quando ',
+          C.el('b', { text: 'outra pessoa' }),
+          ' confirma, recusa, altera, cancela, exclui ou recupera uma reserva dele.'
+        ]),
+        C.el('p', { class: 'muted', style: 'margin:12px 0 0' },
+          'Vale do próximo clique em diante, para quem recarregar a página. O que já aconteceu não gera e-mail.')
+      ])
+    }, gravar);
   }
 
   function editarParametros() {

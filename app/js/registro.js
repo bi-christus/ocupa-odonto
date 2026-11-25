@@ -118,8 +118,10 @@
       vigenciaFim: lim.fim,
       linhas: [novaLinha()]
     };
-    if (editando) aplicarReserva(doc);
-    else aplicarInicial(opcoes.inicial);
+    if (editando) {
+      aplicarReserva(doc);
+      global.Avisos.preparar(doc.id);
+    } else aplicarInicial(opcoes.inicial);
     /* Na edição o horário gravado vale como está: encaixá-lo na janela de
        hoje mudaria a reserva sem ninguém pedir. */
     if (!editando) form.linhas.forEach(encaixarNaJanela);

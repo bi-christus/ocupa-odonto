@@ -69,6 +69,11 @@
   function sair() { return auth.signOut(); }
   function aoMudarSessao(cb) { return auth.onAuthStateChanged(cb); }
   function contaAtual() { return auth ? auth.currentUser : null; }
+  /* ID token da sessão, para /api/avisos. O SDK renova sozinho. */
+  function tokenAtual() {
+    var u = contaAtual();
+    return u ? u.getIdToken() : global.Promise.reject({ erro: 'sessao' });
+  }
 
   /* ── Leitura ──────────────────────────────────────────────────────── */
   function docsDe(snap) {
@@ -261,7 +266,7 @@
   global.Nuvem = {
     iniciar: iniciar, disponivel: disponivel, COLECOES: COLECOES,
     entrarComGoogle: entrarComGoogle, sair: sair,
-    aoMudarSessao: aoMudarSessao, contaAtual: contaAtual,
+    aoMudarSessao: aoMudarSessao, contaAtual: contaAtual, tokenAtual: tokenAtual,
     lerAutorizado: lerAutorizado, lerColecao: lerColecao, lerConfig: lerConfig,
     carregarTudo: carregarTudo,
     assinarVivas: assinarVivas, encerrarAssinaturas: encerrarAssinaturas,

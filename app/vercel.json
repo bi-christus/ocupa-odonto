@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["gru1"],
+  "functions": {
+    "api/avisos.js": {
+      "maxDuration": 30,
+      "includeFiles": "js/{core,acesso,dados,store}.js"
+    }
+  }
+}
